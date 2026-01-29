@@ -1,10 +1,10 @@
 {
   "started_at": "2026-01-29T00:00:00Z",
-  "current_phase": "P0",
-  "completed_phases": [],
+  "current_phase": "P4",
+  "completed_phases": ["P0", "P1", "P2", "P3"],
   "slack_webhook": null,
   "mode": "normal",
   "total_tasks": 30,
-  "completed_tasks": 0,
+  "completed_tasks": 21,
   "failed_tasks": []
 }

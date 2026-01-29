@@ -139,7 +139,7 @@
 
 ## P3: AI Router
 
-### [ ] P3-T3.1: AI Provider 추상 인터페이스 + 스키마
+### [x] P3-T3.1: AI Provider 추상 인터페이스 + 스키마
 - **담당**: backend-specialist
 - **파일**: `backend/tests/test_ai_schemas.py` → `backend/app/ai_router/providers/base.py`, `backend/app/ai_router/schemas.py`
 - **스펙**: AIProvider ABC (chat, stream, available_models), Message/AIResponse/ModelInfo 스키마
@@ -148,7 +148,7 @@
 - **TDD**: RED → GREEN → REFACTOR
 - **병렬**: 독립 실행
 
-### [ ] P3-T3.2: OpenAI Provider
+### [x] P3-T3.2: OpenAI Provider
 - **담당**: backend-specialist
 - **의존**: T3.1 (Mock: `mockBaseProvider`)
 - **파일**: `backend/tests/test_openai_provider.py` → `backend/app/ai_router/providers/openai.py`
@@ -158,7 +158,7 @@
 - **TDD**: RED → GREEN → REFACTOR
 - **병렬**: T3.3, T3.4, T3.5와 병렬 가능
 
-### [ ] P3-T3.3: Anthropic Provider
+### [x] P3-T3.3: Anthropic Provider
 - **담당**: backend-specialist
 - **의존**: T3.1 (Mock: `mockBaseProvider`)
 - **파일**: `backend/tests/test_anthropic_provider.py` → `backend/app/ai_router/providers/anthropic.py`
@@ -168,7 +168,7 @@
 - **TDD**: RED → GREEN → REFACTOR
 - **병렬**: T3.2, T3.4, T3.5와 병렬 가능
 
-### [ ] P3-T3.4: Google Gemini Provider
+### [x] P3-T3.4: Google Gemini Provider
 - **담당**: backend-specialist
 - **의존**: T3.1 (Mock: `mockBaseProvider`)
 - **파일**: `backend/tests/test_google_provider.py` → `backend/app/ai_router/providers/google.py`
@@ -178,7 +178,7 @@
 - **TDD**: RED → GREEN → REFACTOR
 - **병렬**: T3.2, T3.3, T3.5와 병렬 가능
 
-### [ ] P3-T3.5: ZhipuAI Provider
+### [x] P3-T3.5: ZhipuAI Provider
 - **담당**: backend-specialist
 - **의존**: T3.1 (Mock: `mockBaseProvider`)
 - **파일**: `backend/tests/test_zhipuai_provider.py` → `backend/app/ai_router/providers/zhipuai.py`
@@ -188,7 +188,7 @@
 - **TDD**: RED → GREEN → REFACTOR
 - **병렬**: T3.2, T3.3, T3.4와 병렬 가능
 
-### [ ] P3-T3.6: AI 통합 라우터 + SSE 스트리밍
+### [x] P3-T3.6: AI 통합 라우터 + SSE 스트리밍
 - **담당**: backend-specialist
 - **의존**: T3.2, T3.3, T3.4, T3.5
 - **파일**: `backend/tests/test_ai_router.py` → `backend/app/ai_router/router.py`
@@ -198,7 +198,7 @@
 - **TDD**: RED → GREEN → REFACTOR
 - **병렬**: T3.2~T3.5 완료 후 실행
 
-### [ ] P3-T3.7: AI 프롬프트 템플릿 (5가지 기능)
+### [x] P3-T3.7: AI 프롬프트 템플릿 (5가지 기능)
 - **담당**: backend-specialist
 - **파일**: `backend/tests/test_prompts.py` → `backend/app/ai_router/prompts/`
 - **스펙**: insight.py(인사이트 도출), search_qa.py(RAG 검색 QA), writing.py(연구노트 작성), spellcheck.py(맞춤법 교정), template.py(템플릿 생성)
