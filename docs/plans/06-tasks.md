@@ -44,7 +44,7 @@
 
 ## P1: Synology Gateway
 
-### [ ] P1-T1.1: Synology 클라이언트 (인증/세션 관리)
+### [x] P1-T1.1: Synology 클라이언트 (인증/세션 관리)
 - **담당**: backend-specialist
 - **파일**: `backend/tests/test_synology_client.py` → `backend/app/synology_gateway/client.py`
 - **스펙**: synology-api 라이브러리를 래핑. 환경변수 기반 인증, 세션 유지, 만료 시 자동 재인증
@@ -53,7 +53,7 @@
 - **TDD**: RED → GREEN → REFACTOR
 - **병렬**: 독립 실행
 
-### [ ] P1-T1.2: NoteStation API 래퍼
+### [x] P1-T1.2: NoteStation API 래퍼
 - **담당**: backend-specialist
 - **의존**: T1.1 (Mock: `mockSynologyClient`)
 - **파일**: `backend/tests/test_notestation.py` → `backend/app/synology_gateway/notestation.py`
@@ -63,7 +63,7 @@
 - **TDD**: RED → GREEN → REFACTOR
 - **병렬**: T1.3과 병렬 가능 (Mock 사용)
 
-### [ ] P1-T1.3: FileStation API 래퍼
+### [x] P1-T1.3: FileStation API 래퍼
 - **담당**: backend-specialist
 - **의존**: T1.1 (Mock: `mockSynologyClient`)
 - **파일**: `backend/tests/test_filestation.py` → `backend/app/synology_gateway/filestation.py`
@@ -73,7 +73,7 @@
 - **TDD**: RED → GREEN → REFACTOR
 - **병렬**: T1.2와 병렬 가능 (Mock 사용)
 
-### [ ] P1-T1.4: 노트 동기화 서비스
+### [x] P1-T1.4: 노트 동기화 서비스
 - **담당**: backend-specialist
 - **의존**: T1.2, P0-T0.5 (Mock: `mockNoteStation`, `mockDB`)
 - **파일**: `backend/tests/test_sync_service.py` → `backend/app/services/sync_service.py`
