@@ -25,6 +25,7 @@ dependencies = [
     "sse-starlette>=2.2.0",
     "pgvector>=0.3.6",
     "openai>=1.59.0",
+    "tiktoken>=0.7.0",
     "anthropic>=0.42.0",
     "google-genai>=1.0.0",
     "zhipuai>=2.1.0",
