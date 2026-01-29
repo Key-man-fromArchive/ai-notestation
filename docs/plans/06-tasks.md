@@ -10,31 +10,31 @@
 
 ## P0: 프로젝트 셋업
 
-### [ ] P0-T0.1: 모노레포 디렉토리 구조 생성
+### [x] P0-T0.1: 모노레포 디렉토리 구조 생성
 - **담당**: backend-specialist
 - **작업**: `backend/`, `frontend/`, `docs/` 디렉토리 및 루트 설정 파일 생성
 - **산출물**: `backend/pyproject.toml`, `backend/app/__init__.py`, `frontend/package.json`, `.env.example`, `.gitignore`
 - **Worktree**: ❌ (main 직접)
 
-### [ ] P0-T0.2: Docker Compose 환경 구성
+### [x] P0-T0.2: Docker Compose 환경 구성
 - **담당**: backend-specialist
 - **작업**: FastAPI + PostgreSQL(pgvector) + React 프론트엔드 3-컨테이너 구성
 - **산출물**: `docker-compose.yml`, `backend/Dockerfile`, `frontend/Dockerfile`
 - **Worktree**: ❌ (main 직접)
 
-### [ ] P0-T0.3: FastAPI 백엔드 초기화
+### [x] P0-T0.3: FastAPI 백엔드 초기화
 - **담당**: backend-specialist
 - **작업**: FastAPI 앱 엔트리포인트, pydantic-settings 설정, SQLAlchemy 연결, Alembic 마이그레이션 초기화
 - **산출물**: `backend/app/main.py`, `backend/app/config.py`, `backend/app/database.py`, `backend/alembic/`
 - **Worktree**: ❌ (main 직접)
 
-### [ ] P0-T0.4: React 프론트엔드 초기화
+### [x] P0-T0.4: React 프론트엔드 초기화
 - **담당**: frontend-specialist
 - **작업**: Vite + React 19 + TailwindCSS + shadcn/ui + TanStack Query + react-router 프로젝트 생성. Light mode only.
 - **산출물**: `frontend/src/main.tsx`, `frontend/src/App.tsx`, `frontend/vite.config.ts`, `frontend/tailwind.config.ts`
 - **Worktree**: ❌ (main 직접)
 
-### [ ] P0-T0.5: PostgreSQL 스키마 + pgvector 마이그레이션
+### [x] P0-T0.5: PostgreSQL 스키마 + pgvector 마이그레이션
 - **담당**: database-specialist
 - **작업**: notes, note_embeddings, settings 테이블 생성. tsvector GIN 인덱스, ivfflat 벡터 인덱스 구성
 - **산출물**: `backend/alembic/versions/001_initial_schema.py`, `backend/app/models.py`

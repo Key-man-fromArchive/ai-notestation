@@ -1,0 +1,57 @@
+# @TASK P0-T0.3 - pydantic-settings 기반 애플리케이션 설정
+# @SPEC docs/plans/2026-01-29-labnote-ai-design.md#environment-variables
+
+from functools import lru_cache
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    """LabNote AI application settings.
+
+    All values are loaded from environment variables.
+    A .env file in the backend directory is also supported.
+    """
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+    )
+
+    # --- Database ---
+    DATABASE_URL: str = "postgresql+asyncpg://labnote:labnote@db:5432/labnote"
+
+    # --- Synology NAS ---
+    SYNOLOGY_URL: str = "http://localhost:5000"
+    SYNOLOGY_USER: str = "admin"
+    SYNOLOGY_PASSWORD: str = ""
+
+    # --- JWT ---
+    JWT_SECRET: str = "change-this-secret-key"
+    JWT_ALGORITHM: str = "HS256"
+    JWT_EXPIRE_MINUTES: int = 1440
+
+    # --- AI Providers (optional) ---
+    OPENAI_API_KEY: str = ""
+    ANTHROPIC_API_KEY: str = ""
+    GOOGLE_API_KEY: str = ""
+    ZHIPUAI_API_KEY: str = ""
+
+    # --- Embeddings ---
+    EMBEDDING_MODEL: str = "text-embedding-3-small"
+    EMBEDDING_DIMENSION: int = 1536
+
+    @property
+    def async_database_url(self) -> str:
+        """Ensure the database URL uses the asyncpg driver."""
+        url = self.DATABASE_URL
+        if url.startswith("postgresql://"):
+            url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return url
+
+
+@lru_cache
+def get_settings() -> Settings:
+    """Return cached application settings singleton."""
+    return Settings()

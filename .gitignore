@@ -1,26 +1,45 @@
 # Environment
 .env
 .env.local
+.env.*.local
 
 # Python
 __pycache__/
 *.py[cod]
+*$py.class
 *.egg-info/
+*.egg
 dist/
+build/
 .venv/
 venv/
+.python-version
+*.so
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
 
 # Node
 node_modules/
 frontend/dist/
+.vite/
+*.tsbuildinfo
 
 # IDE
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
 
 # OS
 .DS_Store
 Thumbs.db
+Desktop.ini
 
 # Docker
 pgdata/
@@ -28,3 +47,9 @@ pgdata/
 # Logs
 *.log
 docs/logs/
+
+# Worktree
+worktree/
+
+# Alembic
+backend/alembic/versions/__pycache__/

@@ -1,0 +1,71 @@
+# @TASK P0-T0.2 - Docker Compose 3-container environment
+# @SPEC docs/plans/2026-01-29-labnote-ai-design.md#system-architecture
+#
+# Services: db (PostgreSQL 16 + pgvector), backend (FastAPI), frontend (React + Vite)
+# Usage: docker compose up -d
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: labnote-db
+    environment:
+      POSTGRES_DB: labnote
+      POSTGRES_USER: labnote
+      POSTGRES_PASSWORD: labnote
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U labnote -d labnote"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - labnote-net
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: labnote-backend
+    ports:
+      - "8000:8000"
+    env_file: .env
+    environment:
+      # Ensure DATABASE_URL points to the db service
+      DATABASE_URL: postgresql+asyncpg://labnote:labnote@db:5432/labnote
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    restart: unless-stopped
+    networks:
+      - labnote-net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: labnote-frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: npm run dev -- --host 0.0.0.0 --port 3000
+    restart: unless-stopped
+    networks:
+      - labnote-net
+
+volumes:
+  pgdata:
+
+networks:
+  labnote-net:
+    driver: bridge

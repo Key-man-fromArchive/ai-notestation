@@ -90,11 +90,11 @@ labnote-ai/
 
 | Phase | 태스크 | 완료일 | 주요 내용 |
 |-------|--------|--------|----------|
-| - | - | - | 아직 실행된 Phase 없음 |
+| P0 | 5/5 | 2026-01-29 | 모노레포 구조, Docker Compose, FastAPI, React, DB 스키마 |
 
 ### 현재 Phase
 
-- 아직 시작되지 않음
+- P1: Synology Gateway (진행 중)
 
 ### 재개 명령어
 
