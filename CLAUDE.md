@@ -91,10 +91,12 @@ labnote-ai/
 | Phase | 태스크 | 완료일 | 주요 내용 |
 |-------|--------|--------|----------|
 | P0 | 5/5 | 2026-01-29 | 모노레포 구조, Docker Compose, FastAPI, React, DB 스키마 |
+| P1 | 4/4 | 2026-01-29 | Synology 클라이언트, NoteStation/FileStation 래퍼, 동기화 서비스 |
+| P2 | 5/5 | 2026-01-29 | 임베딩 서비스, 노트 인덱서, 전문검색, 의미검색, 하이브리드검색(RRF) |
 
 ### 현재 Phase
 
-- P1: Synology Gateway (진행 중)
+- P3: AI Router (대기 중)
 
 ### 재개 명령어
 

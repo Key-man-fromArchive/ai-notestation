@@ -87,7 +87,7 @@
 
 ## P2: 검색 엔진
 
-### [ ] P2-T2.1: 임베딩 생성 서비스
+### [x] P2-T2.1: 임베딩 생성 서비스
 - **담당**: backend-specialist
 - **파일**: `backend/tests/test_embeddings.py` → `backend/app/search/embeddings.py`
 - **스펙**: 텍스트를 벡터 임베딩으로 변환. OpenAI text-embedding-3-small 기본. 설정에서 모델 변경 가능
@@ -96,7 +96,7 @@
 - **TDD**: RED → GREEN → REFACTOR
 - **병렬**: 독립 실행
 
-### [ ] P2-T2.2: 노트 인덱서
+### [x] P2-T2.2: 노트 인덱서
 - **담당**: backend-specialist
 - **의존**: T2.1, P1-T1.4 (Mock: `mockEmbeddings`, `mockSyncService`)
 - **파일**: `backend/tests/test_indexer.py` → `backend/app/search/indexer.py`
@@ -106,7 +106,7 @@
 - **TDD**: RED → GREEN → REFACTOR
 - **병렬**: T2.1 완료 후 실행
 
-### [ ] P2-T2.3: 전문 검색 (Full-text Search)
+### [x] P2-T2.3: 전문 검색 (Full-text Search)
 - **담당**: backend-specialist
 - **파일**: `backend/tests/test_fts.py` → `backend/app/search/engine.py`
 - **스펙**: PostgreSQL tsvector 기반 전문 검색. 제목 가중치(A), 본문 가중치(B)
@@ -115,7 +115,7 @@
 - **TDD**: RED → GREEN → REFACTOR
 - **병렬**: T2.4와 병렬 가능
 
-### [ ] P2-T2.4: 의미 검색 (Semantic Search)
+### [x] P2-T2.4: 의미 검색 (Semantic Search)
 - **담당**: backend-specialist
 - **의존**: T2.1 (Mock: `mockEmbeddings`)
 - **파일**: `backend/tests/test_semantic.py` → `backend/app/search/engine.py` (확장)
@@ -125,7 +125,7 @@
 - **TDD**: RED → GREEN → REFACTOR
 - **병렬**: T2.3과 병렬 가능
 
-### [ ] P2-T2.5: 하이브리드 검색 (RRF 병합)
+### [x] P2-T2.5: 하이브리드 검색 (RRF 병합)
 - **담당**: backend-specialist
 - **의존**: T2.3, T2.4
 - **파일**: `backend/tests/test_hybrid_search.py` → `backend/app/search/engine.py` (확장)
