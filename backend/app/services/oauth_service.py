@@ -11,6 +11,7 @@ import hashlib
 import logging
 import secrets
 from datetime import UTC, datetime, timedelta
+from urllib.parse import urlencode
 
 import httpx
 from cryptography.fernet import Fernet
@@ -33,7 +34,7 @@ _PROVIDER_CONFIG = {
     "google": {
         "authorize_url": "https://accounts.google.com/o/oauth2/v2/auth",
         "token_url": "https://oauth2.googleapis.com/token",
-        "scopes": "https://www.googleapis.com/auth/generative-language",
+        "scopes": "https://www.googleapis.com/auth/generative-language https://www.googleapis.com/auth/userinfo.email",
         "supports_refresh": True,
     },
 }
@@ -166,15 +167,24 @@ class OAuthService:
         }
 
         if provider == "openai":
-            params["client_id"] = self._settings.OPENAI_OAUTH_CLIENT_ID
+            client_id = self._settings.OPENAI_OAUTH_CLIENT_ID
+            if not client_id:
+                raise OAuthError("OPENAI_OAUTH_CLIENT_ID is not configured", provider)
+            params["client_id"] = client_id
         elif provider == "google":
-            params["client_id"] = self._settings.GOOGLE_OAUTH_CLIENT_ID
+            client_id = self._settings.GOOGLE_OAUTH_CLIENT_ID
+            if not client_id:
+                raise OAuthError(
+                    "GOOGLE_OAUTH_CLIENT_ID is not configured. "
+                    "Create one at https://console.cloud.google.com/apis/credentials",
+                    provider,
+                )
+            params["client_id"] = client_id
             params["scope"] = config["scopes"]
             params["access_type"] = "offline"
             params["prompt"] = "consent"
 
-        query = "&".join(f"{k}={v}" for k, v in params.items())
-        authorization_url = f"{config['authorize_url']}?{query}"
+        authorization_url = f"{config['authorize_url']}?{urlencode(params)}"
 
         return {"authorization_url": authorization_url, "state": state}
 
@@ -418,6 +428,24 @@ class OAuthService:
             await db.flush()
 
         return {"disconnected": True}
+
+    # ------------------------------------------------------------------
+    # Configuration Check
+    # ------------------------------------------------------------------
+
+    def is_provider_configured(self, provider: str) -> dict[str, bool | str]:
+        """Check whether the OAuth provider has required credentials configured."""
+        if provider == "openai":
+            configured = bool(self._settings.OPENAI_OAUTH_CLIENT_ID)
+        elif provider == "google":
+            configured = bool(
+                self._settings.GOOGLE_OAUTH_CLIENT_ID
+                and self._settings.GOOGLE_OAUTH_CLIENT_SECRET
+            )
+        else:
+            configured = False
+
+        return {"provider": provider, "configured": configured}
 
     # ------------------------------------------------------------------
     # Helpers

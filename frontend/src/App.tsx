@@ -4,11 +4,12 @@
 
 import { Suspense, lazy } from 'react'
 import { QueryClientProvider } from '@tanstack/react-query'
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, Navigate } from 'react-router-dom'
 import { queryClient } from './lib/query-client'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { Layout } from './components/Layout'
 import { LoadingSpinner } from './components/LoadingSpinner'
+import { AuthProvider, useAuth } from './contexts/AuthContext'
 
 // Lazy load all pages for code splitting
 const Dashboard = lazy(() => import('./pages/Dashboard'))
@@ -18,46 +19,84 @@ const Search = lazy(() => import('./pages/Search'))
 const AIWorkbench = lazy(() => import('./pages/AIWorkbench'))
 const Settings = lazy(() => import('./pages/Settings'))
 const OAuthCallback = lazy(() => import('./pages/OAuthCallback'))
+const Login = lazy(() => import('./pages/Login'))
 
 // Demo pages
 const DemoHub = lazy(() => import('./demo/index'))
 const DemoNotesPages = lazy(() => import('./demo/phase-5/t5-2-notes-pages/page'))
 
 /**
- * App Shell (without Router wrapper for testing flexibility)
- * - React Router v7 라우팅
- * - React.lazy 코드 스플리팅
- * - TanStack Query Provider
- * - ErrorBoundary
- * - Layout (Sidebar + Main)
+ * 인증 확인 후 보호된 라우트를 렌더링
+ * - 로딩 중: 전체화면 스피너
+ * - 미인증: /login으로 리다이렉트
+ * - 인증: Layout + 자식 라우트 렌더링
+ */
+function ProtectedRoutes() {
+  const { isAuthenticated, isLoading } = useAuth()
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <LoadingSpinner size="lg" />
+      </div>
+    )
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />
+  }
+
+  return (
+    <Layout>
+      <Suspense
+        fallback={
+          <div className="flex items-center justify-center min-h-[400px]">
+            <LoadingSpinner />
+          </div>
+        }
+      >
+        <Routes>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/notes" element={<Notes />} />
+          <Route path="/notes/:id" element={<NoteDetail />} />
+          <Route path="/search" element={<Search />} />
+          <Route path="/ai" element={<AIWorkbench />} />
+          <Route path="/settings" element={<Settings />} />
+          <Route path="/oauth/callback" element={<OAuthCallback />} />
+
+          {/* Demo pages */}
+          <Route path="/demo" element={<DemoHub />} />
+          <Route path="/demo/phase-5/t5-2-notes-pages/*" element={<DemoNotesPages />} />
+        </Routes>
+      </Suspense>
+    </Layout>
+  )
+}
+
+/**
+ * App Shell
+ * - AuthProvider로 인증 상태 관리
+ * - /login: 공개 라우트 (Layout 없음)
+ * - /*: 보호 라우트 (인증 필요, Layout 포함)
  */
 function App() {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <Layout>
+        <AuthProvider>
           <Suspense
             fallback={
-              <div className="flex items-center justify-center min-h-[400px]">
-                <LoadingSpinner />
+              <div className="flex items-center justify-center min-h-screen">
+                <LoadingSpinner size="lg" />
               </div>
             }
           >
             <Routes>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/notes" element={<Notes />} />
-              <Route path="/notes/:id" element={<NoteDetail />} />
-              <Route path="/search" element={<Search />} />
-              <Route path="/ai" element={<AIWorkbench />} />
-              <Route path="/settings" element={<Settings />} />
-              <Route path="/oauth/callback" element={<OAuthCallback />} />
-
-              {/* Demo pages */}
-              <Route path="/demo" element={<DemoHub />} />
-              <Route path="/demo/phase-5/t5-2-notes-pages/*" element={<DemoNotesPages />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/*" element={<ProtectedRoutes />} />
             </Routes>
           </Suspense>
-        </Layout>
+        </AuthProvider>
       </QueryClientProvider>
     </ErrorBoundary>
   )

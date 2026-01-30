@@ -58,6 +58,11 @@ class DisconnectResponse(BaseModel):
     disconnected: bool
 
 
+class ConfigStatusResponse(BaseModel):
+    provider: str
+    configured: bool
+
+
 # ---------------------------------------------------------------------------
 # Dependencies
 # ---------------------------------------------------------------------------
@@ -78,6 +83,17 @@ def _validate_provider(provider: str) -> str:
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
+
+
+@router.get("/{provider}/config-status", response_model=ConfigStatusResponse)
+async def get_config_status(
+    provider: str,
+    oauth_service: OAuthService = Depends(_get_oauth_service),
+) -> ConfigStatusResponse:
+    """Check if OAuth provider credentials are configured (no auth required)."""
+    _validate_provider(provider)
+    result = oauth_service.is_provider_configured(provider)
+    return ConfigStatusResponse(**result)
 
 
 @router.get("/{provider}/authorize", response_model=AuthorizeResponse)

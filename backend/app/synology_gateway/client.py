@@ -81,7 +81,10 @@ class SynologyClient:
         self._user: str = user
         self._password: str = password
         self._sid: str | None = None
-        self._client: httpx.AsyncClient = httpx.AsyncClient(timeout=30.0)
+        self._client: httpx.AsyncClient = httpx.AsyncClient(
+            timeout=30.0,
+            verify=False,  # Synology 자체 서명 인증서 허용
+        )
 
     # ------------------------------------------------------------------
     # Authentication

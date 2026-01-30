@@ -35,11 +35,39 @@ class ApiClient {
   }
 
   /**
+   * 현재 access token 반환
+   */
+  getToken(): string | null {
+    return this.token
+  }
+
+  /**
    * JWT 토큰 제거
    */
   clearToken(): void {
     this.token = null
     localStorage.removeItem('auth_token')
+  }
+
+  /**
+   * Refresh token 저장
+   */
+  setRefreshToken(token: string): void {
+    localStorage.setItem('refresh_token', token)
+  }
+
+  /**
+   * Refresh token 조회
+   */
+  getRefreshToken(): string | null {
+    return localStorage.getItem('refresh_token')
+  }
+
+  /**
+   * Refresh token 삭제
+   */
+  clearRefreshToken(): void {
+    localStorage.removeItem('refresh_token')
   }
 
   /**

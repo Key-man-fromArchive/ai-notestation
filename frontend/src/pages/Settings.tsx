@@ -8,7 +8,7 @@ import { useSync } from '@/hooks/useSync'
 import { useOAuth } from '@/hooks/useOAuth'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
 import { EmptyState } from '@/components/EmptyState'
-import { Save, AlertCircle, CheckCircle, ChevronDown, ChevronRight, Link2, Unlink } from 'lucide-react'
+import { Save, AlertCircle, CheckCircle, ChevronDown, ChevronRight, Link2, Unlink, Info } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface SettingsData {
@@ -61,8 +61,19 @@ const settingsList: Setting[] = [
  * OAuth connection section for a provider
  */
 function OAuthSection({ provider, label }: { provider: string; label: string }) {
-  const { connected, email, isConnecting, isDisconnecting, connect, disconnect } =
+  const { configured, connected, email, isConnecting, isDisconnecting, connectError, connect, disconnect } =
     useOAuth(provider)
+
+  if (!configured) {
+    return (
+      <div className="flex items-center gap-2 p-3 bg-muted/50 border border-input rounded-md">
+        <Info className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden="true" />
+        <span className="text-sm text-muted-foreground">
+          {label} OAuth가 설정되지 않았습니다. 서버 환경변수를 확인하세요.
+        </span>
+      </div>
+    )
+  }
 
   if (connected) {
     return (
@@ -94,19 +105,29 @@ function OAuthSection({ provider, label }: { provider: string; label: string }) 
   }
 
   return (
-    <button
-      onClick={() => connect()}
-      disabled={isConnecting}
-      className={cn(
-        'flex items-center gap-2 w-full px-4 py-2.5 rounded-md',
-        'border border-primary/30 text-primary',
-        'hover:bg-primary/5 transition-colors',
-        'disabled:opacity-50 disabled:cursor-not-allowed'
+    <div className="space-y-2">
+      <button
+        onClick={() => connect()}
+        disabled={isConnecting}
+        className={cn(
+          'flex items-center gap-2 w-full px-4 py-2.5 rounded-md',
+          'border border-primary/30 text-primary',
+          'hover:bg-primary/5 transition-colors',
+          'disabled:opacity-50 disabled:cursor-not-allowed'
+        )}
+      >
+        <Link2 className="h-4 w-4" aria-hidden="true" />
+        {isConnecting ? '연결 중...' : `${label}로 연결`}
+      </button>
+      {connectError && (
+        <div className="flex items-center gap-2 p-2 bg-destructive/10 border border-destructive/20 rounded-md" role="alert">
+          <AlertCircle className="h-3.5 w-3.5 text-destructive shrink-0" aria-hidden="true" />
+          <span className="text-xs text-destructive">
+            연결에 실패했습니다. 서버 설정을 확인하세요.
+          </span>
+        </div>
       )}
-    >
-      <Link2 className="h-4 w-4" aria-hidden="true" />
-      {isConnecting ? '연결 중...' : `${label}로 연결`}
-    </button>
+    </div>
   )
 }
 

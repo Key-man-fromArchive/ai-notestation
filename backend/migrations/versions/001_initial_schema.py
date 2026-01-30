@@ -13,6 +13,7 @@ from typing import Sequence, Union
 
 import sqlalchemy as sa
 from alembic import op
+from pgvector.sqlalchemy import Vector
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
@@ -85,7 +86,7 @@ def upgrade() -> None:
         sa.Column("chunk_text", sa.Text, nullable=False),
         sa.Column(
             "embedding",
-            postgresql.Vector(dim=1536),
+            Vector(1536),
             nullable=False,
         ),
         sa.Column(
@@ -110,7 +111,7 @@ def upgrade() -> None:
         "settings",
         sa.Column("id", sa.Integer, nullable=False),
         sa.Column("key", sa.String(255), nullable=False),
-        sa.Column("value", postgresql.JSONB(astext_type=sa.Text()), nullable=False, server_default="'{}'"),
+        sa.Column("value", postgresql.JSONB(astext_type=sa.Text()), nullable=False, server_default=sa.text("'{}'::jsonb")),
         sa.Column(
             "updated_at",
             sa.DateTime(timezone=True),

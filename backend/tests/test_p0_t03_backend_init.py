@@ -154,22 +154,22 @@ class TestAlembicConfig:
         assert os.path.isfile(ini_path), f"alembic.ini not found at {ini_path}"
 
     def test_alembic_env_exists(self):
-        """alembic/env.py should exist."""
+        """migrations/env.py should exist."""
         import os
 
-        env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "alembic", "env.py")
-        assert os.path.isfile(env_path), f"alembic/env.py not found at {env_path}"
+        env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "migrations", "env.py")
+        assert os.path.isfile(env_path), f"migrations/env.py not found at {env_path}"
 
     def test_alembic_versions_dir_exists(self):
-        """alembic/versions/ directory should exist."""
+        """migrations/versions/ directory should exist."""
         import os
 
-        versions_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "alembic", "versions")
-        assert os.path.isdir(versions_path), f"alembic/versions/ not found at {versions_path}"
+        versions_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "migrations", "versions")
+        assert os.path.isdir(versions_path), f"migrations/versions/ not found at {versions_path}"
 
     def test_alembic_script_mako_exists(self):
-        """alembic/script.py.mako template should exist."""
+        """migrations/script.py.mako template should exist."""
         import os
 
-        mako_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "alembic", "script.py.mako")
+        mako_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "migrations", "script.py.mako")
         assert os.path.isfile(mako_path), f"script.py.mako not found at {mako_path}"
