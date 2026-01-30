@@ -94,10 +94,11 @@ labnote-ai/
 | P1 | 4/4 | 2026-01-29 | Synology 클라이언트, NoteStation/FileStation 래퍼, 동기화 서비스 |
 | P2 | 5/5 | 2026-01-29 | 임베딩 서비스, 노트 인덱서, 전문검색, 의미검색, 하이브리드검색(RRF) |
 | P3 | 7/7 | 2026-01-29 | Provider ABC, OpenAI/Anthropic/Gemini/ZhipuAI Provider, 통합 라우터+SSE, 프롬프트 템플릿 |
+| P4 | 6/6 | 2026-01-29 | JWT 인증, Notes/Search/AI/Sync/Settings API 엔드포인트 |
 
 ### 현재 Phase
 
-- P4: Backend API (대기 중)
+- P5: Frontend UI (대기 중)
 
 ### 재개 명령어
 

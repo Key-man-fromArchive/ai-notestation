@@ -211,7 +211,7 @@
 
 ## P4: Backend API 레이어
 
-### [ ] P4-T4.1: JWT 인증 서비스
+### [x] P4-T4.1: JWT 인증 서비스
 - **담당**: backend-specialist
 - **파일**: `backend/tests/test_auth_service.py` → `backend/app/services/auth_service.py`, `backend/app/api/auth.py`
 - **스펙**: JWT 토큰 발급/검증, FastAPI Depends 미들웨어
@@ -220,7 +220,7 @@
 - **TDD**: RED → GREEN → REFACTOR
 - **병렬**: 독립 실행
 
-### [ ] P4-T4.2: Notes API 엔드포인트
+### [x] P4-T4.2: Notes API 엔드포인트
 - **담당**: backend-specialist
 - **의존**: P1-T1.2, T4.1 (Mock: `mockNoteStation`, `mockAuth`)
 - **파일**: `backend/tests/test_api_notes.py` → `backend/app/api/notes.py`
@@ -230,7 +230,7 @@
 - **TDD**: RED → GREEN → REFACTOR
 - **병렬**: T4.3, T4.4, T4.5, T4.6과 병렬 가능 (Mock 사용)
 
-### [ ] P4-T4.3: Search API 엔드포인트
+### [x] P4-T4.3: Search API 엔드포인트
 - **담당**: backend-specialist
 - **의존**: P2-T2.5, T4.1 (Mock: `mockSearchEngine`, `mockAuth`)
 - **파일**: `backend/tests/test_api_search.py` → `backend/app/api/search.py`
@@ -240,7 +240,7 @@
 - **TDD**: RED → GREEN → REFACTOR
 - **병렬**: T4.2, T4.4, T4.5, T4.6과 병렬 가능 (Mock 사용)
 
-### [ ] P4-T4.4: AI API 엔드포인트 (chat + SSE stream)
+### [x] P4-T4.4: AI API 엔드포인트 (chat + SSE stream)
 - **담당**: backend-specialist
 - **의존**: P3-T3.6, P3-T3.7, T4.1 (Mock: `mockAIRouter`, `mockAuth`)
 - **파일**: `backend/tests/test_api_ai.py` → `backend/app/api/ai.py`
@@ -250,7 +250,7 @@
 - **TDD**: RED → GREEN → REFACTOR
 - **병렬**: T4.2, T4.3, T4.5, T4.6과 병렬 가능 (Mock 사용)
 
-### [ ] P4-T4.5: Sync API 엔드포인트
+### [x] P4-T4.5: Sync API 엔드포인트
 - **담당**: backend-specialist
 - **의존**: P1-T1.4, T4.1 (Mock: `mockSyncService`, `mockAuth`)
 - **파일**: `backend/tests/test_api_sync.py` → `backend/app/api/sync.py`
@@ -260,7 +260,7 @@
 - **TDD**: RED → GREEN → REFACTOR
 - **병렬**: T4.2, T4.3, T4.4, T4.6과 병렬 가능 (Mock 사용)
 
-### [ ] P4-T4.6: Settings API 엔드포인트
+### [x] P4-T4.6: Settings API 엔드포인트
 - **담당**: backend-specialist
 - **의존**: T4.1 (Mock: `mockAuth`)
 - **파일**: `backend/tests/test_api_settings.py` → `backend/app/api/settings.py`
