@@ -274,7 +274,7 @@
 
 ## P5: Frontend UI
 
-### [ ] P5-T5.1: App Shell (라우팅 + 레이아웃 + 공통 컴포넌트)
+### [x] P5-T5.1: App Shell (라우팅 + 레이아웃 + 공통 컴포넌트)
 - **담당**: frontend-specialist
 - **파일**: `frontend/src/__tests__/App.test.tsx` → `frontend/src/App.tsx`, `frontend/src/lib/queryClient.ts`, `frontend/src/lib/api.ts`
 - **스펙**: react-router 라우팅 (/, /notes, /notes/:id, /search, /ai, /settings), React.lazy 코드 스플리팅, TanStack Query Provider, ErrorBoundary, EmptyState 공통 컴포넌트
@@ -285,7 +285,7 @@
 - **데모**: `frontend/src/demo/phase-5/t5-1-app-shell/page.tsx`
 - **데모 상태**: loading, error, navigation
 
-### [ ] P5-T5.2: Notes 페이지 + NoteDetail 페이지
+### [x] P5-T5.2: Notes 페이지 + NoteDetail 페이지
 - **담당**: frontend-specialist
 - **의존**: T5.1 (Mock: `mockNotesAPI`)
 - **파일**: `frontend/src/__tests__/Notes.test.tsx`, `frontend/src/__tests__/NoteDetail.test.tsx` → `frontend/src/pages/Notes.tsx`, `frontend/src/pages/NoteDetail.tsx`, `frontend/src/components/NoteList.tsx`, `frontend/src/components/NoteCard.tsx`, `frontend/src/components/MarkdownRenderer.tsx`, `frontend/src/hooks/useNotes.ts`, `frontend/src/hooks/useNote.ts`
@@ -297,7 +297,7 @@
 - **데모**: `frontend/src/demo/phase-5/t5-2-notes/page.tsx`
 - **데모 상태**: loading, error, empty, normal, virtualized-1000-items
 
-### [ ] P5-T5.3: Search 페이지 + AI Workbench 페이지 + Settings 페이지 + Dashboard
+### [x] P5-T5.3: Search 페이지 + AI Workbench 페이지 + Settings 페이지 + Dashboard
 - **담당**: frontend-specialist
 - **의존**: T5.1 (Mock: `mockSearchAPI`, `mockAIAPI`, `mockSettingsAPI`)
 - **파일**: `frontend/src/__tests__/Search.test.tsx`, `frontend/src/__tests__/AIWorkbench.test.tsx`, `frontend/src/__tests__/Settings.test.tsx`, `frontend/src/__tests__/Dashboard.test.tsx` → `frontend/src/pages/Search.tsx`, `frontend/src/pages/AIWorkbench.tsx`, `frontend/src/pages/Settings.tsx`, `frontend/src/pages/Dashboard.tsx`, `frontend/src/components/SearchBar.tsx`, `frontend/src/components/AIChat.tsx`, `frontend/src/components/MarkdownEditor.tsx`, `frontend/src/components/ModelSelector.tsx`, `frontend/src/hooks/useSearch.ts`, `frontend/src/hooks/useAIStream.ts`, `frontend/src/hooks/useSync.ts`

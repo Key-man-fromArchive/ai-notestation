@@ -95,10 +95,11 @@ labnote-ai/
 | P2 | 5/5 | 2026-01-29 | 임베딩 서비스, 노트 인덱서, 전문검색, 의미검색, 하이브리드검색(RRF) |
 | P3 | 7/7 | 2026-01-29 | Provider ABC, OpenAI/Anthropic/Gemini/ZhipuAI Provider, 통합 라우터+SSE, 프롬프트 템플릿 |
 | P4 | 6/6 | 2026-01-29 | JWT 인증, Notes/Search/AI/Sync/Settings API 엔드포인트 |
+| P5 | 3/3 | 2026-01-30 | App Shell, Notes/NoteDetail, Search/AI/Settings/Dashboard |
 
 ### 현재 Phase
 
-- P5: Frontend UI (대기 중)
+- 전체 완료 (30/30 태스크)
 
 ### 재개 명령어
 
