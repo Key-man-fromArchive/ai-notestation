@@ -18,7 +18,8 @@ class TestConfig:
         )
         assert settings.DATABASE_URL == "postgresql+asyncpg://test:test@localhost/test"
         assert settings.JWT_ALGORITHM == "HS256"
-        assert settings.JWT_EXPIRE_MINUTES == 1440
+        assert settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES == 30
+        assert settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS == 7
         assert settings.EMBEDDING_MODEL == "text-embedding-3-small"
         assert settings.EMBEDDING_DIMENSION == 1536
 

@@ -38,13 +38,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Router includes (added in later phases) ---
-# from app.api import notes, search, ai, sync, settings as settings_api
-# app.include_router(notes.router, prefix="/api")
-# app.include_router(search.router, prefix="/api")
-# app.include_router(ai.router, prefix="/api")
-# app.include_router(sync.router, prefix="/api")
-# app.include_router(settings_api.router, prefix="/api")
+# --- Router includes ---
+from app.api.auth import router as auth_router
+from app.api.notes import router as notes_router
+from app.api.search import router as search_router
+from app.api.settings import router as settings_router
+from app.api.sync import router as sync_router
+
+app.include_router(auth_router, prefix="/api")
+app.include_router(notes_router, prefix="/api")
+app.include_router(search_router, prefix="/api")
+app.include_router(settings_router, prefix="/api")
+app.include_router(sync_router, prefix="/api")
+
+from app.api.ai import router as ai_router
+
+app.include_router(ai_router, prefix="/api")
 
 
 @app.get("/api/health", tags=["health"])
