@@ -21,9 +21,9 @@ test.describe('OpenAI OAuth Live Browser Test', () => {
     await expect(openaiButton).toBeVisible({ timeout: 5000 })
     await page.screenshot({ path: 'e2e-screenshots/02-openai-button-visible.png', fullPage: true })
 
-    // Step 4: Google OAuth 미설정 안내 확인
-    await expect(page.getByText('Google OAuth가 설정되지 않았습니다')).toBeVisible()
-    await page.screenshot({ path: 'e2e-screenshots/03-google-not-configured.png', fullPage: true })
+    // Step 4: Google OAuth 설정 확인 (연결 버튼 표시)
+    await expect(page.getByText('Google로 연결')).toBeVisible()
+    await page.screenshot({ path: 'e2e-screenshots/03-google-configured.png', fullPage: true })
 
     // Step 5: OpenAI 연결 클릭 → OpenAI 페이지로 리다이렉트
     await openaiButton.click()

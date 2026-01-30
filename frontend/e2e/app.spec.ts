@@ -27,12 +27,12 @@ test('OAuth status with bad token returns 401', async ({ request }) => {
 
 // ─── 3. OAuth config-status (no auth required) ──────────────
 
-test('Google OAuth config-status returns configured=false', async ({ request }) => {
+test('Google OAuth config-status returns configured=true', async ({ request }) => {
   const res = await request.get(`${API}/oauth/google/config-status`)
   expect(res.status()).toBe(200)
   const body = await res.json()
   expect(body.provider).toBe('google')
-  expect(body.configured).toBe(false)
+  expect(body.configured).toBe(true)
 })
 
 test('OpenAI OAuth config-status returns configured=true', async ({ request }) => {
@@ -53,11 +53,11 @@ test('OpenAI OAuth authorize returns valid URL with PKCE', async ({ request }) =
   expect(config.configured).toBe(true)
 })
 
-test('Google OAuth authorize blocks when unconfigured', async ({ request }) => {
+test('Google OAuth authorize is configured', async ({ request }) => {
   const configRes = await request.get(`${API}/oauth/google/config-status`)
   expect(configRes.status()).toBe(200)
   const config = await configRes.json()
-  expect(config.configured).toBe(false)
+  expect(config.configured).toBe(true)
 })
 
 // ─── 5. Login 페이지 렌더링 ──────────────────────────────────

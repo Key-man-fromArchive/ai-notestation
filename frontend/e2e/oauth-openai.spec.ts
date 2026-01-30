@@ -61,13 +61,13 @@ test.describe('OpenAI OAuth Flow', () => {
     expect(request.url()).toContain('client_id=app_EMoamEEZ73f0CkXaXp7hrann')
   })
 
-  test('4. UI: Google OAuth 미설정 시 안내 메시지 표시', async ({ page }) => {
+  test('4. UI: Google OAuth 설정 시 연결 버튼 표시', async ({ page }) => {
     const token = process.env.TEST_JWT!
     await injectAuth(page, token)
     await page.goto('/settings')
 
     await expect(
-      page.getByText('Google OAuth가 설정되지 않았습니다')
+      page.getByText('Google로 연결')
     ).toBeVisible({ timeout: 5000 })
   })
 
