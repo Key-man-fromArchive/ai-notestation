@@ -1,63 +1,60 @@
-/* @TASK P0-T0.4 - TailwindCSS + shadcn/ui 호환 스타일 */
+/* @TASK P5-T5.1 - TailwindCSS v4 + shadcn/ui 호환 스타일 */
 /* @SPEC docs/plans/2026-01-29-labnote-ai-design.md#프론트엔드 */
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
-@layer base {
-  :root {
-    /* Light mode only - shadcn/ui 호환 CSS 변수 */
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+@theme {
+  /* shadcn/ui 호환 디자인 토큰 (Light mode only) */
+  --color-background: oklch(100% 0 0);
+  --color-foreground: oklch(9.8% 0.023 286);
 
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+  --color-card: oklch(100% 0 0);
+  --color-card-foreground: oklch(9.8% 0.023 286);
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+  --color-popover: oklch(100% 0 0);
+  --color-popover-foreground: oklch(9.8% 0.023 286);
 
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
+  --color-primary: oklch(53.3% 0.177 263);
+  --color-primary-foreground: oklch(98% 0.008 247);
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+  --color-secondary: oklch(96.1% 0.008 247);
+  --color-secondary-foreground: oklch(11.2% 0.041 286);
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+  --color-muted: oklch(96.1% 0.008 247);
+  --color-muted-foreground: oklch(46.9% 0.014 254);
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+  --color-accent: oklch(96.1% 0.008 247);
+  --color-accent-foreground: oklch(11.2% 0.041 286);
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+  --color-destructive: oklch(60.2% 0.177 25);
+  --color-destructive-foreground: oklch(98% 0.008 247);
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
+  --color-border: oklch(91.4% 0.007 254);
+  --color-input: oklch(91.4% 0.007 254);
+  --color-ring: oklch(53.3% 0.177 263);
 
-    --radius: 0.5rem;
-  }
-
-  * {
-    @apply border-border;
-  }
-
-  body {
-    @apply bg-background text-foreground;
-    font-feature-settings: "rlig" 1, "calt" 1;
-  }
+  --radius-lg: 0.5rem;
+  --radius-md: calc(0.5rem - 2px);
+  --radius-sm: calc(0.5rem - 4px);
 }
 
-@layer utilities {
-  /* 애니메이션 줄이기 선호 사용자 지원 */
-  @media (prefers-reduced-motion: reduce) {
-    *,
-    *::before,
-    *::after {
-      animation-duration: 0.01ms !important;
-      animation-iteration-count: 1 !important;
-      transition-duration: 0.01ms !important;
-    }
+* {
+  border-color: theme(colors.border);
+}
+
+body {
+  background-color: theme(colors.background);
+  color: theme(colors.foreground);
+  font-feature-settings: "rlig" 1, "calt" 1;
+}
+
+/* 애니메이션 줄이기 선호 사용자 지원 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
