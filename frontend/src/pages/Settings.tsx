@@ -1,14 +1,14 @@
-// @TASK P5-T5.3 - Settings 페이지
+// @TASK P5-T5.3 + P6C-T6C.4 - Settings 페이지 with OAuth
 // @SPEC docs/plans/2026-01-29-labnote-ai-design.md#settings-페이지
-// @TEST src/__tests__/Settings.test.tsx
 
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/lib/api'
 import { useSync } from '@/hooks/useSync'
+import { useOAuth } from '@/hooks/useOAuth'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
 import { EmptyState } from '@/components/EmptyState'
-import { Save, AlertCircle, CheckCircle } from 'lucide-react'
+import { Save, AlertCircle, CheckCircle, ChevronDown, ChevronRight, Link2, Unlink } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface SettingsData {
@@ -20,6 +20,7 @@ interface Setting {
   label: string
   type: 'password' | 'text'
   placeholder?: string
+  oauthProvider?: string
 }
 
 const settingsList: Setting[] = [
@@ -28,6 +29,7 @@ const settingsList: Setting[] = [
     label: 'OpenAI API Key',
     type: 'password',
     placeholder: 'sk-...',
+    oauthProvider: 'openai',
   },
   {
     key: 'anthropic_api_key',
@@ -40,6 +42,7 @@ const settingsList: Setting[] = [
     label: 'Google API Key (Gemini)',
     type: 'password',
     placeholder: 'AIza...',
+    oauthProvider: 'google',
   },
   {
     key: 'zhipuai_api_key',
@@ -54,10 +57,64 @@ const settingsList: Setting[] = [
   },
 ]
 
+/**
+ * OAuth connection section for a provider
+ */
+function OAuthSection({ provider, label }: { provider: string; label: string }) {
+  const { connected, email, isConnecting, isDisconnecting, connect, disconnect } =
+    useOAuth(provider)
+
+  if (connected) {
+    return (
+      <div className="flex items-center justify-between p-3 bg-green-500/10 border border-green-500/20 rounded-md">
+        <div className="flex items-center gap-2">
+          <CheckCircle className="h-4 w-4 text-green-600" aria-hidden="true" />
+          <span className="text-sm font-medium text-green-700">
+            {label} 연결됨
+          </span>
+          {email && (
+            <span className="text-xs text-muted-foreground">({email})</span>
+          )}
+        </div>
+        <button
+          onClick={() => disconnect()}
+          disabled={isDisconnecting}
+          className={cn(
+            'flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md',
+            'border border-destructive/30 text-destructive',
+            'hover:bg-destructive/10 transition-colors',
+            'disabled:opacity-50 disabled:cursor-not-allowed'
+          )}
+        >
+          <Unlink className="h-3.5 w-3.5" aria-hidden="true" />
+          연결 해제
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <button
+      onClick={() => connect()}
+      disabled={isConnecting}
+      className={cn(
+        'flex items-center gap-2 w-full px-4 py-2.5 rounded-md',
+        'border border-primary/30 text-primary',
+        'hover:bg-primary/5 transition-colors',
+        'disabled:opacity-50 disabled:cursor-not-allowed'
+      )}
+    >
+      <Link2 className="h-4 w-4" aria-hidden="true" />
+      {isConnecting ? '연결 중...' : `${label}로 연결`}
+    </button>
+  )
+}
+
 export default function Settings() {
   const queryClient = useQueryClient()
   const [editingKey, setEditingKey] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
+  const [expandedApiKeys, setExpandedApiKeys] = useState<Set<string>>(new Set())
 
   const { status: syncStatus, lastSync, error: syncError } = useSync()
 
@@ -93,6 +150,18 @@ export default function Settings() {
   const handleCancel = () => {
     setEditingKey(null)
     setEditValue('')
+  }
+
+  const toggleApiKeyExpand = (key: string) => {
+    setExpandedApiKeys((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) {
+        next.delete(key)
+      } else {
+        next.add(key)
+      }
+      return next
+    })
   }
 
   if (isLoading) {
@@ -164,6 +233,8 @@ export default function Settings() {
           {settingsList.map((setting) => {
             const currentValue = data?.settings[setting.key] || ''
             const isEditing = editingKey === setting.key
+            const hasOAuth = !!setting.oauthProvider
+            const isApiKeyExpanded = expandedApiKeys.has(setting.key)
 
             return (
               <div key={setting.key} className="flex flex-col gap-2">
@@ -173,58 +244,138 @@ export default function Settings() {
                 >
                   {setting.label}
                 </label>
-                <div className="flex gap-2">
-                  <input
-                    id={setting.key}
-                    type={isEditing ? 'text' : setting.type}
-                    value={isEditing ? editValue : currentValue}
-                    onChange={(e) => setEditValue(e.target.value)}
-                    readOnly={!isEditing}
-                    placeholder={setting.placeholder}
-                    className={cn(
-                      'flex-1 px-3 py-2 border border-input rounded-md',
-                      'bg-background text-foreground',
-                      'placeholder:text-muted-foreground',
-                      'focus:outline-none focus:ring-2 focus:ring-ring',
-                      'transition-all duration-200',
-                      'motion-reduce:transition-none',
-                      !isEditing && 'bg-muted/50 cursor-default'
-                    )}
+
+                {/* OAuth section for supported providers */}
+                {hasOAuth && (
+                  <OAuthSection
+                    provider={setting.oauthProvider!}
+                    label={setting.oauthProvider === 'google' ? 'Google' : 'OpenAI'}
                   />
-                  {isEditing ? (
-                    <>
-                      <button
-                        onClick={() => handleSave(setting.key)}
-                        disabled={updateMutation.isPending}
-                        className={cn(
-                          'px-4 py-2 bg-primary text-primary-foreground rounded-md',
-                          'hover:bg-primary/90',
-                          'flex items-center gap-2',
-                          'transition-colors duration-200',
-                          'disabled:opacity-50 disabled:cursor-not-allowed'
+                )}
+
+                {/* API key input — always visible for non-OAuth, collapsible for OAuth */}
+                {hasOAuth ? (
+                  <div>
+                    <button
+                      onClick={() => toggleApiKeyExpand(setting.key)}
+                      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      {isApiKeyExpanded ? (
+                        <ChevronDown className="h-3 w-3" />
+                      ) : (
+                        <ChevronRight className="h-3 w-3" />
+                      )}
+                      API 키로 직접 입력
+                    </button>
+                    {isApiKeyExpanded && (
+                      <div className="flex gap-2 mt-2">
+                        <input
+                          id={setting.key}
+                          type={isEditing ? 'text' : setting.type}
+                          value={isEditing ? editValue : currentValue}
+                          onChange={(e) => setEditValue(e.target.value)}
+                          readOnly={!isEditing}
+                          placeholder={setting.placeholder}
+                          className={cn(
+                            'flex-1 px-3 py-2 border border-input rounded-md',
+                            'bg-background text-foreground',
+                            'placeholder:text-muted-foreground',
+                            'focus:outline-none focus:ring-2 focus:ring-ring',
+                            'transition-all duration-200',
+                            'motion-reduce:transition-none',
+                            !isEditing && 'bg-muted/50 cursor-default'
+                          )}
+                        />
+                        {isEditing ? (
+                          <>
+                            <button
+                              onClick={() => handleSave(setting.key)}
+                              disabled={updateMutation.isPending}
+                              className={cn(
+                                'px-4 py-2 bg-primary text-primary-foreground rounded-md',
+                                'hover:bg-primary/90',
+                                'flex items-center gap-2',
+                                'transition-colors duration-200',
+                                'disabled:opacity-50 disabled:cursor-not-allowed'
+                              )}
+                              aria-label="저장"
+                            >
+                              <Save className="h-4 w-4" aria-hidden="true" />
+                              저장
+                            </button>
+                            <button
+                              onClick={handleCancel}
+                              disabled={updateMutation.isPending}
+                              className="px-4 py-2 bg-muted text-muted-foreground rounded-md hover:bg-muted/80 transition-colors"
+                            >
+                              취소
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            onClick={() => handleEdit(setting.key, currentValue)}
+                            className="px-4 py-2 bg-muted text-muted-foreground rounded-md hover:bg-muted/80 transition-colors"
+                          >
+                            수정
+                          </button>
                         )}
-                        aria-label="저장"
-                      >
-                        <Save className="h-4 w-4" aria-hidden="true" />
-                        저장
-                      </button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <input
+                      id={setting.key}
+                      type={isEditing ? 'text' : setting.type}
+                      value={isEditing ? editValue : currentValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      readOnly={!isEditing}
+                      placeholder={setting.placeholder}
+                      className={cn(
+                        'flex-1 px-3 py-2 border border-input rounded-md',
+                        'bg-background text-foreground',
+                        'placeholder:text-muted-foreground',
+                        'focus:outline-none focus:ring-2 focus:ring-ring',
+                        'transition-all duration-200',
+                        'motion-reduce:transition-none',
+                        !isEditing && 'bg-muted/50 cursor-default'
+                      )}
+                    />
+                    {isEditing ? (
+                      <>
+                        <button
+                          onClick={() => handleSave(setting.key)}
+                          disabled={updateMutation.isPending}
+                          className={cn(
+                            'px-4 py-2 bg-primary text-primary-foreground rounded-md',
+                            'hover:bg-primary/90',
+                            'flex items-center gap-2',
+                            'transition-colors duration-200',
+                            'disabled:opacity-50 disabled:cursor-not-allowed'
+                          )}
+                          aria-label="저장"
+                        >
+                          <Save className="h-4 w-4" aria-hidden="true" />
+                          저장
+                        </button>
+                        <button
+                          onClick={handleCancel}
+                          disabled={updateMutation.isPending}
+                          className="px-4 py-2 bg-muted text-muted-foreground rounded-md hover:bg-muted/80 transition-colors"
+                        >
+                          취소
+                        </button>
+                      </>
+                    ) : (
                       <button
-                        onClick={handleCancel}
-                        disabled={updateMutation.isPending}
+                        onClick={() => handleEdit(setting.key, currentValue)}
                         className="px-4 py-2 bg-muted text-muted-foreground rounded-md hover:bg-muted/80 transition-colors"
                       >
-                        취소
+                        수정
                       </button>
-                    </>
-                  ) : (
-                    <button
-                      onClick={() => handleEdit(setting.key, currentValue)}
-                      className="px-4 py-2 bg-muted text-muted-foreground rounded-md hover:bg-muted/80 transition-colors"
-                    >
-                      수정
-                    </button>
-                  )}
-                </div>
+                    )}
+                  </div>
+                )}
               </div>
             )
           })}

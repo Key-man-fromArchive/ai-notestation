@@ -46,23 +46,39 @@ class GoogleProvider(AIProvider):
         _client: The google-genai Client instance.
     """
 
-    def __init__(self, api_key: str | None = None) -> None:
+    def __init__(
+        self,
+        api_key: str | None = None,
+        *,
+        oauth_token: str | None = None,
+        is_oauth: bool = False,
+    ) -> None:
         """Initialize the Google Gemini provider.
 
         Args:
             api_key: Google API key. If not provided, reads from
                      the GOOGLE_API_KEY environment variable.
+            oauth_token: OAuth access token for Google OAuth authentication.
+            is_oauth: Whether this provider uses OAuth credentials.
 
         Raises:
             ProviderError: If no API key is available.
         """
-        resolved_key = api_key or os.environ.get("GOOGLE_API_KEY")
-        if not resolved_key:
-            raise ProviderError(
-                provider="google",
-                message="API key is required. Provide api_key argument or set GOOGLE_API_KEY environment variable.",
-            )
-        self._client = genai.Client(api_key=resolved_key)
+        if oauth_token:
+            import google.oauth2.credentials as oauth2_credentials
+
+            creds = oauth2_credentials.Credentials(token=oauth_token)
+            self._client = genai.Client(credentials=creds)
+            self.is_oauth = True
+        else:
+            resolved_key = api_key or os.environ.get("GOOGLE_API_KEY")
+            if not resolved_key:
+                raise ProviderError(
+                    provider="google",
+                    message="API key is required. Provide api_key argument or set GOOGLE_API_KEY environment variable.",
+                )
+            self._client = genai.Client(api_key=resolved_key)
+            self.is_oauth = is_oauth
 
     def _convert_messages(
         self, messages: list[Message]

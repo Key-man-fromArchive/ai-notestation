@@ -17,6 +17,7 @@ const NoteDetail = lazy(() => import('./pages/NoteDetail'))
 const Search = lazy(() => import('./pages/Search'))
 const AIWorkbench = lazy(() => import('./pages/AIWorkbench'))
 const Settings = lazy(() => import('./pages/Settings'))
+const OAuthCallback = lazy(() => import('./pages/OAuthCallback'))
 
 // Demo pages
 const DemoHub = lazy(() => import('./demo/index'))
@@ -49,6 +50,7 @@ function App() {
               <Route path="/search" element={<Search />} />
               <Route path="/ai" element={<AIWorkbench />} />
               <Route path="/settings" element={<Settings />} />
+              <Route path="/oauth/callback" element={<OAuthCallback />} />
 
               {/* Demo pages */}
               <Route path="/demo" element={<DemoHub />} />

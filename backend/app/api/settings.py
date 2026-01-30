@@ -42,6 +42,8 @@ class SettingItem(BaseModel):
     key: str
     value: Any
     description: str = ""
+    oauth_connected: bool | None = None
+    oauth_email: str | None = None
 
 
 class SettingsListResponse(BaseModel):

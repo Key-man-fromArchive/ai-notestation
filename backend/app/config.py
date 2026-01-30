@@ -43,6 +43,13 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL: str = "text-embedding-3-small"
     EMBEDDING_DIMENSION: int = 1536
 
+    # --- OAuth ---
+    OAUTH_ENCRYPTION_KEY: str = ""  # Fernet key for token encryption
+    APP_BASE_URL: str = "http://localhost:3000"  # Frontend URL for OAuth callback
+    OPENAI_OAUTH_CLIENT_ID: str = "app_EMoamEEZ73f0CkXaXp7hrann"
+    GOOGLE_OAUTH_CLIENT_ID: str = ""
+    GOOGLE_OAUTH_CLIENT_SECRET: str = ""
+
     @property
     def async_database_url(self) -> str:
         """Ensure the database URL uses the asyncpg driver."""

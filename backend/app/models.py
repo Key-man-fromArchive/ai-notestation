@@ -4,7 +4,7 @@
 from datetime import datetime
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Boolean, DateTime, Index, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, Index, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -68,4 +68,32 @@ class Setting(Base):
     value: Mapped[dict] = mapped_column(JSONB, default={})
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class OAuthToken(Base):
+    """OAuth tokens for provider authentication (Google, OpenAI)."""
+
+    __tablename__ = "oauth_tokens"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    username: Mapped[str] = mapped_column(String(255), nullable=False)
+    provider: Mapped[str] = mapped_column(String(50), nullable=False)
+    access_token_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
+    refresh_token_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    token_type: Mapped[str] = mapped_column(String(50), default="bearer")
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    scope: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    pkce_state: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    pkce_code_verifier: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint("username", "provider", name="uq_oauth_tokens_user_provider"),
+        Index("idx_oauth_tokens_username", "username"),
+        Index("idx_oauth_tokens_provider", "provider"),
     )

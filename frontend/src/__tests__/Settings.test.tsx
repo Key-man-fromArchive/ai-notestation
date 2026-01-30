@@ -14,7 +14,31 @@ vi.mock('../lib/api', () => ({
   apiClient: {
     get: vi.fn(),
     put: vi.fn(),
+    delete: vi.fn(),
   },
+}))
+
+vi.mock('../hooks/useSync', () => ({
+  useSync: () => ({
+    status: 'idle',
+    lastSync: null,
+    error: null,
+    triggerSync: vi.fn(),
+  }),
+}))
+
+vi.mock('../hooks/useOAuth', () => ({
+  useOAuth: () => ({
+    connected: false,
+    email: null,
+    isLoading: false,
+    isConnecting: false,
+    isDisconnecting: false,
+    connect: vi.fn(),
+    disconnect: vi.fn(),
+    exchangeCode: vi.fn(),
+    callbackError: null,
+  }),
 }))
 
 const createWrapper = () => {
@@ -34,12 +58,21 @@ const createWrapper = () => {
 describe('Settings Page', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(api.apiClient.get).mockResolvedValue({
-      settings: {
-        openai_api_key: 'sk-****',
-        anthropic_api_key: 'ant****',
-        nas_url: 'https://nas.example.com',
-      },
+    vi.mocked(api.apiClient.get).mockImplementation((path: string) => {
+      if (path === '/settings') {
+        return Promise.resolve({
+          settings: {
+            openai_api_key: 'sk-****',
+            anthropic_api_key: 'ant****',
+            nas_url: 'https://nas.example.com',
+          },
+        })
+      }
+      // OAuth status endpoints
+      if (path.includes('/oauth/') && path.includes('/status')) {
+        return Promise.resolve({ connected: false })
+      }
+      return Promise.resolve({})
     })
   })
 
@@ -55,32 +88,37 @@ describe('Settings Page', () => {
   it('masks API keys', async () => {
     render(<Settings />, { wrapper: createWrapper() })
 
+    // Anthropic key is always visible (no OAuth)
     await waitFor(() => {
-      expect(screen.getByDisplayValue('sk-****')).toBeInTheDocument()
       expect(screen.getByDisplayValue('ant****')).toBeInTheDocument()
     })
+
+    // OpenAI key is behind a collapsible toggle (OAuth provider)
+    // Verify the label is present
+    expect(screen.getByText(/OpenAI API Key/i)).toBeInTheDocument()
   })
 
   it('updates setting value', async () => {
     vi.mocked(api.apiClient.put).mockResolvedValue({
-      key: 'openai_api_key',
-      value: 'sk-new-key',
+      key: 'anthropic_api_key',
+      value: 'ant-new-key',
     })
 
     const user = userEvent.setup()
     render(<Settings />, { wrapper: createWrapper() })
 
+    // Use Anthropic key which is always visible (non-OAuth provider)
     await waitFor(() => {
-      expect(screen.getByDisplayValue('sk-****')).toBeInTheDocument()
+      expect(screen.getByDisplayValue('ant****')).toBeInTheDocument()
     })
 
     // 수정 버튼 클릭
     const editButtons = screen.getAllByText('수정')
-    await user.click(editButtons[0]) // OpenAI 키 수정
+    await user.click(editButtons[0]) // Anthropic 키 수정
 
     // 입력 필드가 편집 가능해졌는지 확인
     await waitFor(() => {
-      const input = screen.getByDisplayValue('sk-****')
+      const input = screen.getByDisplayValue('ant****')
       expect(input).not.toHaveAttribute('readonly')
     })
 

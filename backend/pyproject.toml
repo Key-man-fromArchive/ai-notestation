@@ -31,6 +31,8 @@ dependencies = [
     "zhipuai>=2.1.0",
     "beautifulsoup4>=4.12.0",
     "lxml>=5.3.0",
+    "cryptography>=44.0.0",
+    "google-auth>=2.37.0",
 ]
 
 [project.optional-dependencies]

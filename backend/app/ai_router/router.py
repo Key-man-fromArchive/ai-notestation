@@ -106,6 +106,47 @@ class AIRouter:
         """
         self._providers[name] = provider
 
+    def register_oauth_provider(self, name: str, access_token: str, **kwargs: Any) -> None:
+        """Register a provider using an OAuth access token.
+
+        Args:
+            name: Provider name ("openai" or "google").
+            access_token: OAuth access token.
+            **kwargs: Extra keyword arguments forwarded to the provider constructor.
+        """
+        try:
+            if name == "openai":
+                from app.ai_router.providers.openai import OpenAIProvider
+
+                provider = OpenAIProvider(api_key=access_token, is_oauth=True, **kwargs)
+            elif name == "google":
+                from app.ai_router.providers.google import GoogleProvider
+
+                provider = GoogleProvider(oauth_token=access_token, is_oauth=True, **kwargs)
+            else:
+                logger.warning("OAuth not supported for provider: %s", name)
+                return
+
+            self._providers[name] = provider
+            logger.info("Registered OAuth provider: %s", name)
+        except Exception:
+            logger.warning("Failed to register OAuth provider: %s", name, exc_info=True)
+
+    def remove_provider(self, name: str) -> bool:
+        """Remove a registered provider.
+
+        Args:
+            name: The provider name to remove.
+
+        Returns:
+            True if the provider was removed, False if not found.
+        """
+        if name in self._providers:
+            del self._providers[name]
+            logger.info("Removed provider: %s", name)
+            return True
+        return False
+
     def get_provider(self, provider_name: str) -> AIProvider:
         """Retrieve a registered provider by name.
 

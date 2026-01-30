@@ -55,6 +55,10 @@ from app.api.ai import router as ai_router
 
 app.include_router(ai_router, prefix="/api")
 
+from app.api.oauth import router as oauth_router
+
+app.include_router(oauth_router, prefix="/api")
+
 
 @app.get("/api/health", tags=["health"])
 async def health_check() -> dict[str, str]:

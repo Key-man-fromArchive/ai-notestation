@@ -63,7 +63,7 @@ class OpenAIProvider(AIProvider):
         ProviderError: If no API key is found.
     """
 
-    def __init__(self, api_key: str | None = None) -> None:
+    def __init__(self, api_key: str | None = None, *, is_oauth: bool = False) -> None:
         resolved_key = api_key or os.environ.get("OPENAI_API_KEY")
         if not resolved_key:
             raise ProviderError(
@@ -72,6 +72,7 @@ class OpenAIProvider(AIProvider):
                 status_code=None,
             )
         self._client = AsyncOpenAI(api_key=resolved_key)
+        self.is_oauth = is_oauth
 
     # ------------------------------------------------------------------
     # chat
