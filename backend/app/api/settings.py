@@ -24,6 +24,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
+from app.config import get_settings
 from app.services.auth_service import get_current_user
 
 logger = logging.getLogger(__name__)
@@ -72,6 +73,9 @@ class SettingUpdateResponse(BaseModel):
 
 # Description metadata for each known setting key
 _SETTING_DESCRIPTIONS: dict[str, str] = {
+    "nas_url": "Synology NAS URL (e.g. http://192.168.1.100:5000)",
+    "nas_user": "Synology NAS login username",
+    "nas_password": "Synology NAS login password",
     "openai_api_key": "OpenAI API key for GPT models",
     "anthropic_api_key": "Anthropic API key for Claude models",
     "google_api_key": "Google API key for Gemini models",
@@ -82,18 +86,40 @@ _SETTING_DESCRIPTIONS: dict[str, str] = {
     "max_search_results": "Maximum number of search results returned",
 }
 
+
+def _init_settings_store() -> dict[str, Any]:
+    """Initialise the in-memory settings store.
+
+    NAS settings are seeded from environment variables so that existing
+    ``.env`` configurations continue to work. Users can then override
+    them at runtime via the Settings UI.
+    """
+    env = get_settings()
+    return {
+        "nas_url": env.SYNOLOGY_URL,
+        "nas_user": env.SYNOLOGY_USER,
+        "nas_password": env.SYNOLOGY_PASSWORD,
+        "openai_api_key": "",
+        "anthropic_api_key": "",
+        "google_api_key": "",
+        "zhipuai_api_key": "",
+        "default_ai_model": "gpt-4",
+        "sync_interval_minutes": 30,
+        "embedding_model": "text-embedding-3-small",
+        "max_search_results": 20,
+    }
+
+
 # In-memory settings store (will be replaced by DB in future phase)
 # Keys must match _SETTING_DESCRIPTIONS to be recognized.
-_settings_store: dict[str, Any] = {
-    "openai_api_key": "",
-    "anthropic_api_key": "",
-    "google_api_key": "",
-    "zhipuai_api_key": "",
-    "default_ai_model": "gpt-4",
-    "sync_interval_minutes": 30,
-    "embedding_model": "text-embedding-3-small",
-    "max_search_results": 20,
-}
+_settings_store: dict[str, Any] = {}
+
+
+def _get_store() -> dict[str, Any]:
+    """Return the settings store, initialising lazily on first access."""
+    if not _settings_store:
+        _settings_store.update(_init_settings_store())
+    return _settings_store
 
 
 # ---------------------------------------------------------------------------
@@ -118,6 +144,8 @@ def _mask_value(key: str, value: Any) -> Any:
     """
     if key.endswith("_api_key") and isinstance(value, str) and len(value) > 0:
         return value[:3] + "****"
+    if key == "nas_password" and isinstance(value, str) and len(value) > 0:
+        return "****"
     return value
 
 
@@ -137,10 +165,10 @@ async def list_settings(
     items = [
         SettingItem(
             key=key,
-            value=_mask_value(key, _settings_store[key]),
+            value=_mask_value(key, _get_store()[key]),
             description=_SETTING_DESCRIPTIONS.get(key, ""),
         )
-        for key in _settings_store
+        for key in _get_store()
     ]
     return SettingsListResponse(settings=items)
 
@@ -157,7 +185,7 @@ async def get_setting(
     Args:
         key: The setting key to retrieve.
     """
-    if key not in _settings_store:
+    if key not in _get_store():
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Setting '{key}' not found",
@@ -165,7 +193,7 @@ async def get_setting(
 
     return SettingItem(
         key=key,
-        value=_mask_value(key, _settings_store[key]),
+        value=_mask_value(key, _get_store()[key]),
         description=_SETTING_DESCRIPTIONS.get(key, ""),
     )
 
@@ -185,17 +213,90 @@ async def update_setting(
         key: The setting key to update.
         body: Request body containing the new value.
     """
-    if key not in _settings_store:
+    if key not in _get_store():
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Setting '{key}' not found",
         )
 
-    _settings_store[key] = body.value
+    _get_store()[key] = body.value
     logger.info("Setting '%s' updated by user", key)
 
     return SettingUpdateResponse(
         key=key,
-        value=_mask_value(key, _settings_store[key]),
+        value=_mask_value(key, _get_store()[key]),
         updated=True,
     )
+
+
+# ---------------------------------------------------------------------------
+# NAS configuration helpers (used by sync / auth modules)
+# ---------------------------------------------------------------------------
+
+
+def get_nas_config() -> dict[str, str]:
+    """Return the current NAS connection settings.
+
+    Other modules (sync, auth) should call this instead of reading
+    ``get_settings()`` directly so that runtime overrides made through
+    the Settings UI are respected.
+
+    Returns:
+        A dict with keys ``url``, ``user``, ``password``.
+    """
+    store = _get_store()
+    return {
+        "url": store["nas_url"],
+        "user": store["nas_user"],
+        "password": store["nas_password"],
+    }
+
+
+# ---------------------------------------------------------------------------
+# NAS connection test
+# ---------------------------------------------------------------------------
+
+
+class NasTestResponse(BaseModel):
+    """Response for the NAS connection test."""
+
+    success: bool
+    message: str
+
+
+@router.post("/nas/test", response_model=NasTestResponse)
+async def test_nas_connection(
+    _current_user: dict = Depends(get_current_user),  # noqa: B008
+) -> NasTestResponse:
+    """Test connectivity to the configured Synology NAS.
+
+    Attempts to authenticate using the current NAS settings.
+    Returns success/failure with a human-readable message.
+    """
+    from app.synology_gateway.client import SynologyAuthError, SynologyClient
+
+    nas = get_nas_config()
+
+    if not nas["url"]:
+        return NasTestResponse(success=False, message="NAS URL이 설정되지 않았습니다.")
+
+    client = SynologyClient(
+        url=nas["url"],
+        user=nas["user"],
+        password=nas["password"],
+    )
+    try:
+        await client.login()
+        return NasTestResponse(success=True, message="NAS에 성공적으로 연결되었습니다.")
+    except SynologyAuthError:
+        return NasTestResponse(
+            success=False,
+            message="NAS 인증에 실패했습니다. 사용자 이름과 비밀번호를 확인하세요.",
+        )
+    except Exception as exc:
+        return NasTestResponse(
+            success=False,
+            message=f"NAS 연결에 실패했습니다: {exc}",
+        )
+    finally:
+        await client.close()

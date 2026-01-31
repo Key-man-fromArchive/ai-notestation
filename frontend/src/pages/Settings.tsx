@@ -8,7 +8,7 @@ import { useSync } from '@/hooks/useSync'
 import { useOAuth } from '@/hooks/useOAuth'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
 import { EmptyState } from '@/components/EmptyState'
-import { Save, AlertCircle, CheckCircle, ChevronDown, ChevronRight, Link2, Unlink, Info } from 'lucide-react'
+import { Save, AlertCircle, CheckCircle, ChevronDown, ChevronRight, Link2, Unlink, Info, Wifi, WifiOff, Copy, ExternalLink, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface SettingsData {
@@ -23,7 +23,28 @@ interface Setting {
   oauthProvider?: string
 }
 
-const settingsList: Setting[] = [
+const nasSettingsList: Setting[] = [
+  {
+    key: 'nas_url',
+    label: 'Synology NAS URL',
+    type: 'text',
+    placeholder: 'http://192.168.1.100:5000',
+  },
+  {
+    key: 'nas_user',
+    label: 'NAS 사용자 이름',
+    type: 'text',
+    placeholder: 'admin',
+  },
+  {
+    key: 'nas_password',
+    label: 'NAS 비밀번호',
+    type: 'password',
+    placeholder: '••••••••',
+  },
+]
+
+const apiKeySettingsList: Setting[] = [
   {
     key: 'openai_api_key',
     label: 'OpenAI API Key',
@@ -49,20 +70,29 @@ const settingsList: Setting[] = [
     label: 'ZhipuAI API Key (GLM)',
     type: 'password',
   },
-  {
-    key: 'nas_url',
-    label: 'Synology NAS URL',
-    type: 'text',
-    placeholder: 'https://nas.example.com',
-  },
 ]
+
+const settingsList: Setting[] = [...nasSettingsList, ...apiKeySettingsList]
 
 /**
  * OAuth connection section for a provider
  */
 function OAuthSection({ provider, label }: { provider: string; label: string }) {
-  const { configured, connected, email, isConnecting, isDisconnecting, connectError, connect, disconnect } =
+  const { configured, connected, email, isConnecting, isDisconnecting, connectError, connect, authUrl, disconnect } =
     useOAuth(provider)
+  const [copied, setCopied] = useState(false)
+
+  const handleConnect = async () => {
+    setCopied(false)
+    await connect()
+  }
+
+  const handleCopy = async () => {
+    if (!authUrl) return
+    await navigator.clipboard.writeText(authUrl)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
 
   if (!configured) {
     return (
@@ -107,7 +137,7 @@ function OAuthSection({ provider, label }: { provider: string; label: string }) 
   return (
     <div className="space-y-2">
       <button
-        onClick={() => connect()}
+        onClick={handleConnect}
         disabled={isConnecting}
         className={cn(
           'flex items-center gap-2 w-full px-4 py-2.5 rounded-md',
@@ -117,8 +147,49 @@ function OAuthSection({ provider, label }: { provider: string; label: string }) 
         )}
       >
         <Link2 className="h-4 w-4" aria-hidden="true" />
-        {isConnecting ? '연결 중...' : `${label}로 연결`}
+        {isConnecting ? '링크 생성 중...' : `${label}로 연결`}
       </button>
+
+      {/* OAuth URL display */}
+      {authUrl && (
+        <div className="p-3 bg-muted/50 border border-input rounded-md space-y-2">
+          <p className="text-xs text-muted-foreground">
+            아래 링크를 복사하여 브라우저에서 열어주세요:
+          </p>
+          <div className="flex gap-1.5">
+            <input
+              type="text"
+              value={authUrl}
+              readOnly
+              className="flex-1 px-2 py-1.5 text-xs font-mono bg-background border border-input rounded-md truncate"
+              onClick={(e) => (e.target as HTMLInputElement).select()}
+            />
+            <button
+              onClick={handleCopy}
+              className={cn(
+                'flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-md shrink-0',
+                'border border-input hover:bg-muted transition-colors',
+                copied && 'text-green-600 border-green-500/30'
+              )}
+              title="복사"
+            >
+              {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+              {copied ? '복사됨' : '복사'}
+            </button>
+            <a
+              href={authUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-md shrink-0 border border-input hover:bg-muted transition-colors"
+              title="새 탭에서 열기"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              열기
+            </a>
+          </div>
+        </div>
+      )}
+
       {connectError && (
         <div className="flex items-center gap-2 p-2 bg-destructive/10 border border-destructive/20 rounded-md" role="alert">
           <AlertCircle className="h-3.5 w-3.5 text-destructive shrink-0" aria-hidden="true" />
@@ -127,6 +198,93 @@ function OAuthSection({ provider, label }: { provider: string; label: string }) 
           </span>
         </div>
       )}
+    </div>
+  )
+}
+
+/**
+ * Inline setting editor row (label + input + edit/save/cancel buttons)
+ */
+function SettingRow({
+  setting,
+  currentValue,
+  editingKey,
+  editValue,
+  isPending,
+  onEdit,
+  onSave,
+  onCancel,
+  onEditValueChange,
+}: {
+  setting: Setting
+  currentValue: string
+  editingKey: string | null
+  editValue: string
+  isPending: boolean
+  onEdit: (key: string, value: string) => void
+  onSave: (key: string) => void
+  onCancel: () => void
+  onEditValueChange: (value: string) => void
+}) {
+  const isEditing = editingKey === setting.key
+
+  return (
+    <div className="flex flex-col gap-2">
+      <label htmlFor={setting.key} className="text-sm font-medium text-foreground">
+        {setting.label}
+      </label>
+      <div className="flex gap-2">
+        <input
+          id={setting.key}
+          type={isEditing ? 'text' : setting.type}
+          value={isEditing ? editValue : currentValue}
+          onChange={(e) => onEditValueChange(e.target.value)}
+          readOnly={!isEditing}
+          placeholder={setting.placeholder}
+          className={cn(
+            'flex-1 px-3 py-2 border border-input rounded-md',
+            'bg-background text-foreground',
+            'placeholder:text-muted-foreground',
+            'focus:outline-none focus:ring-2 focus:ring-ring',
+            'transition-all duration-200',
+            'motion-reduce:transition-none',
+            !isEditing && 'bg-muted/50 cursor-default'
+          )}
+        />
+        {isEditing ? (
+          <>
+            <button
+              onClick={() => onSave(setting.key)}
+              disabled={isPending}
+              className={cn(
+                'px-4 py-2 bg-primary text-primary-foreground rounded-md',
+                'hover:bg-primary/90',
+                'flex items-center gap-2',
+                'transition-colors duration-200',
+                'disabled:opacity-50 disabled:cursor-not-allowed'
+              )}
+              aria-label="저장"
+            >
+              <Save className="h-4 w-4" aria-hidden="true" />
+              저장
+            </button>
+            <button
+              onClick={onCancel}
+              disabled={isPending}
+              className="px-4 py-2 bg-muted text-muted-foreground rounded-md hover:bg-muted/80 transition-colors"
+            >
+              취소
+            </button>
+          </>
+        ) : (
+          <button
+            onClick={() => onEdit(setting.key, currentValue)}
+            className="px-4 py-2 bg-muted text-muted-foreground rounded-md hover:bg-muted/80 transition-colors"
+          >
+            수정
+          </button>
+        )}
+      </div>
     </div>
   )
 }
@@ -157,6 +315,11 @@ export default function Settings() {
       setEditingKey(null)
       setEditValue('')
     },
+  })
+
+  const nasTestMutation = useMutation({
+    mutationFn: () =>
+      apiClient.post<{ success: boolean; message: string }>('/settings/nas/test', {}),
   })
 
   const handleEdit = (key: string, currentValue: string) => {
@@ -208,10 +371,12 @@ export default function Settings() {
         </p>
       </div>
 
-      {/* NAS 연결 상태 */}
+      {/* NAS 설정 */}
       <div className="p-4 border border-input rounded-md">
-        <h3 className="text-lg font-semibold mb-3">NAS 연결 상태</h3>
-        <div className="flex items-center gap-2 mb-2">
+        <h3 className="text-lg font-semibold mb-3">Synology NAS 연결</h3>
+
+        {/* NAS 연결 상태 표시 */}
+        <div className="flex items-center gap-2 mb-4">
           <div
             className={cn(
               'h-3 w-3 rounded-full',
@@ -228,30 +393,85 @@ export default function Settings() {
             {syncStatus === 'completed' && '동기화 완료'}
             {syncStatus === 'error' && 'NAS 연결에 실패했습니다'}
           </span>
+          {lastSync && (
+            <span className="text-xs text-muted-foreground ml-2">
+              (마지막 동기화: {new Date(lastSync).toLocaleString('ko-KR')})
+            </span>
+          )}
         </div>
-        {lastSync && (
-          <p className="text-xs text-muted-foreground">
-            마지막 동기화: {new Date(lastSync).toLocaleString('ko-KR')}
-          </p>
-        )}
+
         {syncError && (
           <div
-            className="mt-2 p-3 bg-destructive/10 border border-destructive/20 rounded-md"
+            className="mb-4 p-3 bg-destructive/10 border border-destructive/20 rounded-md"
             role="alert"
           >
             <p className="text-sm text-destructive">{syncError}</p>
             <p className="text-xs text-destructive/80 mt-1">
-              NAS URL과 인증 정보를 확인하세요
+              아래에서 NAS URL과 인증 정보를 확인하세요
             </p>
           </div>
         )}
+
+        {/* NAS 설정 필드 */}
+        <div className="space-y-4">
+          {nasSettingsList.map((setting) => (
+            <SettingRow
+              key={setting.key}
+              setting={setting}
+              currentValue={data?.settings[setting.key] || ''}
+              editingKey={editingKey}
+              editValue={editValue}
+              isPending={updateMutation.isPending}
+              onEdit={handleEdit}
+              onSave={handleSave}
+              onCancel={handleCancel}
+              onEditValueChange={setEditValue}
+            />
+          ))}
+        </div>
+
+        {/* NAS 연결 테스트 버튼 */}
+        <div className="mt-4 flex items-center gap-3">
+          <button
+            onClick={() => nasTestMutation.mutate()}
+            disabled={nasTestMutation.isPending}
+            className={cn(
+              'flex items-center gap-2 px-4 py-2 rounded-md',
+              'border border-primary/30 text-primary',
+              'hover:bg-primary/5 transition-colors',
+              'disabled:opacity-50 disabled:cursor-not-allowed'
+            )}
+          >
+            <Wifi className="h-4 w-4" aria-hidden="true" />
+            {nasTestMutation.isPending ? '연결 테스트 중...' : '연결 테스트'}
+          </button>
+
+          {nasTestMutation.isSuccess && nasTestMutation.data?.success && (
+            <div className="flex items-center gap-2 text-green-600">
+              <CheckCircle className="h-4 w-4" aria-hidden="true" />
+              <span className="text-sm">{nasTestMutation.data.message}</span>
+            </div>
+          )}
+          {nasTestMutation.isSuccess && !nasTestMutation.data?.success && (
+            <div className="flex items-center gap-2 text-destructive">
+              <WifiOff className="h-4 w-4" aria-hidden="true" />
+              <span className="text-sm">{nasTestMutation.data?.message}</span>
+            </div>
+          )}
+          {nasTestMutation.isError && (
+            <div className="flex items-center gap-2 text-destructive">
+              <AlertCircle className="h-4 w-4" aria-hidden="true" />
+              <span className="text-sm">연결 테스트에 실패했습니다</span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* API 키 설정 */}
       <div className="p-4 border border-input rounded-md">
         <h3 className="text-lg font-semibold mb-3">API 키 관리</h3>
         <div className="space-y-4">
-          {settingsList.map((setting) => {
+          {apiKeySettingsList.map((setting) => {
             const currentValue = data?.settings[setting.key] || ''
             const isEditing = editingKey === setting.key
             const hasOAuth = !!setting.oauthProvider

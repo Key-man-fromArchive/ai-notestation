@@ -16,7 +16,6 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
-from app.config import get_settings
 from app.services.auth_service import (
     create_access_token,
     create_refresh_token,
@@ -77,12 +76,15 @@ class UserResponse(BaseModel):
 def _create_synology_client(username: str, password: str) -> SynologyClient:
     """Create a SynologyClient with the given credentials.
 
-    Uses the NAS URL from application settings.
+    Uses the NAS URL from the settings store (which is seeded from env
+    variables but can be overridden at runtime via the Settings UI).
     This function is extracted to allow easy mocking in tests.
     """
-    settings = get_settings()
+    from app.api.settings import get_nas_config
+
+    nas = get_nas_config()
     return SynologyClient(
-        url=settings.SYNOLOGY_URL,
+        url=nas["url"],
         user=username,
         password=password,
     )

@@ -96,19 +96,19 @@ async def _create_sync_service() -> tuple:
     Raises:
         Any exception from session creation or service instantiation.
     """
-    from app.config import get_settings
+    from app.api.settings import get_nas_config
     from app.database import async_session_factory
     from app.services.sync_service import SyncService
     from app.synology_gateway.client import SynologyClient
     from app.synology_gateway.notestation import NoteStationService
 
-    settings = get_settings()
+    nas = get_nas_config()
     session = async_session_factory()
 
     client = SynologyClient(
-        url=settings.SYNOLOGY_URL,
-        user=settings.SYNOLOGY_USER,
-        password=settings.SYNOLOGY_PASSWORD,
+        url=nas["url"],
+        user=nas["user"],
+        password=nas["password"],
     )
     await client.login()
 

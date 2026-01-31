@@ -54,8 +54,7 @@ export function useOAuth(provider: string) {
       )
       // Store provider in sessionStorage for callback page
       sessionStorage.setItem('oauth_provider', provider)
-      // Redirect to OAuth provider
-      window.location.href = data.authorization_url
+      return data
     },
   })
 
@@ -82,7 +81,8 @@ export function useOAuth(provider: string) {
     isConnecting: connectMutation.isPending,
     isDisconnecting: disconnectMutation.isPending,
     connectError: connectMutation.error,
-    connect: connectMutation.mutate,
+    connect: connectMutation.mutateAsync,
+    authUrl: connectMutation.data?.authorization_url ?? null,
     disconnect: disconnectMutation.mutate,
     exchangeCode: callbackMutation.mutateAsync,
     callbackError: callbackMutation.error,

@@ -65,6 +65,8 @@ describe('Settings Page', () => {
             openai_api_key: 'sk-****',
             anthropic_api_key: 'ant****',
             nas_url: 'https://nas.example.com',
+            nas_user: 'admin',
+            nas_password: '****',
           },
         })
       }
@@ -100,25 +102,25 @@ describe('Settings Page', () => {
 
   it('updates setting value', async () => {
     vi.mocked(api.apiClient.put).mockResolvedValue({
-      key: 'anthropic_api_key',
-      value: 'ant-new-key',
+      key: 'nas_url',
+      value: 'http://new-nas:5000',
     })
 
     const user = userEvent.setup()
     render(<Settings />, { wrapper: createWrapper() })
 
-    // Use Anthropic key which is always visible (non-OAuth provider)
+    // NAS URL is always visible in the NAS section
     await waitFor(() => {
-      expect(screen.getByDisplayValue('ant****')).toBeInTheDocument()
+      expect(screen.getByDisplayValue('https://nas.example.com')).toBeInTheDocument()
     })
 
-    // 수정 버튼 클릭
+    // 수정 버튼 클릭 (NAS URL is the first editable field)
     const editButtons = screen.getAllByText('수정')
-    await user.click(editButtons[0]) // Anthropic 키 수정
+    await user.click(editButtons[0])
 
     // 입력 필드가 편집 가능해졌는지 확인
     await waitFor(() => {
-      const input = screen.getByDisplayValue('ant****')
+      const input = screen.getByDisplayValue('https://nas.example.com')
       expect(input).not.toHaveAttribute('readonly')
     })
 
@@ -132,7 +134,7 @@ describe('Settings Page', () => {
     render(<Settings />, { wrapper: createWrapper() })
 
     await waitFor(() => {
-      expect(screen.getByText(/NAS 연결 상태/i)).toBeInTheDocument()
+      expect(screen.getByText(/Synology NAS 연결/i)).toBeInTheDocument()
     })
   })
 

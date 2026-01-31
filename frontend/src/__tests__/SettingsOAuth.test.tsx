@@ -49,6 +49,8 @@ function mockDefaultApi(overrides?: Record<string, unknown>) {
           google_api_key: '',
           zhipuai_api_key: '',
           nas_url: '',
+          nas_user: '',
+          nas_password: '',
           ...((overrides as Record<string, unknown>)?.settings ?? {}),
         },
       })
@@ -193,6 +195,8 @@ describe('Settings OAuth UI', () => {
             google_api_key: '',
             zhipuai_api_key: '',
             nas_url: '',
+          nas_user: '',
+          nas_password: '',
           },
         })
       }
@@ -241,6 +245,8 @@ describe('Settings OAuth UI', () => {
             google_api_key: '',
             zhipuai_api_key: '',
             nas_url: '',
+          nas_user: '',
+          nas_password: '',
           },
         })
       }
@@ -273,7 +279,7 @@ describe('Settings OAuth UI', () => {
     })
   })
 
-  it('initiates OAuth flow with correct state', async () => {
+  it('shows OAuth URL after clicking connect', async () => {
     const authUrl = 'https://accounts.google.com/o/oauth2/v2/auth?client_id=test&state=abc'
     vi.mocked(api.apiClient.get).mockImplementation((path: string) => {
       if (path === '/settings') {
@@ -284,6 +290,8 @@ describe('Settings OAuth UI', () => {
             google_api_key: '',
             zhipuai_api_key: '',
             nas_url: '',
+            nas_user: '',
+            nas_password: '',
           },
         })
       }
@@ -308,14 +316,6 @@ describe('Settings OAuth UI', () => {
       return Promise.resolve({})
     })
 
-    // Mock window.location.href setter
-    const originalLocation = window.location
-    const locationMock = { ...originalLocation, href: '' }
-    Object.defineProperty(window, 'location', {
-      value: locationMock,
-      writable: true,
-    })
-
     const user = userEvent.setup()
     render(<Settings />, { wrapper: createWrapper() })
 
@@ -328,18 +328,14 @@ describe('Settings OAuth UI', () => {
     const connectButton = screen.getByRole('button', { name: /Google로 연결/i })
     await user.click(connectButton)
 
+    // Verify OAuth URL is displayed instead of redirect
     await waitFor(() => {
-      expect(sessionStorage.getItem('oauth_provider')).toBe('google')
+      expect(screen.getByDisplayValue(authUrl)).toBeInTheDocument()
     })
 
-    // Verify redirect to OAuth URL
-    expect(window.location.href).toBe(authUrl)
-
-    // Restore
-    Object.defineProperty(window, 'location', {
-      value: originalLocation,
-      writable: true,
-    })
+    // Verify copy and open buttons are shown
+    expect(screen.getByTitle('복사')).toBeInTheDocument()
+    expect(screen.getByTitle('새 탭에서 열기')).toBeInTheDocument()
   })
 
   it('displays all available provider sections', async () => {
