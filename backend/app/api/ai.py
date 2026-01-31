@@ -22,10 +22,14 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.ai_router.prompts import insight, search_qa, spellcheck, template, writing
 from app.ai_router.router import AIRouter
 from app.ai_router.schemas import AIRequest, AIResponse, ModelInfo, ProviderError
+from app.database import get_db
 from app.services.auth_service import get_current_user
+from app.services.oauth_service import OAuthService
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +55,53 @@ def get_ai_router() -> AIRouter:
     if _ai_router is None:
         _ai_router = AIRouter()
     return _ai_router
+
+
+def _get_oauth_service() -> OAuthService:
+    """Return a fresh OAuthService instance for dependency injection."""
+    return OAuthService()
+
+
+def _resolve_provider_name(model: str | None) -> str | None:
+    """Map model name to OAuth provider name."""
+    if not model:
+        return None
+    if model.startswith("gpt-"):
+        return "openai"
+    if model.startswith("gemini"):
+        return "google"
+    return None
+
+
+async def _inject_oauth_if_available(
+    ai_router: AIRouter,
+    model: str | None,
+    username: str,
+    db: AsyncSession,
+    oauth_service: OAuthService,
+) -> AIRouter:
+    """Create a per-request router copy with OAuth provider if a token is available.
+
+    Returns either the original singleton (no OAuth) or a shallow copy with
+    the OAuth provider registered. This avoids mutating the singleton.
+    """
+    provider_name = _resolve_provider_name(model)
+    if not provider_name:
+        return ai_router
+
+    token = await oauth_service.get_valid_token(
+        username=username,
+        provider=provider_name,
+        db=db,
+    )
+    if not token:
+        return ai_router
+
+    # Create per-request router to avoid mutating the singleton
+    request_router = AIRouter.__new__(AIRouter)
+    request_router._providers = dict(ai_router._providers)
+    request_router.register_oauth_provider(provider_name, token)
+    return request_router
 
 
 # ---------------------------------------------------------------------------
@@ -171,11 +222,14 @@ async def ai_chat(
     request: AIChatRequest,
     current_user: dict = Depends(get_current_user),  # noqa: B008
     ai_router: AIRouter = Depends(get_ai_router),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    oauth_service: OAuthService = Depends(_get_oauth_service),  # noqa: B008
 ) -> AIChatResponse:
     """Synchronous AI chat endpoint.
 
     Builds prompt messages from the specified feature, sends them to
     the AI router, and returns the complete response.
+    Injects per-user OAuth tokens when available.
 
     Requires JWT Bearer authentication.
     """
@@ -191,13 +245,18 @@ async def ai_chat(
             detail=str(exc),
         ) from None
 
+    # Inject OAuth token if user has one for the target provider
+    effective_router = await _inject_oauth_if_available(
+        ai_router, request.model, current_user["username"], db, oauth_service,
+    )
+
     ai_request = AIRequest(
         messages=messages,
         model=request.model,
     )
 
     try:
-        ai_response: AIResponse = await ai_router.chat(ai_request)
+        ai_response: AIResponse = await effective_router.chat(ai_request)
     except ProviderError as exc:
         logger.error("AI chat error: %s", exc)
         raise HTTPException(
@@ -226,11 +285,14 @@ async def ai_stream(
     request: AIChatRequest,
     current_user: dict = Depends(get_current_user),  # noqa: B008
     ai_router: AIRouter = Depends(get_ai_router),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    oauth_service: OAuthService = Depends(_get_oauth_service),  # noqa: B008
 ) -> StreamingResponse:
     """SSE streaming AI endpoint.
 
     Builds prompt messages from the specified feature and streams the
     AI response as Server-Sent Events.
+    Injects per-user OAuth tokens when available.
 
     SSE format:
         - Text chunks: ``data: {text_chunk}\\n\\n``
@@ -251,6 +313,11 @@ async def ai_stream(
             detail=str(exc),
         ) from None
 
+    # Inject OAuth token if user has one for the target provider
+    effective_router = await _inject_oauth_if_available(
+        ai_router, request.model, current_user["username"], db, oauth_service,
+    )
+
     ai_request = AIRequest(
         messages=messages,
         model=request.model,
@@ -260,7 +327,7 @@ async def ai_stream(
     async def event_generator():
         """Generate SSE events from the AI router stream."""
         try:
-            async for sse_line in ai_router.stream(ai_request):
+            async for sse_line in effective_router.stream(ai_request):
                 yield sse_line
         except ProviderError as exc:
             logger.error("AI stream error: %s", exc)

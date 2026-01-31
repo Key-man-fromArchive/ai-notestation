@@ -158,7 +158,7 @@ class TestStatusEndpoint:
         app = _get_app()
         _setup_overrides(app)
         try:
-            mock_result = {"connected": False, "provider": "openai", "email": None, "expires_at": None}
+            mock_result = {"connected": False, "provider": "google", "email": None, "expires_at": None}
 
             with patch("app.api.oauth.OAuthService") as MockService:
                 instance = MockService.return_value
@@ -169,10 +169,36 @@ class TestStatusEndpoint:
 
                 transport = ASGITransport(app=app)
                 async with AsyncClient(transport=transport, base_url="http://test") as client:
-                    resp = await client.get("/api/oauth/openai/status")
+                    resp = await client.get("/api/oauth/google/status")
 
                 assert resp.status_code == 200
                 assert resp.json()["connected"] is False
+        finally:
+            _clear_overrides(app)
+
+    @pytest.mark.asyncio
+    async def test_openai_authorize_returns_url(self):
+        """OpenAI OAuth (Codex CLI flow) should return authorize URL."""
+        app = _get_app()
+        _setup_overrides(app)
+        try:
+            mock_result = {"authorization_url": "https://auth.openai.com/oauth/authorize?...", "state": "xyz"}
+
+            with patch("app.api.oauth.OAuthService") as MockService:
+                instance = MockService.return_value
+                instance.build_authorize_url = AsyncMock(return_value=mock_result)
+
+                from app.api.oauth import _get_oauth_service
+                app.dependency_overrides[_get_oauth_service] = lambda: instance
+
+                transport = ASGITransport(app=app)
+                async with AsyncClient(transport=transport, base_url="http://test") as client:
+                    resp = await client.get("/api/oauth/openai/authorize")
+
+                assert resp.status_code == 200
+                data = resp.json()
+                assert "authorization_url" in data
+                assert "auth.openai.com" in data["authorization_url"]
         finally:
             _clear_overrides(app)
 

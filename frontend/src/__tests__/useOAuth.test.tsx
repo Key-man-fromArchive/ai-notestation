@@ -160,20 +160,19 @@ describe('useOAuth hook', () => {
     expect(api.apiClient.delete).toHaveBeenCalledWith('/oauth/google/disconnect')
   })
 
-  it('supports OpenAI OAuth', async () => {
+  it('enables queries for OpenAI (ChatGPT Codex OAuth flow)', async () => {
     vi.mocked(api.apiClient.get).mockResolvedValue({
-      connected: true,
+      connected: false,
       provider: 'openai',
-      email: 'user@openai.com',
     })
 
     const { result } = renderHook(() => useOAuth('openai'), {
       wrapper: createWrapper(),
     })
 
+    // OpenAI OAuth via Codex CLI flow — queries should be enabled
     await waitFor(() => {
-      expect(result.current.connected).toBe(true)
-      expect(result.current.email).toBe('user@openai.com')
+      expect(api.apiClient.get).toHaveBeenCalledWith('/oauth/openai/config-status')
     })
   })
 

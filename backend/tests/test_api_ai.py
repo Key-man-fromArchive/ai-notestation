@@ -98,10 +98,18 @@ def _mock_ai_router() -> MagicMock:
     return mock
 
 
-def _get_test_app(mock_ai_router: MagicMock):
+def _mock_oauth_service() -> MagicMock:
+    """Create a mock OAuthService that returns no tokens (default)."""
+    mock = MagicMock()
+    mock.get_valid_token = AsyncMock(return_value=None)
+    return mock
+
+
+def _get_test_app(mock_ai_router: MagicMock, mock_oauth: MagicMock | None = None):
     """Create the FastAPI app with the AI router and mock dependencies."""
-    from app.api.ai import get_ai_router
+    from app.api.ai import _get_oauth_service, get_ai_router
     from app.api.ai import router as ai_router
+    from app.database import get_db
     from app.main import app
 
     # Ensure AI router is included
@@ -112,14 +120,21 @@ def _get_test_app(mock_ai_router: MagicMock):
     # Override the AI router dependency
     app.dependency_overrides[get_ai_router] = lambda: mock_ai_router
 
+    # Override DB and OAuth dependencies (no real DB needed for unit tests)
+    app.dependency_overrides[get_db] = lambda: AsyncMock()
+    app.dependency_overrides[_get_oauth_service] = lambda: (mock_oauth or _mock_oauth_service())
+
     return app
 
 
 def _cleanup_app(app):
     """Remove dependency overrides after test."""
-    from app.api.ai import get_ai_router
+    from app.api.ai import _get_oauth_service, get_ai_router
+    from app.database import get_db
 
     app.dependency_overrides.pop(get_ai_router, None)
+    app.dependency_overrides.pop(get_db, None)
+    app.dependency_overrides.pop(_get_oauth_service, None)
 
 
 # ---------------------------------------------------------------------------

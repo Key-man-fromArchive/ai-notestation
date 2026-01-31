@@ -270,7 +270,7 @@ export default function Settings() {
                 {hasOAuth && (
                   <OAuthSection
                     provider={setting.oauthProvider!}
-                    label={setting.oauthProvider === 'google' ? 'Google' : 'OpenAI'}
+                    label={setting.oauthProvider === 'google' ? 'Google' : 'ChatGPT (Plus/Pro)'}
                   />
                 )}
 

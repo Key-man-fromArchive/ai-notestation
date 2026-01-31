@@ -38,30 +38,49 @@ const createWrapper = () => {
   )
 }
 
+/** Default mock: OpenAI + Google OAuth configured but not connected */
+function mockDefaultApi(overrides?: Record<string, unknown>) {
+  vi.mocked(api.apiClient.get).mockImplementation((path: string) => {
+    if (path === '/settings') {
+      return Promise.resolve({
+        settings: {
+          openai_api_key: '',
+          anthropic_api_key: '',
+          google_api_key: '',
+          zhipuai_api_key: '',
+          nas_url: '',
+          ...((overrides as Record<string, unknown>)?.settings ?? {}),
+        },
+      })
+    }
+    if (path === '/oauth/openai/config-status') {
+      return Promise.resolve({ configured: true, provider: 'openai' })
+    }
+    if (path === '/oauth/openai/status') {
+      return Promise.resolve(
+        (overrides as Record<string, unknown>)?.openaiStatus ?? { connected: false, provider: 'openai' }
+      )
+    }
+    if (path === '/oauth/google/config-status') {
+      return Promise.resolve({ configured: true, provider: 'google' })
+    }
+    if (path === '/oauth/google/status') {
+      return Promise.resolve(
+        (overrides as Record<string, unknown>)?.googleStatus ?? { connected: false, provider: 'google' }
+      )
+    }
+    return Promise.resolve({})
+  })
+}
+
 describe('Settings OAuth UI', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     sessionStorage.clear()
   })
 
-  it('renders OAuth connect buttons for Google and OpenAI', async () => {
-    vi.mocked(api.apiClient.get).mockImplementation((path: string) => {
-      if (path === '/settings') {
-        return Promise.resolve({
-          settings: {
-            openai_api_key: '',
-            anthropic_api_key: '',
-            google_api_key: '',
-            zhipuai_api_key: '',
-            nas_url: '',
-          },
-        })
-      }
-      if (path.includes('/oauth/') && path.includes('/status')) {
-        return Promise.resolve({ connected: false, provider: 'google' })
-      }
-      return Promise.resolve({})
-    })
+  it('renders OAuth connect buttons for ChatGPT and Google', async () => {
+    mockDefaultApi()
 
     render(<Settings />, { wrapper: createWrapper() })
 
@@ -73,36 +92,20 @@ describe('Settings OAuth UI', () => {
       expect(
         screen.getByRole('button', { name: /Google로 연결/i })
       ).toBeInTheDocument()
+      // OpenAI OAuth via ChatGPT Codex flow
       expect(
-        screen.getByRole('button', { name: /OpenAI로 연결/i })
+        screen.getByRole('button', { name: /ChatGPT \(Plus\/Pro\)로 연결/i })
       ).toBeInTheDocument()
     })
   })
 
   it('shows connected status for OAuth provider', async () => {
-    vi.mocked(api.apiClient.get).mockImplementation((path: string) => {
-      if (path === '/settings') {
-        return Promise.resolve({
-          settings: {
-            openai_api_key: '',
-            anthropic_api_key: '',
-            google_api_key: '',
-            zhipuai_api_key: '',
-            nas_url: '',
-          },
-        })
-      }
-      if (path === '/oauth/google/status') {
-        return Promise.resolve({
-          connected: true,
-          provider: 'google',
-          email: 'user@gmail.com',
-        })
-      }
-      if (path === '/oauth/openai/status') {
-        return Promise.resolve({ connected: false, provider: 'openai' })
-      }
-      return Promise.resolve({})
+    mockDefaultApi({
+      googleStatus: {
+        connected: true,
+        provider: 'google',
+        email: 'user@gmail.com',
+      },
     })
 
     render(<Settings />, { wrapper: createWrapper() })
@@ -117,26 +120,12 @@ describe('Settings OAuth UI', () => {
   })
 
   it('shows disconnect button for connected OAuth provider', async () => {
-    vi.mocked(api.apiClient.get).mockImplementation((path: string) => {
-      if (path === '/settings') {
-        return Promise.resolve({
-          settings: {
-            openai_api_key: '',
-            anthropic_api_key: '',
-            google_api_key: '',
-            zhipuai_api_key: '',
-            nas_url: '',
-          },
-        })
-      }
-      if (path === '/oauth/google/status') {
-        return Promise.resolve({
-          connected: true,
-          provider: 'google',
-          email: 'user@gmail.com',
-        })
-      }
-      return Promise.resolve({})
+    mockDefaultApi({
+      googleStatus: {
+        connected: true,
+        provider: 'google',
+        email: 'user@gmail.com',
+      },
     })
 
     render(<Settings />, { wrapper: createWrapper() })
@@ -149,26 +138,12 @@ describe('Settings OAuth UI', () => {
   })
 
   it('disconnects OAuth provider', async () => {
-    vi.mocked(api.apiClient.get).mockImplementation((path: string) => {
-      if (path === '/settings') {
-        return Promise.resolve({
-          settings: {
-            openai_api_key: '',
-            anthropic_api_key: '',
-            google_api_key: '',
-            zhipuai_api_key: '',
-            nas_url: '',
-          },
-        })
-      }
-      if (path === '/oauth/google/status') {
-        return Promise.resolve({
-          connected: true,
-          provider: 'google',
-          email: 'user@gmail.com',
-        })
-      }
-      return Promise.resolve({})
+    mockDefaultApi({
+      googleStatus: {
+        connected: true,
+        provider: 'google',
+        email: 'user@gmail.com',
+      },
     })
 
     vi.mocked(api.apiClient.delete).mockResolvedValue({
@@ -194,23 +169,7 @@ describe('Settings OAuth UI', () => {
   })
 
   it('shows API key fallback toggle for OAuth providers', async () => {
-    vi.mocked(api.apiClient.get).mockImplementation((path: string) => {
-      if (path === '/settings') {
-        return Promise.resolve({
-          settings: {
-            openai_api_key: '',
-            anthropic_api_key: '',
-            google_api_key: '',
-            zhipuai_api_key: '',
-            nas_url: '',
-          },
-        })
-      }
-      if (path.includes('/oauth/') && path.includes('/status')) {
-        return Promise.resolve({ connected: false })
-      }
-      return Promise.resolve({})
-    })
+    mockDefaultApi()
 
     render(<Settings />, { wrapper: createWrapper() })
 
@@ -220,7 +179,7 @@ describe('Settings OAuth UI', () => {
 
     await waitFor(() => {
       const toggleButtons = screen.getAllByText(/API 키로 직접 입력/i)
-      expect(toggleButtons.length).toBeGreaterThanOrEqual(2) // At least Google + OpenAI
+      expect(toggleButtons.length).toBe(2) // OpenAI + Google
     })
   })
 
@@ -237,8 +196,17 @@ describe('Settings OAuth UI', () => {
           },
         })
       }
-      if (path.includes('/oauth/') && path.includes('/status')) {
-        return Promise.resolve({ connected: false })
+      if (path === '/oauth/openai/config-status') {
+        return Promise.resolve({ configured: true, provider: 'openai' })
+      }
+      if (path === '/oauth/openai/status') {
+        return Promise.resolve({ connected: false, provider: 'openai' })
+      }
+      if (path === '/oauth/google/config-status') {
+        return Promise.resolve({ configured: true, provider: 'google' })
+      }
+      if (path === '/oauth/google/status') {
+        return Promise.resolve({ connected: false, provider: 'google' })
       }
       return Promise.resolve({})
     })
@@ -275,6 +243,15 @@ describe('Settings OAuth UI', () => {
             nas_url: '',
           },
         })
+      }
+      if (path === '/oauth/openai/config-status') {
+        return Promise.resolve({ configured: true, provider: 'openai' })
+      }
+      if (path === '/oauth/openai/status') {
+        return Promise.resolve({ connected: false, provider: 'openai' })
+      }
+      if (path === '/oauth/google/config-status') {
+        return Promise.resolve({ configured: true, provider: 'google' })
       }
       if (path === '/oauth/google/status') {
         return Promise.reject(new Error('Connection failed'))
@@ -316,8 +293,17 @@ describe('Settings OAuth UI', () => {
           state: 'abc',
         })
       }
-      if (path.includes('/oauth/') && path.includes('/status')) {
-        return Promise.resolve({ connected: false })
+      if (path === '/oauth/openai/config-status') {
+        return Promise.resolve({ configured: true, provider: 'openai' })
+      }
+      if (path === '/oauth/openai/status') {
+        return Promise.resolve({ connected: false, provider: 'openai' })
+      }
+      if (path === '/oauth/google/config-status') {
+        return Promise.resolve({ configured: true, provider: 'google' })
+      }
+      if (path === '/oauth/google/status') {
+        return Promise.resolve({ connected: false, provider: 'google' })
       }
       return Promise.resolve({})
     })
@@ -357,23 +343,7 @@ describe('Settings OAuth UI', () => {
   })
 
   it('displays all available provider sections', async () => {
-    vi.mocked(api.apiClient.get).mockImplementation((path: string) => {
-      if (path === '/settings') {
-        return Promise.resolve({
-          settings: {
-            openai_api_key: '',
-            anthropic_api_key: '',
-            google_api_key: '',
-            zhipuai_api_key: '',
-            nas_url: '',
-          },
-        })
-      }
-      if (path.includes('/oauth/') && path.includes('/status')) {
-        return Promise.resolve({ connected: false })
-      }
-      return Promise.resolve({})
-    })
+    mockDefaultApi()
 
     render(<Settings />, { wrapper: createWrapper() })
 

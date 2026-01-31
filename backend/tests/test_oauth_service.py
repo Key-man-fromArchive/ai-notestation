@@ -122,10 +122,11 @@ class TestBuildAuthorizeUrl:
 
     @pytest.mark.asyncio
     async def test_openai_authorize_url(self):
+        """OpenAI OAuth via Codex CLI flow should build correct authorize URL."""
         settings = MagicMock()
         settings.OAUTH_ENCRYPTION_KEY = ""
         settings.APP_BASE_URL = "http://localhost:3000"
-        settings.OPENAI_OAUTH_CLIENT_ID = "app_test123"
+        settings.OPENAI_OAUTH_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
         service = OAuthService(settings=settings)
 
         db = AsyncMock()
@@ -139,7 +140,13 @@ class TestBuildAuthorizeUrl:
 
         url = result["authorization_url"]
         assert "auth.openai.com" in url
-        assert "app_test123" in url
+        assert "app_EMoamEEZ73f0CkXaXp7hrann" in url
+        assert "scope=openid+profile+email+offline_access" in url or "scope=openid" in url
+        assert "code_challenge=" in url
+        assert "code_challenge_method=S256" in url
+        # Codex CLI required params
+        assert "codex_cli_simplified_flow=true" in url
+        assert "originator=codex_cli_rs" in url
 
 
 class TestExchangeCode:

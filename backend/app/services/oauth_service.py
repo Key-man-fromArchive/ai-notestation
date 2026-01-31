@@ -1,7 +1,10 @@
-"""OAuth service for managing Google and OpenAI OAuth flows.
+"""OAuth service for managing OAuth flows (Google + OpenAI ChatGPT).
 
 Handles PKCE generation, token encryption/decryption, authorization URL building,
 code exchange, token refresh, and token revocation.
+
+OpenAI OAuth uses the Codex CLI flow (auth.openai.com) to authenticate with
+ChatGPT Plus/Pro subscriptions via chatgpt.com/backend-api.
 """
 
 from __future__ import annotations
@@ -28,13 +31,13 @@ _PROVIDER_CONFIG = {
     "openai": {
         "authorize_url": "https://auth.openai.com/oauth/authorize",
         "token_url": "https://auth.openai.com/oauth/token",
-        "scopes": "",
+        "scopes": "openid profile email offline_access",
         "supports_refresh": True,
     },
     "google": {
         "authorize_url": "https://accounts.google.com/o/oauth2/v2/auth",
         "token_url": "https://oauth2.googleapis.com/token",
-        "scopes": "https://www.googleapis.com/auth/generative-language https://www.googleapis.com/auth/userinfo.email",
+        "scopes": "openid https://www.googleapis.com/auth/userinfo.email",
         "supports_refresh": True,
     },
 }
@@ -118,7 +121,7 @@ class OAuthService:
         """Build the OAuth authorization URL with PKCE.
 
         Args:
-            provider: "openai" or "google".
+            provider: OAuth provider name (e.g. "google").
             username: Current user's username.
             db: Database session.
 
@@ -171,6 +174,11 @@ class OAuthService:
             if not client_id:
                 raise OAuthError("OPENAI_OAUTH_CLIENT_ID is not configured", provider)
             params["client_id"] = client_id
+            params["scope"] = config["scopes"]
+            # Codex CLI required params
+            params["id_token_add_organizations"] = "true"
+            params["codex_cli_simplified_flow"] = "true"
+            params["originator"] = "codex_cli_rs"
         elif provider == "google":
             client_id = self._settings.GOOGLE_OAUTH_CLIENT_ID
             if not client_id:
@@ -202,7 +210,7 @@ class OAuthService:
         """Exchange authorization code for tokens.
 
         Args:
-            provider: "openai" or "google".
+            provider: OAuth provider name (e.g. "google").
             code: Authorization code from callback.
             state: State parameter for CSRF verification.
             db: Database session.

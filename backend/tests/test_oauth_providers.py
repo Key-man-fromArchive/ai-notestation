@@ -2,11 +2,20 @@
 
 from __future__ import annotations
 
+import base64
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from app.ai_router.router import AIRouter
+
+
+def _make_fake_jwt(account_id: str = "acct-test123") -> str:
+    """Create a fake JWT with a chatgpt_account_id claim."""
+    payload = {"https://api.openai.com/auth": {"chatgpt_account_id": account_id}}
+    b64 = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
+    return f"header.{b64}.signature"
 
 
 class TestRegisterOAuthProvider:
@@ -17,16 +26,30 @@ class TestRegisterOAuthProvider:
         with patch.dict("os.environ", {}, clear=True):
             router._providers.clear()
 
-        with patch("app.ai_router.providers.openai.OpenAIProvider") as MockProvider:
-            mock_instance = MagicMock()
-            mock_instance.is_oauth = True
-            MockProvider.return_value = mock_instance
+        fake_jwt = _make_fake_jwt("acct-test123")
+        router.register_oauth_provider("openai", fake_jwt)
 
-            router.register_oauth_provider("openai", "oauth-access-token")
+        assert "openai" in router._providers
+        assert router._providers["openai"].is_oauth is True
+        assert router._providers["openai"]._account_id == "acct-test123"
 
-            MockProvider.assert_called_once_with(api_key="oauth-access-token", is_oauth=True)
-            assert "openai" in router._providers
-            assert router._providers["openai"].is_oauth is True
+    def test_register_openai_oauth_with_explicit_account_id(self):
+        router = AIRouter()
+        with patch.dict("os.environ", {}, clear=True):
+            router._providers.clear()
+
+        router.register_oauth_provider("openai", "plain-token", account_id="acct-explicit")
+
+        assert "openai" in router._providers
+        assert router._providers["openai"]._account_id == "acct-explicit"
+
+    def test_register_openai_oauth_no_account_id_skips(self):
+        router = AIRouter()
+        with patch.dict("os.environ", {}, clear=True):
+            router._providers.clear()
+
+        router.register_oauth_provider("openai", "invalid-no-account-id-token")
+        assert "openai" not in router._providers
 
     def test_register_google_oauth(self):
         router = AIRouter()
@@ -56,8 +79,12 @@ class TestRegisterOAuthProvider:
         with patch.dict("os.environ", {}, clear=True):
             router._providers.clear()
 
-        with patch("app.ai_router.providers.openai.OpenAIProvider", side_effect=Exception("init failed")):
-            router.register_oauth_provider("openai", "bad-token")
+        with patch(
+            "app.ai_router.providers.chatgpt_codex.ChatGPTCodexProvider",
+            side_effect=Exception("init failed"),
+        ):
+            fake_jwt = _make_fake_jwt()
+            router.register_oauth_provider("openai", fake_jwt)
 
         assert "openai" not in router._providers
 

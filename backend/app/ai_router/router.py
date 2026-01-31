@@ -116,9 +116,16 @@ class AIRouter:
         """
         try:
             if name == "openai":
-                from app.ai_router.providers.openai import OpenAIProvider
+                from app.ai_router.providers.chatgpt_codex import (
+                    ChatGPTCodexProvider,
+                    extract_chatgpt_account_id,
+                )
 
-                provider = OpenAIProvider(api_key=access_token, is_oauth=True, **kwargs)
+                account_id = kwargs.get("account_id") or extract_chatgpt_account_id(access_token)
+                if not account_id:
+                    logger.warning("Cannot extract chatgpt_account_id from token")
+                    return
+                provider: AIProvider = ChatGPTCodexProvider(access_token=access_token, account_id=account_id)
             elif name == "google":
                 from app.ai_router.providers.google import GoogleProvider
 
