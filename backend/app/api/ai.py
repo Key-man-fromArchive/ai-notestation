@@ -15,6 +15,7 @@ All endpoints require JWT authentication via Bearer token.
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Literal
 
@@ -28,6 +29,8 @@ from app.ai_router.prompts import insight, search_qa, spellcheck, template, writ
 from app.ai_router.router import AIRouter
 from app.ai_router.schemas import AIRequest, AIResponse, ModelInfo, ProviderError
 from app.database import get_db
+from app.models import Note
+from app.search.engine import FullTextSearchEngine
 from app.services.auth_service import get_current_user
 from app.services.oauth_service import OAuthService
 
@@ -92,6 +95,44 @@ def reset_ai_router() -> None:
 def _get_oauth_service() -> OAuthService:
     """Return a fresh OAuthService instance for dependency injection."""
     return OAuthService()
+
+
+_OAUTH_PROVIDER_MODELS: dict[str, list[ModelInfo]] = {
+    "google": [
+        ModelInfo(id="gemini-2.0-flash", name="Gemini 2.0 Flash", provider="google", max_tokens=1_048_576, supports_streaming=True),
+        ModelInfo(id="gemini-1.5-pro", name="Gemini 1.5 Pro", provider="google", max_tokens=2_097_152, supports_streaming=True),
+    ],
+    "openai": [
+        ModelInfo(id="gpt-4o", name="GPT-4o (OAuth)", provider="openai", max_tokens=128000, supports_streaming=True),
+        ModelInfo(id="gpt-4o-mini", name="GPT-4o mini (OAuth)", provider="openai", max_tokens=128000, supports_streaming=True),
+    ],
+}
+
+
+async def _get_oauth_provider_models(
+    username: str,
+    db: AsyncSession,
+    oauth_service: OAuthService,
+    exclude_providers: set[str],
+) -> list[ModelInfo]:
+    """Return model metadata for OAuth-connected providers not in exclude set."""
+    models: list[ModelInfo] = []
+    for provider_name, provider_models in _OAUTH_PROVIDER_MODELS.items():
+        if provider_name in exclude_providers:
+            continue
+        # Check if user has an OAuth connection (even if expired - auto-refresh exists)
+        from app.models import OAuthToken
+        from sqlalchemy import select
+
+        stmt = select(OAuthToken).where(
+            OAuthToken.username == username,
+            OAuthToken.provider == provider_name,
+        )
+        result = await db.execute(stmt)
+        token_row = result.scalar_one_or_none()
+        if token_row and token_row.access_token_encrypted:
+            models.extend(provider_models)
+    return models
 
 
 def _resolve_provider_name(model: str | None) -> str | None:
@@ -193,6 +234,67 @@ class ProviderListResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+_SEARCH_CONTENT_MAX_CHARS = 12_000
+
+
+async def _search_and_fetch_notes(
+    query: str,
+    db: AsyncSession,
+    limit: int = 5,
+) -> tuple[list[dict], str]:
+    """Search notes by query and return their content for AI analysis.
+
+    Uses FullTextSearchEngine (always available, no API key required).
+
+    Args:
+        query: The user's search query.
+        db: Async database session.
+        limit: Maximum number of notes to fetch.
+
+    Returns:
+        A tuple of (notes_metadata, combined_content).
+        notes_metadata: list of dicts with note_id, title, score.
+        combined_content: concatenated note texts, capped at 12k chars.
+    """
+    fts = FullTextSearchEngine(session=db)
+    results = await fts.search(query, limit=limit)
+
+    if not results:
+        return [], ""
+
+    # Fetch full content_text for matched notes
+    from sqlalchemy import select
+
+    note_ids = [r.note_id for r in results]
+    stmt = select(Note.synology_note_id, Note.title, Note.content_text).where(
+        Note.synology_note_id.in_(note_ids)
+    )
+    rows = await db.execute(stmt)
+    content_map: dict[str, tuple[str, str]] = {}
+    for row in rows.fetchall():
+        content_map[row.synology_note_id] = (row.title, row.content_text or "")
+
+    # Build metadata and combined content (ranked order, 12k char limit)
+    notes_metadata: list[dict] = []
+    parts: list[str] = []
+    remaining = _SEARCH_CONTENT_MAX_CHARS
+
+    for r in results:
+        title, text = content_map.get(r.note_id, (r.title, ""))
+        notes_metadata.append({
+            "note_id": r.note_id,
+            "title": title,
+            "score": r.score,
+        })
+        if remaining > 0 and text:
+            chunk = text[:remaining]
+            parts.append(f"## {title}\n{chunk}")
+            remaining -= len(chunk)
+
+    combined = "\n\n---\n\n".join(parts)
+    return notes_metadata, combined
+
+
 def _build_messages_for_feature(
     feature: FeatureType,
     content: str,
@@ -217,7 +319,11 @@ def _build_messages_for_feature(
     opts = options or {}
 
     if feature == "insight":
-        return insight.build_messages(note_content=content)
+        search_query = opts.get("search_query")
+        return insight.build_messages(
+            note_content=content,
+            additional_context=f"사용자 검색 쿼리: {search_query}" if search_query else None,
+        )
     elif feature == "search_qa":
         context_notes = opts.get("context_notes", [])
         if not context_notes:
@@ -263,13 +369,37 @@ async def ai_chat(
     the AI router, and returns the complete response.
     Injects per-user OAuth tokens when available.
 
+    When ``feature == "insight"`` and ``options.mode == "search"``, the
+    user's content is treated as a search query: matching notes are fetched
+    and their text is analysed instead of the raw input.
+
     Requires JWT Bearer authentication.
     """
+    opts = request.options or {}
+    content = request.content
+    effective_options = dict(opts)
+
+    # Search mode: search notes first, then analyze their content
+    is_search_mode = (
+        request.feature == "insight" and opts.get("mode") == "search"
+    )
+    if is_search_mode:
+        notes_meta, combined = await _search_and_fetch_notes(content, db)
+        if not combined:
+            return AIChatResponse(
+                content="검색 결과가 없습니다. 다른 검색어를 시도해 주세요.",
+                model=request.model or "",
+                provider="",
+                usage=None,
+            )
+        effective_options["search_query"] = content
+        content = combined
+
     try:
         messages = _build_messages_for_feature(
             feature=request.feature,
-            content=request.content,
-            options=request.options,
+            content=content,
+            options=effective_options,
         )
     except ValueError as exc:
         raise HTTPException(
@@ -326,18 +456,53 @@ async def ai_stream(
     AI response as Server-Sent Events.
     Injects per-user OAuth tokens when available.
 
+    When ``feature == "insight"`` and ``options.mode == "search"``, the
+    user's content is treated as a search query.  An ``event: metadata``
+    SSE event is emitted before the AI chunks with matched-note info.
+
     SSE format:
+        - Metadata:   ``event: metadata\\ndata: {json}\\n\\n``
         - Text chunks: ``data: {text_chunk}\\n\\n``
         - Completion: ``data: [DONE]\\n\\n``
         - Errors: ``event: error\\ndata: {error_message}\\n\\n``
 
     Requires JWT Bearer authentication.
     """
+    opts = request.options or {}
+    content = request.content
+    effective_options = dict(opts)
+    notes_metadata: list[dict] | None = None
+
+    # Search mode: search notes first, then analyze their content
+    is_search_mode = (
+        request.feature == "insight" and opts.get("mode") == "search"
+    )
+    if is_search_mode:
+        notes_meta, combined = await _search_and_fetch_notes(content, db)
+        notes_metadata = notes_meta
+        if not combined:
+            async def no_results_generator():
+                msg = json.dumps({"chunk": "검색 결과가 없습니다. 다른 검색어를 시도해 주세요."})
+                yield f"data: {msg}\n\n"
+                yield "data: [DONE]\n\n"
+
+            return StreamingResponse(
+                no_results_generator(),
+                media_type="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive",
+                    "X-Accel-Buffering": "no",
+                },
+            )
+        effective_options["search_query"] = content
+        content = combined
+
     try:
         messages = _build_messages_for_feature(
             feature=request.feature,
-            content=request.content,
-            options=request.options,
+            content=content,
+            options=effective_options,
         )
     except ValueError as exc:
         raise HTTPException(
@@ -358,6 +523,10 @@ async def ai_stream(
 
     async def event_generator():
         """Generate SSE events from the AI router stream."""
+        # Emit matched-notes metadata before AI chunks
+        if notes_metadata:
+            yield f"event: metadata\ndata: {json.dumps({'matched_notes': notes_metadata}, ensure_ascii=False)}\n\n"
+
         try:
             async for sse_line in effective_router.stream(ai_request):
                 yield sse_line
@@ -380,13 +549,27 @@ async def ai_stream(
 async def list_models(
     current_user: dict = Depends(get_current_user),  # noqa: B008
     ai_router: AIRouter = Depends(get_ai_router),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    oauth_service: OAuthService = Depends(_get_oauth_service),  # noqa: B008
 ) -> ModelListResponse:
     """List available AI models.
 
-    Returns metadata for all models from all registered providers.
+    Returns metadata for all models from all registered providers,
+    plus models from OAuth-connected providers.
     Requires JWT Bearer authentication.
     """
     models = ai_router.all_models()
+    existing_providers = {m.provider for m in models}
+
+    # Include models from OAuth-connected providers not already registered
+    oauth_models = await _get_oauth_provider_models(
+        username=current_user["username"],
+        db=db,
+        oauth_service=oauth_service,
+        exclude_providers=existing_providers,
+    )
+    models.extend(oauth_models)
+
     return ModelListResponse(models=models)
 
 

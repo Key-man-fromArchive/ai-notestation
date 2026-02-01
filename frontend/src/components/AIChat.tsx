@@ -6,7 +6,7 @@ import { useAIStream } from '@/hooks/useAIStream'
 import { MarkdownRenderer } from './MarkdownRenderer'
 import { LoadingSpinner } from './LoadingSpinner'
 import { cn } from '@/lib/utils'
-import { Send, Square, Copy, Check } from 'lucide-react'
+import { Send, Square, Copy, Check, FileText } from 'lucide-react'
 
 interface AIChatProps {
   feature: 'insight' | 'search_qa' | 'writing' | 'spellcheck' | 'template'
@@ -21,9 +21,11 @@ interface AIChatProps {
  * - AbortController로 스트림 정리
  */
 export function AIChat({ feature, model, className }: AIChatProps) {
-  const { content, isStreaming, error, startStream, stopStream, reset } =
+  const { content, isStreaming, error, matchedNotes, startStream, stopStream, reset } =
     useAIStream()
   const [copied, setCopied] = useState(false)
+
+  const isSearchMode = feature === 'insight'
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(content)
@@ -38,7 +40,12 @@ export function AIChat({ feature, model, className }: AIChatProps) {
 
     if (!message.trim()) return
 
-    await startStream({ message, feature, model })
+    await startStream({
+      message,
+      feature,
+      model,
+      ...(isSearchMode ? { options: { mode: 'search' } } : {}),
+    })
   }
 
   return (
@@ -48,7 +55,7 @@ export function AIChat({ feature, model, className }: AIChatProps) {
         <input
           type="text"
           name="message"
-          placeholder="메시지를 입력하세요..."
+          placeholder={isSearchMode ? '검색어를 입력하세요 (예: asg pcr)...' : '메시지를 입력하세요...'}
           disabled={isStreaming}
           className={cn(
             'flex-1 px-4 py-2 border border-input rounded-md',
@@ -121,6 +128,25 @@ export function AIChat({ feature, model, className }: AIChatProps) {
         )}
 
         <div className="p-4">
+          {/* 매칭된 노트 표시 (검색 모드) */}
+          {matchedNotes.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mb-3 pb-3 border-b border-input">
+              <span className="text-xs text-muted-foreground flex items-center gap-1 mr-1">
+                <FileText className="h-3 w-3" aria-hidden="true" />
+                참조 노트:
+              </span>
+              {matchedNotes.map((note) => (
+                <span
+                  key={note.note_id}
+                  className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-primary/10 text-primary"
+                  title={`${note.title} (관련도: ${(note.score * 100).toFixed(0)}%)`}
+                >
+                  {note.title.length > 30 ? note.title.slice(0, 30) + '...' : note.title}
+                </span>
+              ))}
+            </div>
+          )}
+
           {error && (
             <div className="flex items-center gap-2 text-destructive text-sm" role="alert">
               <span className="font-medium">오류:</span> {error}
@@ -146,7 +172,11 @@ export function AIChat({ feature, model, className }: AIChatProps) {
           {!isStreaming && !content && !error && (
             <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
               <Send className="h-8 w-8 mb-3 opacity-30" />
-              <p className="text-sm">메시지를 입력하고 전송을 눌러 시작하세요</p>
+              <p className="text-sm">
+                {isSearchMode
+                  ? '검색어를 입력하면 관련 노트를 찾아 인사이트를 도출합니다'
+                  : '메시지를 입력하고 전송을 눌러 시작하세요'}
+              </p>
             </div>
           )}
         </div>

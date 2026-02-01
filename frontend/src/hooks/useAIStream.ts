@@ -10,11 +10,22 @@ interface StreamOptions {
   feature: 'insight' | 'search_qa' | 'writing' | 'spellcheck' | 'template'
   model?: string
   note_ids?: string[]
+  options?: Record<string, unknown>
 }
 
 interface SSEMessage {
   chunk?: string
   error?: string
+}
+
+interface MatchedNote {
+  note_id: string
+  title: string
+  score: number
+}
+
+interface MetadataMessage {
+  matched_notes?: MatchedNote[]
 }
 
 /**
@@ -27,12 +38,14 @@ export function useAIStream() {
   const [content, setContent] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [matchedNotes, setMatchedNotes] = useState<MatchedNote[]>([])
   const abortControllerRef = useRef<AbortController | null>(null)
 
   const startStream = useCallback(async (options: StreamOptions) => {
     // 초기화
     setContent('')
     setError(null)
+    setMatchedNotes([])
     setIsStreaming(true)
 
     // AbortController 생성
@@ -54,7 +67,10 @@ export function useAIStream() {
           feature: options.feature,
           content: options.message,
           model: options.model || undefined,
-          options: options.note_ids ? { note_ids: options.note_ids } : undefined,
+          options: {
+            ...(options.note_ids ? { note_ids: options.note_ids } : {}),
+            ...(options.options || {}),
+          },
         }),
         signal: abortControllerRef.current.signal,
       })
@@ -82,9 +98,31 @@ export function useAIStream() {
         const lines = buffer.split('\n')
         buffer = lines.pop() || '' // 마지막 불완전한 라인 보관
 
+        let currentEvent = ''
         for (const line of lines) {
+          if (line.startsWith('event: ')) {
+            currentEvent = line.slice(7).trim()
+            continue
+          }
+
           if (line.startsWith('data: ')) {
             const data = line.slice(6) // "data: " 제거
+
+            // Handle metadata event (matched notes from search mode)
+            if (currentEvent === 'metadata') {
+              try {
+                const meta: MetadataMessage = JSON.parse(data)
+                if (meta.matched_notes) {
+                  setMatchedNotes(meta.matched_notes)
+                }
+              } catch {
+                console.warn('Failed to parse metadata SSE:', data)
+              }
+              currentEvent = ''
+              continue
+            }
+
+            currentEvent = ''
 
             // [DONE] 신호
             if (data === '[DONE]') {
@@ -108,9 +146,6 @@ export function useAIStream() {
               // JSON 파싱 실패 무시
               console.warn('Failed to parse SSE message:', data)
             }
-          } else if (line.startsWith('event: error')) {
-            // 다음 라인이 data일 것
-            continue
           }
         }
       }
@@ -140,6 +175,7 @@ export function useAIStream() {
   const reset = useCallback(() => {
     setContent('')
     setError(null)
+    setMatchedNotes([])
     setIsStreaming(false)
   }, [])
 
@@ -147,6 +183,7 @@ export function useAIStream() {
     content,
     isStreaming,
     error,
+    matchedNotes,
     startStream,
     stopStream,
     reset,
