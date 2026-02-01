@@ -100,35 +100,51 @@ export default function Search() {
         {data && data.results.length > 0 && (
           <div>
             <div className="text-sm text-muted-foreground mb-4">
-              총 {data.total}개의 결과 ({data.search_type})
+              총 <span className="font-medium text-foreground">{data.total}</span>개의 결과
             </div>
 
-            <ul className="space-y-4" role="list">
+            <ul className="space-y-3" role="list">
               {data.results.map((result) => (
                 <li key={result.note_id}>
                   <Link
                     to={`/notes/${result.note_id}`}
                     className={cn(
-                      'block p-4 border border-input rounded-md',
-                      'hover:bg-muted/50 transition-colors duration-200',
+                      'block p-4 border border-border rounded-lg',
+                      'hover:border-primary/30 hover:bg-muted/30 transition-colors duration-200',
                       'motion-reduce:transition-none'
                     )}
                   >
-                    <h3 className="font-semibold text-foreground mb-2">
-                      {result.title}
-                    </h3>
-                    <p
-                      className="text-sm text-muted-foreground line-clamp-2 [&_b]:font-semibold [&_b]:text-foreground"
-                      dangerouslySetInnerHTML={{
-                        __html: DOMPurify.sanitize(result.snippet, {
-                          ALLOWED_TAGS: ['b'],
-                        }),
-                      }}
-                    />
-                    <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
-                      <span>점수: {(result.score * 100).toFixed(1)}%</span>
-                      <span>•</span>
-                      <span>{result.search_type}</span>
+                    <div className="flex items-start gap-3">
+                      <FileText className="h-5 w-5 mt-0.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                      <div className="min-w-0 flex-1">
+                        <h3 className="font-semibold text-foreground mb-1 truncate">
+                          {result.title}
+                        </h3>
+                        <p
+                          className="text-sm text-muted-foreground line-clamp-2 [&_b]:font-semibold [&_b]:text-foreground"
+                          dangerouslySetInnerHTML={{
+                            __html: DOMPurify.sanitize(result.snippet, {
+                              ALLOWED_TAGS: ['b'],
+                            }),
+                          }}
+                        />
+                        <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
+                          <span className="inline-flex items-center gap-1">
+                            <span
+                              className={cn(
+                                'inline-block h-1.5 w-1.5 rounded-full',
+                                result.score >= 0.7 ? 'bg-green-500' :
+                                result.score >= 0.4 ? 'bg-yellow-500' : 'bg-muted-foreground'
+                              )}
+                            />
+                            {(result.score * 100).toFixed(0)}%
+                          </span>
+                          <span className="px-1.5 py-0.5 rounded bg-muted text-xs">
+                            {result.search_type === 'fts' ? 'FTS' :
+                             result.search_type === 'semantic' ? 'Semantic' : 'Hybrid'}
+                          </span>
+                        </div>
+                      </div>
                     </div>
                   </Link>
                 </li>

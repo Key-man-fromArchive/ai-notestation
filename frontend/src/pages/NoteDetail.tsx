@@ -3,7 +3,7 @@
 // @TEST frontend/src/__tests__/NoteDetail.test.tsx
 
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Notebook, Tag, Paperclip, AlertCircle } from 'lucide-react'
+import { ArrowLeft, Notebook, Tag, Paperclip, Image, File, AlertCircle, Calendar } from 'lucide-react'
 import { useNote } from '@/hooks/useNote'
 import { MarkdownRenderer } from '@/components/MarkdownRenderer'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
@@ -58,11 +58,8 @@ export default function NoteDetail() {
     return null
   }
 
-  const formattedDate = note.updated_at ? new Date(note.updated_at).toLocaleDateString('ko-KR', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  }) : ''
+  const formatDate = (iso: string) =>
+    new Date(iso).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })
 
   return (
     <div className="h-full overflow-y-auto">
@@ -77,24 +74,47 @@ export default function NoteDetail() {
         </button>
 
         {/* 노트 제목 */}
-        <h1 className="text-3xl font-bold text-foreground mb-4">{note.title}</h1>
+        <h1 className="text-3xl font-bold text-foreground mb-2">{note.title}</h1>
 
         {/* 메타정보 */}
-        <div className="flex items-center gap-4 text-sm text-muted-foreground mb-6 pb-6 border-b border-border">
-          {/* 노트북 */}
-          <div className="flex items-center gap-1.5">
-            <Notebook className="h-4 w-4" aria-hidden="true" />
-            <span>{note.notebook || ''}</span>
+        <div className="flex flex-col gap-3 mb-6 pb-6 border-b border-border">
+          <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
+            {/* 노트북 */}
+            {note.notebook && (
+              <div className="flex items-center gap-1.5">
+                <Notebook className="h-4 w-4" aria-hidden="true" />
+                <span>{note.notebook}</span>
+              </div>
+            )}
+
+            {/* 수정일 */}
+            {note.updated_at && (
+              <div className="flex items-center gap-1.5">
+                <Calendar className="h-4 w-4" aria-hidden="true" />
+                <time dateTime={note.updated_at}>{formatDate(note.updated_at)}</time>
+              </div>
+            )}
+
+            {/* 생성일 (수정일과 다른 경우만 표시) */}
+            {note.created_at && note.updated_at && note.created_at !== note.updated_at && (
+              <span className="text-xs text-muted-foreground/70">
+                (작성: {formatDate(note.created_at)})
+              </span>
+            )}
           </div>
 
-          {/* 수정일 */}
-          {note.updated_at && <time dateTime={note.updated_at}>{formattedDate}</time>}
-
-          {/* 태그 */}
+          {/* 태그 - pill 스타일 */}
           {note.tags.length > 0 && (
-            <div className="flex items-center gap-1.5">
-              <Tag className="h-4 w-4" aria-hidden="true" />
-              <span>{note.tags.join(', ')}</span>
+            <div className="flex items-center gap-2 flex-wrap">
+              <Tag className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+              {note.tags.map((tag) => (
+                <span
+                  key={tag}
+                  className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary"
+                >
+                  {tag}
+                </span>
+              ))}
             </div>
           )}
         </div>
@@ -110,21 +130,27 @@ export default function NoteDetail() {
             <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
               <Paperclip className="h-5 w-5" aria-hidden="true" />
               첨부파일
+              <span className="text-sm font-normal text-muted-foreground">
+                ({note.attachments?.length})
+              </span>
             </h2>
-            <ul className="space-y-2">
-              {note.attachments?.map((attachment, index) => (
-                <li key={index}>
-                  <a
-                    href={attachment.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm text-primary hover:text-primary/80 underline"
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {note.attachments?.map((attachment, index) => {
+                const ext = attachment.name.split('.').pop()?.toLowerCase() ?? ''
+                const isImage = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'].includes(ext)
+                const Icon = isImage ? Image : File
+                return (
+                  <div
+                    key={index}
+                    className="flex items-center gap-3 rounded-lg border border-border bg-muted/30 px-3 py-2.5"
                   >
-                    {attachment.name}
-                  </a>
-                </li>
-              ))}
-            </ul>
+                    <Icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                    <span className="text-sm text-foreground truncate">{attachment.name}</span>
+                    <span className="ml-auto text-xs text-muted-foreground uppercase shrink-0">{ext}</span>
+                  </div>
+                )
+              })}
+            </div>
           </section>
         )}
       </div>

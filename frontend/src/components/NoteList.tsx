@@ -29,7 +29,7 @@ export function NoteList({
   const virtualizer = useVirtualizer({
     count: notes.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 140, // 노트 카드 예상 높이 (px)
+    estimateSize: () => 100, // 노트 카드 예상 높이 (px)
     overscan: 5, // 스크롤 시 미리 렌더링할 아이템 수
   })
 

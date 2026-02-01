@@ -241,6 +241,39 @@ class SynologyClient:
         return response.json()
 
     # ------------------------------------------------------------------
+    # Binary fetch (for image proxy)
+    # ------------------------------------------------------------------
+
+    async def fetch_binary(self, path: str) -> tuple[bytes, str]:
+        """Fetch binary content from the Synology NAS.
+
+        Sends an authenticated GET request and returns raw bytes
+        with the content-type header.
+
+        Args:
+            path: URL path on the NAS (e.g. ``/webapi/entry.cgi?api=...``).
+
+        Returns:
+            Tuple of (bytes, content_type).
+        """
+        if self._sid is None:
+            await self.login()
+
+        separator = "&" if "?" in path else "?"
+        url = f"{self._url}{path}{separator}_sid={self._sid}"
+
+        response = await self._client.get(url)
+
+        # Re-auth if needed
+        if response.status_code == 403 or response.status_code == 401:
+            await self.login()
+            url = f"{self._url}{path}{separator}_sid={self._sid}"
+            response = await self._client.get(url)
+
+        content_type = response.headers.get("content-type", "application/octet-stream")
+        return response.content, content_type
+
+    # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
 

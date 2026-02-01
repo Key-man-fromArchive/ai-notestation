@@ -2,7 +2,7 @@
 // @SPEC docs/plans/2026-01-29-labnote-ai-design.md#노트-목록
 
 import { Link } from 'react-router-dom'
-import { FileText, Tag, Notebook } from 'lucide-react'
+import { FileText, Tag, FolderOpen, Calendar } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { NoteListItem } from '@/types/note'
 
@@ -13,7 +13,7 @@ interface NoteCardProps {
 
 /**
  * 노트 카드 컴포넌트
- * - 제목, 스니펫(2줄 제한), 노트북명, 수정일, 태그
+ * - 제목(1줄 truncate), 스니펫(2줄 제한), 노트북명, 수정일, 태그
  * - 클릭 시 /notes/:id 로 이동
  * - hover 효과, focus ring (접근성)
  */
@@ -28,41 +28,50 @@ export function NoteCard({ note, className }: NoteCardProps) {
     <Link
       to={`/notes/${note.note_id}`}
       className={cn(
-        'block p-4 border border-border rounded-lg',
-        'hover:border-primary/50 hover:shadow-sm',
+        'block px-4 py-3 border border-border rounded-lg',
+        'hover:border-primary/30 hover:bg-muted/30',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
         'transition-all duration-200',
         className
       )}
       role="listitem"
     >
-      {/* 제목 */}
-      <h3 className="text-lg font-semibold text-foreground mb-2 flex items-center gap-2">
-        <FileText className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-        {note.title}
+      {/* 제목 - 1줄 강제 truncate */}
+      <h3 className="text-sm font-semibold text-foreground truncate mb-1 flex items-center gap-1.5">
+        <FileText className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" aria-hidden="true" />
+        <span className="truncate">{note.title}</span>
       </h3>
 
       {/* 스니펫 (2줄 제한) */}
-      <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
-        {note.snippet || ''}
-      </p>
+      {note.snippet && (
+        <p className="text-xs text-muted-foreground mb-2 line-clamp-2 leading-relaxed pl-5">
+          {note.snippet}
+        </p>
+      )}
 
-      {/* 메타정보 */}
-      <div className="flex items-center gap-4 text-xs text-muted-foreground">
+      {/* 메타정보 - 한 줄 */}
+      <div className="flex items-center gap-3 text-[11px] text-muted-foreground pl-5">
         {/* 노트북 */}
-        <div className="flex items-center gap-1">
-          <Notebook className="h-3 w-3" aria-hidden="true" />
-          <span>{note.notebook || ''}</span>
-        </div>
+        {note.notebook && (
+          <div className="flex items-center gap-1 min-w-0">
+            <FolderOpen className="h-3 w-3 flex-shrink-0" aria-hidden="true" />
+            <span className="truncate max-w-[120px]">{note.notebook}</span>
+          </div>
+        )}
 
         {/* 수정일 */}
-        {note.updated_at && <time dateTime={note.updated_at}>{formattedDate}</time>}
+        {note.updated_at && (
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <Calendar className="h-3 w-3" aria-hidden="true" />
+            <time dateTime={note.updated_at}>{formattedDate}</time>
+          </div>
+        )}
 
         {/* 태그 */}
         {note.tags.length > 0 && (
-          <div className="flex items-center gap-1">
-            <Tag className="h-3 w-3" aria-hidden="true" />
-            <span>{note.tags.join(', ')}</span>
+          <div className="flex items-center gap-1 min-w-0">
+            <Tag className="h-3 w-3 flex-shrink-0" aria-hidden="true" />
+            <span className="truncate">{note.tags.slice(0, 3).join(', ')}</span>
           </div>
         )}
       </div>

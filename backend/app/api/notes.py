@@ -21,6 +21,9 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime
 
+import base64
+import re
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
@@ -137,24 +140,33 @@ def _normalize_tags(raw: dict) -> list[str]:
     return []
 
 
-def _parse_attachments(note_data: dict, nas_url: str = "") -> list[AttachmentItem]:
+def _parse_attachments(note_data: dict) -> list[AttachmentItem]:
     """Parse Synology attachment field into AttachmentItem list.
+
+    Synology may return attachments as a dict (keyed by unique ID) or a list.
 
     Args:
         note_data: Raw note dict from Synology.
-        nas_url: Base NAS URL for constructing download links.
     """
-    raw_attachments = note_data.get("attachment", [])
-    if not raw_attachments or not isinstance(raw_attachments, list):
+    raw = note_data.get("attachment")
+    if not raw:
+        return []
+
+    # Normalize to list of dicts
+    if isinstance(raw, dict):
+        entries = list(raw.values())
+    elif isinstance(raw, list):
+        entries = raw
+    else:
         return []
 
     items: list[AttachmentItem] = []
-    for att in raw_attachments:
+    for att in entries:
+        if not isinstance(att, dict):
+            continue
         name = att.get("name", att.get("file_name", ""))
-        file_id = att.get("id", att.get("file_id", ""))
         if name:
-            url = f"{nas_url}/webapi/NoteStation/note_attachment/{file_id}" if file_id and nas_url else ""
-            items.append(AttachmentItem(name=name, url=url))
+            items.append(AttachmentItem(name=name, url=""))
     return items
 
 
@@ -281,15 +293,17 @@ async def get_note(
         except Exception:
             logger.warning("Failed to fetch notebooks for name resolution")
 
-    # Parse attachments
-    from app.api.settings import get_nas_config
+    attachments = _parse_attachments(note)
 
-    nas_url = ""
-    try:
-        nas_url = get_nas_config().get("url", "")
-    except Exception:
-        pass
-    attachments = _parse_attachments(note, nas_url)
+    # Build attachment lookup for image metadata resolution
+    att_raw = note.get("attachment")
+    att_lookup: dict[str, dict] = {}
+    if isinstance(att_raw, dict):
+        att_lookup = att_raw
+    elif isinstance(att_raw, list):
+        for a in att_raw:
+            if isinstance(a, dict) and a.get("ref"):
+                att_lookup[a["ref"]] = a
 
     return NoteDetailResponse(
         note_id=note.get("object_id", note_id),
@@ -299,7 +313,7 @@ async def get_note(
         tags=_normalize_tags(note),
         created_at=_unix_to_iso(note.get("ctime")),
         updated_at=_unix_to_iso(note.get("mtime")),
-        content=note.get("content", ""),
+        content=_rewrite_image_urls(note.get("content", ""), att_lookup),
         attachments=attachments,
     )
 
@@ -401,3 +415,82 @@ async def list_smart(
         List of smart note dicts from NoteStation.
     """
     return await ns_service.list_smart()
+
+
+# ---------------------------------------------------------------------------
+# NoteStation image handling
+# ---------------------------------------------------------------------------
+
+# NoteStation embeds images as:
+#   <img class="syno-notestation-image-object"
+#        src="webman/3rdparty/NoteStation/images/transparent.gif"
+#        ref="BASE64_ENCODED_IMAGE_NAME" />
+#
+# The ref attribute is base64-encoded and decodes to an image filename like:
+#   1769648706702ns_attach_image_11331769648706699.png
+#
+# Synology NoteStation does NOT expose a public API for downloading embedded
+# note images (streaming.cgi returns 500, method=streaming returns error 103).
+# We replace these <img> tags with placeholder markers that the frontend
+# renders as styled image cards showing the filename and dimensions.
+
+_NOTESTATION_IMG_RE = re.compile(
+    r'<img\b[^>]*?\bref="([^"]+)"[^>]*/?>',
+    re.IGNORECASE,
+)
+
+
+def _rewrite_image_urls(
+    html: str,
+    attachment_lookup: dict[str, dict] | None = None,
+) -> str:
+    """Replace NoteStation image tags with placeholder markers.
+
+    Since Synology NoteStation does not expose a public API for downloading
+    embedded note images, we replace ``<img ref="...">`` tags with
+    ``<img>`` elements whose ``alt`` attribute encodes metadata for the
+    frontend to render as styled placeholder cards.
+
+    Args:
+        html: HTML content from NoteStation.
+        attachment_lookup: Dict mapping attachment refs/IDs to metadata dicts
+                           with keys like ``name``, ``width``, ``height``.
+    """
+    if not html:
+        return html
+
+    def _replace(match: re.Match) -> str:
+        ref_b64 = match.group(1)
+        try:
+            decoded_name = base64.b64decode(ref_b64).decode("utf-8")
+        except Exception:
+            decoded_name = "image"
+
+        # Look up attachment metadata for a human-readable name & dimensions
+        display_name = decoded_name
+        width = ""
+        height = ""
+        if attachment_lookup:
+            for att in attachment_lookup.values():
+                if not isinstance(att, dict):
+                    continue
+                if att.get("ref") == decoded_name or att.get("name") == decoded_name:
+                    display_name = att.get("name", decoded_name)
+                    if att.get("width"):
+                        width = str(att["width"])
+                    if att.get("height"):
+                        height = str(att["height"])
+                    break
+
+        # Produce an <img> with a recognizable alt prefix for the frontend.
+        # The src is omitted so no network request fires; rehype-sanitize
+        # preserves <img> tags and their alt/width/height attributes.
+        parts = [f'<img alt="notestation-image:{display_name}"']
+        if width:
+            parts.append(f' width="{width}"')
+        if height:
+            parts.append(f' height="{height}"')
+        parts.append(" />")
+        return "".join(parts)
+
+    return _NOTESTATION_IMG_RE.sub(_replace, html)
