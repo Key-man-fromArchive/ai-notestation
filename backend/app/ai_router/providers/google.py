@@ -1,28 +1,40 @@
 # @TASK P3-T3.4 - Google Gemini Provider implementation
 # @SPEC docs/plans/2026-01-29-labnote-ai-design.md#AI-Router
 # @TEST tests/test_google_provider.py
-"""Google Gemini AI provider using the google-genai SDK.
+"""Google Gemini AI provider.
 
-Supports:
+Supports two authentication modes:
+
+1. **API key** (default) -- uses the ``google-genai`` SDK directly.
+2. **OAuth token** -- calls the Gemini REST API with ``httpx`` and a
+   Bearer token.  This is necessary because the ``google-genai`` SDK
+   does not support OAuth credentials for the AI Studio API.
+
+Supported models:
 - Gemini 2.0 Flash (gemini-2.0-flash) - 1M context window
 - Gemini 1.5 Pro (gemini-1.5-pro) - 2M context window
 
-The provider converts the unified Message format to Gemini's content
-format, separating system messages into system_instruction config.
-Role mapping: "assistant" -> "model" (Gemini convention).
+Usage::
 
-Usage:
+    # API key mode
     provider = GoogleProvider(api_key="your-api-key")
+
+    # OAuth mode
+    provider = GoogleProvider(oauth_token="ya29....")
+
     response = await provider.chat(messages, model="gemini-2.0-flash")
 """
 
 from __future__ import annotations
 
 import asyncio
+import json
+import logging
 import os
 from collections.abc import AsyncIterator
 from typing import Any
 
+import httpx
 from google import genai
 from google.genai import types
 
@@ -35,15 +47,62 @@ from app.ai_router.schemas import (
     TokenUsage,
 )
 
+logger = logging.getLogger(__name__)
+
+_PROVIDER_NAME = "google"
+_GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta"
+
+_AVAILABLE_MODELS = [
+    ModelInfo(
+        id="gemini-2.0-flash",
+        name="Gemini 2.0 Flash",
+        provider=_PROVIDER_NAME,
+        max_tokens=1_048_576,  # 1M
+        supports_streaming=True,
+    ),
+    ModelInfo(
+        id="gemini-1.5-pro",
+        name="Gemini 1.5 Pro",
+        provider=_PROVIDER_NAME,
+        max_tokens=2_097_152,  # 2M
+        supports_streaming=True,
+    ),
+]
+
+
+def _convert_messages(
+    messages: list[Message],
+) -> tuple[list[dict[str, Any]], str | None]:
+    """Convert unified Messages to Gemini content format.
+
+    Separates system messages into a system_instruction string and
+    converts the remaining messages to Gemini's content format.
+    Role "assistant" is mapped to "model".
+
+    Returns:
+        A tuple of (contents, system_instruction).
+    """
+    system_parts: list[str] = []
+    contents: list[dict[str, Any]] = []
+
+    for msg in messages:
+        if msg.role == "system":
+            system_parts.append(msg.content)
+        else:
+            role = "model" if msg.role == "assistant" else msg.role
+            contents.append({
+                "role": role,
+                "parts": [{"text": msg.content}],
+            })
+
+    system_instruction = "\n".join(system_parts) if system_parts else None
+    return contents, system_instruction
+
 
 class GoogleProvider(AIProvider):
     """AI provider implementation for Google Gemini models.
 
-    Wraps the google-genai SDK synchronous methods with asyncio.to_thread
-    for async compatibility.
-
-    Attributes:
-        _client: The google-genai Client instance.
+    Supports API key mode (via SDK) and OAuth mode (via REST API).
     """
 
     def __init__(
@@ -56,82 +115,66 @@ class GoogleProvider(AIProvider):
         """Initialize the Google Gemini provider.
 
         Args:
-            api_key: Google API key. If not provided, reads from
-                     the GOOGLE_API_KEY environment variable.
-            oauth_token: OAuth access token for Google OAuth authentication.
+            api_key: Google API key.  Falls back to ``GOOGLE_API_KEY`` env var.
+            oauth_token: OAuth access token for Bearer auth.
             is_oauth: Whether this provider uses OAuth credentials.
 
         Raises:
-            ProviderError: If no API key is available.
+            ProviderError: If neither API key nor OAuth token is available.
         """
-        if oauth_token:
-            import google.oauth2.credentials as oauth2_credentials
+        self.is_oauth = bool(oauth_token) or is_oauth
 
-            creds = oauth2_credentials.Credentials(token=oauth_token)
-            self._client = genai.Client(credentials=creds)
-            self.is_oauth = True
+        if oauth_token:
+            self._oauth_token: str | None = oauth_token
+            self._client = None  # SDK not used in OAuth mode
         else:
+            self._oauth_token = None
             resolved_key = api_key or os.environ.get("GOOGLE_API_KEY")
             if not resolved_key:
                 raise ProviderError(
-                    provider="google",
+                    provider=_PROVIDER_NAME,
                     message="API key is required. Provide api_key argument or set GOOGLE_API_KEY environment variable.",
                 )
             self._client = genai.Client(api_key=resolved_key)
-            self.is_oauth = is_oauth
 
-    def _convert_messages(
-        self, messages: list[Message]
-    ) -> tuple[list[dict[str, Any]], str | None]:
-        """Convert unified Messages to Gemini content format.
-
-        Separates system messages into a system_instruction string and
-        converts the remaining messages to Gemini's content format.
-        Role "assistant" is mapped to "model".
-
-        Args:
-            messages: List of Message objects.
-
-        Returns:
-            A tuple of (contents, system_instruction) where contents is
-            a list of Gemini content dicts and system_instruction is the
-            concatenated system message text (or None if no system messages).
-        """
-        system_parts: list[str] = []
-        contents: list[dict[str, Any]] = []
-
-        for msg in messages:
-            if msg.role == "system":
-                system_parts.append(msg.content)
-            else:
-                # Map "assistant" -> "model" for Gemini API
-                role = "model" if msg.role == "assistant" else msg.role
-                contents.append({
-                    "role": role,
-                    "parts": [{"text": msg.content}],
-                })
-
-        system_instruction = "\n".join(system_parts) if system_parts else None
-        return contents, system_instruction
+    # ------------------------------------------------------------------
+    # SDK helpers (API key mode)
+    # ------------------------------------------------------------------
 
     def _build_config(
         self, system_instruction: str | None, **kwargs: Any
     ) -> types.GenerateContentConfig | None:
-        """Build GenerateContentConfig with optional system_instruction.
-
-        Args:
-            system_instruction: System instruction text, or None.
-            **kwargs: Additional config parameters (reserved for future use).
-
-        Returns:
-            A GenerateContentConfig if system_instruction is provided,
-            otherwise None.
-        """
         if system_instruction is not None:
             return types.GenerateContentConfig(
                 system_instruction=system_instruction,
             )
         return None
+
+    # ------------------------------------------------------------------
+    # REST API helpers (OAuth mode)
+    # ------------------------------------------------------------------
+
+    def _rest_headers(self) -> dict[str, str]:
+        return {
+            "Authorization": f"Bearer {self._oauth_token}",
+            "Content-Type": "application/json",
+        }
+
+    @staticmethod
+    def _rest_body(
+        contents: list[dict[str, Any]],
+        system_instruction: str | None,
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {"contents": contents}
+        if system_instruction:
+            body["systemInstruction"] = {
+                "parts": [{"text": system_instruction}],
+            }
+        return body
+
+    # ------------------------------------------------------------------
+    # Chat (non-streaming)
+    # ------------------------------------------------------------------
 
     async def chat(
         self,
@@ -139,22 +182,21 @@ class GoogleProvider(AIProvider):
         model: str,
         **kwargs: Any,
     ) -> AIResponse:
-        """Send a chat request to Google Gemini and return a complete response.
+        contents, system_instruction = _convert_messages(messages)
 
-        Args:
-            messages: The conversation history as a list of Messages.
-            model: The Gemini model identifier (e.g., "gemini-2.0-flash").
-            **kwargs: Additional provider-specific parameters.
+        if self._oauth_token:
+            return await self._chat_rest(contents, system_instruction, model)
 
-        Returns:
-            AIResponse with the generated content and token usage.
+        return await self._chat_sdk(contents, system_instruction, model, **kwargs)
 
-        Raises:
-            ProviderError: If the Gemini API request fails.
-        """
-        contents, system_instruction = self._convert_messages(messages)
+    async def _chat_sdk(
+        self,
+        contents: list[dict[str, Any]],
+        system_instruction: str | None,
+        model: str,
+        **kwargs: Any,
+    ) -> AIResponse:
         config = self._build_config(system_instruction, **kwargs)
-
         try:
             response = await asyncio.to_thread(
                 self._client.models.generate_content,
@@ -165,12 +207,8 @@ class GoogleProvider(AIProvider):
         except ProviderError:
             raise
         except Exception as exc:
-            raise ProviderError(
-                provider="google",
-                message=str(exc),
-            ) from exc
+            raise ProviderError(provider=_PROVIDER_NAME, message=str(exc)) from exc
 
-        # Extract token usage
         usage = None
         if response.usage_metadata:
             prompt_tokens = response.usage_metadata.prompt_token_count or 0
@@ -184,9 +222,62 @@ class GoogleProvider(AIProvider):
         return AIResponse(
             content=response.text,
             model=model,
-            provider="google",
+            provider=_PROVIDER_NAME,
             usage=usage,
         )
+
+    async def _chat_rest(
+        self,
+        contents: list[dict[str, Any]],
+        system_instruction: str | None,
+        model: str,
+    ) -> AIResponse:
+        url = f"{_GEMINI_API_BASE}/models/{model}:generateContent"
+        body = self._rest_body(contents, system_instruction)
+
+        try:
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                resp = await client.post(url, json=body, headers=self._rest_headers())
+        except httpx.HTTPError as exc:
+            raise ProviderError(provider=_PROVIDER_NAME, message=str(exc)) from exc
+
+        if resp.status_code != 200:
+            raise ProviderError(
+                provider=_PROVIDER_NAME,
+                message=f"Gemini REST error: {resp.status_code} {resp.text[:500]}",
+                status_code=resp.status_code,
+            )
+
+        data = resp.json()
+
+        # Extract text from candidates
+        text = ""
+        for candidate in data.get("candidates", []):
+            for part in candidate.get("content", {}).get("parts", []):
+                text += part.get("text", "")
+
+        # Extract usage
+        usage = None
+        usage_meta = data.get("usageMetadata")
+        if usage_meta:
+            prompt_tokens = usage_meta.get("promptTokenCount", 0)
+            completion_tokens = usage_meta.get("candidatesTokenCount", 0)
+            usage = TokenUsage(
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=usage_meta.get("totalTokenCount", prompt_tokens + completion_tokens),
+            )
+
+        return AIResponse(
+            content=text,
+            model=model,
+            provider=_PROVIDER_NAME,
+            usage=usage,
+        )
+
+    # ------------------------------------------------------------------
+    # Stream (SSE)
+    # ------------------------------------------------------------------
 
     async def stream(
         self,
@@ -194,22 +285,23 @@ class GoogleProvider(AIProvider):
         model: str,
         **kwargs: Any,
     ) -> AsyncIterator[str]:
-        """Stream a chat response from Google Gemini token by token.
+        contents, system_instruction = _convert_messages(messages)
 
-        Args:
-            messages: The conversation history as a list of Messages.
-            model: The Gemini model identifier.
-            **kwargs: Additional provider-specific parameters.
+        if self._oauth_token:
+            async for chunk in self._stream_rest(contents, system_instruction, model):
+                yield chunk
+        else:
+            async for chunk in self._stream_sdk(contents, system_instruction, model, **kwargs):
+                yield chunk
 
-        Yields:
-            String chunks of the generated response.
-
-        Raises:
-            ProviderError: If the Gemini API request fails.
-        """
-        contents, system_instruction = self._convert_messages(messages)
+    async def _stream_sdk(
+        self,
+        contents: list[dict[str, Any]],
+        system_instruction: str | None,
+        model: str,
+        **kwargs: Any,
+    ) -> AsyncIterator[str]:
         config = self._build_config(system_instruction, **kwargs)
-
         try:
             response_stream = await asyncio.to_thread(
                 self._client.models.generate_content_stream,
@@ -220,34 +312,55 @@ class GoogleProvider(AIProvider):
         except ProviderError:
             raise
         except Exception as exc:
-            raise ProviderError(
-                provider="google",
-                message=str(exc),
-            ) from exc
+            raise ProviderError(provider=_PROVIDER_NAME, message=str(exc)) from exc
 
         for chunk in response_stream:
             if chunk.text:
                 yield chunk.text
 
-    def available_models(self) -> list[ModelInfo]:
-        """Return the list of supported Google Gemini models.
+    async def _stream_rest(
+        self,
+        contents: list[dict[str, Any]],
+        system_instruction: str | None,
+        model: str,
+    ) -> AsyncIterator[str]:
+        url = f"{_GEMINI_API_BASE}/models/{model}:streamGenerateContent?alt=sse"
+        body = self._rest_body(contents, system_instruction)
 
-        Returns:
-            List containing Gemini 2.0 Flash and Gemini 1.5 Pro metadata.
-        """
-        return [
-            ModelInfo(
-                id="gemini-2.0-flash",
-                name="Gemini 2.0 Flash",
-                provider="google",
-                max_tokens=1_048_576,  # 1M
-                supports_streaming=True,
-            ),
-            ModelInfo(
-                id="gemini-1.5-pro",
-                name="Gemini 1.5 Pro",
-                provider="google",
-                max_tokens=2_097_152,  # 2M
-                supports_streaming=True,
-            ),
-        ]
+        try:
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                async with client.stream(
+                    "POST", url, json=body, headers=self._rest_headers()
+                ) as resp:
+                    if resp.status_code != 200:
+                        error_body = await resp.aread()
+                        raise ProviderError(
+                            provider=_PROVIDER_NAME,
+                            message=f"Gemini stream error: {resp.status_code} {error_body.decode()[:500]}",
+                            status_code=resp.status_code,
+                        )
+
+                    async for line in resp.aiter_lines():
+                        if not line.startswith("data: "):
+                            continue
+                        payload = line[6:]
+                        try:
+                            event = json.loads(payload)
+                            for candidate in event.get("candidates", []):
+                                for part in candidate.get("content", {}).get("parts", []):
+                                    text = part.get("text", "")
+                                    if text:
+                                        yield text
+                        except json.JSONDecodeError:
+                            continue
+        except ProviderError:
+            raise
+        except httpx.HTTPError as exc:
+            raise ProviderError(provider=_PROVIDER_NAME, message=str(exc)) from exc
+
+    # ------------------------------------------------------------------
+    # Model discovery
+    # ------------------------------------------------------------------
+
+    def available_models(self) -> list[ModelInfo]:
+        return list(_AVAILABLE_MODELS)

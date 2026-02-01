@@ -37,7 +37,7 @@ _PROVIDER_CONFIG = {
     "google": {
         "authorize_url": "https://accounts.google.com/o/oauth2/v2/auth",
         "token_url": "https://oauth2.googleapis.com/token",
-        "scopes": "openid https://www.googleapis.com/auth/userinfo.email",
+        "scopes": "openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/generative-language",
         "supports_refresh": True,
     },
 }

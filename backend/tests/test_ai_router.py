@@ -554,11 +554,11 @@ class TestStream:
         async for sse_line in router.stream(request):
             collected.append(sse_line)
 
-        # Verify SSE format: each chunk prefixed with "data: "
-        assert collected[0] == "data: Hello\n\n"
-        assert collected[1] == "data:  \n\n"
-        assert collected[2] == "data: world\n\n"
-        assert collected[3] == "data: !\n\n"
+        # Verify SSE format: each chunk wrapped in JSON
+        assert collected[0] == 'data: {"chunk": "Hello"}\n\n'
+        assert collected[1] == 'data: {"chunk": " "}\n\n'
+        assert collected[2] == 'data: {"chunk": "world"}\n\n'
+        assert collected[3] == 'data: {"chunk": "!"}\n\n'
         # Last line is the [DONE] marker
         assert collected[-1] == "data: [DONE]\n\n"
 
@@ -621,8 +621,8 @@ class TestStream:
         async for sse_line in router.stream(request):
             collected.append(sse_line)
 
-        # First chunk should be the partial data
-        assert collected[0] == "data: partial\n\n"
+        # First chunk should be the partial data in JSON format
+        assert collected[0] == 'data: {"chunk": "partial"}\n\n'
 
         # Error event should follow SSE error format
         error_lines = [line for line in collected if line.startswith("event: error")]

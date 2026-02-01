@@ -116,22 +116,25 @@ async def _get_oauth_provider_models(
     exclude_providers: set[str],
 ) -> list[ModelInfo]:
     """Return model metadata for OAuth-connected providers not in exclude set."""
+    from app.models import OAuthToken
+    from sqlalchemy import select
+
     models: list[ModelInfo] = []
     for provider_name, provider_models in _OAUTH_PROVIDER_MODELS.items():
         if provider_name in exclude_providers:
             continue
-        # Check if user has an OAuth connection (even if expired - auto-refresh exists)
-        from app.models import OAuthToken
-        from sqlalchemy import select
-
-        stmt = select(OAuthToken).where(
-            OAuthToken.username == username,
-            OAuthToken.provider == provider_name,
-        )
-        result = await db.execute(stmt)
-        token_row = result.scalar_one_or_none()
-        if token_row and token_row.access_token_encrypted:
-            models.extend(provider_models)
+        try:
+            stmt = select(OAuthToken).where(
+                OAuthToken.username == username,
+                OAuthToken.provider == provider_name,
+            )
+            result = await db.execute(stmt)
+            token_row = result.scalar_one_or_none()
+            if token_row and token_row.access_token_encrypted:
+                models.extend(provider_models)
+        except Exception:
+            # DB unavailable or schema mismatch -- skip OAuth models
+            continue
     return models
 
 
