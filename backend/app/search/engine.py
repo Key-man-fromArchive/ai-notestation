@@ -42,7 +42,7 @@ class SearchResult(BaseModel):
         search_type: Origin of the result (fts, semantic, or hybrid).
     """
 
-    note_id: int
+    note_id: str
     title: str
     snippet: str
     score: float
@@ -101,7 +101,7 @@ class FullTextSearchEngine:
 
         stmt = (
             select(
-                Note.id.label("note_id"),
+                Note.synology_note_id.label("note_id"),
                 Note.title,
                 headline,
                 rank,
@@ -208,7 +208,7 @@ class SemanticSearchEngine:
 
         stmt = (
             select(
-                NoteEmbedding.note_id,
+                Note.synology_note_id.label("note_id"),
                 Note.title,
                 NoteEmbedding.chunk_text,
                 cosine_distance.label("cosine_distance"),
@@ -376,8 +376,8 @@ class HybridSearchEngine:
         """
         # Accumulate RRF scores per note_id.
         # Also keep the best metadata (title, snippet) for each note_id.
-        scores: dict[int, float] = {}
-        metadata: dict[int, tuple[str, str]] = {}  # note_id -> (title, snippet)
+        scores: dict[str, float] = {}
+        metadata: dict[str, tuple[str, str]] = {}  # note_id -> (title, snippet)
 
         for rank, result in enumerate(fts_results):
             rrf_score = 1.0 / (k + rank)

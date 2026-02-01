@@ -34,7 +34,7 @@ export default function Dashboard() {
 
   const { data, isLoading } = useQuery<NotesResponse>({
     queryKey: ['notes', 'recent'],
-    queryFn: () => apiClient.get('/notes?limit=5&sort=updated_at'),
+    queryFn: () => apiClient.get('/notes?limit=5'),
   })
 
   return (

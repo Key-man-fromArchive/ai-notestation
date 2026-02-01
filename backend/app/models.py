@@ -22,7 +22,7 @@ class Note(Base):
     content_html: Mapped[str] = mapped_column(Text, default="")
     content_text: Mapped[str] = mapped_column(Text, default="")  # Plaintext extracted from HTML
     notebook_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    tags: Mapped[dict | None] = mapped_column(JSONB, nullable=True)  # ["tag1", "tag2"]
+    tags: Mapped[list | None] = mapped_column(JSONB, nullable=True)  # ["tag1", "tag2"]
     is_todo: Mapped[bool] = mapped_column(Boolean, default=False)
     is_shortcut: Mapped[bool] = mapped_column(Boolean, default=False)
     source_created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

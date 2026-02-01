@@ -19,10 +19,10 @@ from app.search.engine import FullTextSearchEngine, SearchResult
 # ---------------------------------------------------------------------------
 
 
-def _make_mock_row(note_id: int, title: str, snippet: str, score: float):
+def _make_mock_row(note_id: int | str, title: str, snippet: str, score: float):
     """Build a mock SQLAlchemy row result with named attributes."""
     row = MagicMock()
-    row.note_id = note_id
+    row.note_id = str(note_id) if isinstance(note_id, int) else note_id
     row.title = title
     row.snippet = snippet
     row.score = score
@@ -49,13 +49,13 @@ class TestSearchResultModel:
     def test_valid_search_result(self):
         """A SearchResult can be created with valid fields."""
         result = SearchResult(
-            note_id=1,
+            note_id="note_1",
             title="Test Note",
             snippet="This is a <b>test</b> snippet",
             score=0.85,
             search_type="fts",
         )
-        assert result.note_id == 1
+        assert result.note_id == "note_1"
         assert result.title == "Test Note"
         assert result.snippet == "This is a <b>test</b> snippet"
         assert result.score == 0.85
@@ -64,7 +64,7 @@ class TestSearchResultModel:
     def test_search_result_default_search_type(self):
         """SearchResult defaults to search_type='fts'."""
         result = SearchResult(
-            note_id=1,
+            note_id="note_1",
             title="Note",
             snippet="snip",
             score=0.5,
@@ -74,13 +74,13 @@ class TestSearchResultModel:
     def test_search_result_accepts_different_types(self):
         """SearchResult accepts semantic and hybrid search types."""
         for stype in ("fts", "semantic", "hybrid"):
-            result = SearchResult(note_id=1, title="N", snippet="S", score=0.1, search_type=stype)
+            result = SearchResult(note_id="note_1", title="N", snippet="S", score=0.1, search_type=stype)
             assert result.search_type == stype
 
     def test_search_result_serialization(self):
         """SearchResult can be serialized to a dictionary."""
         result = SearchResult(
-            note_id=42,
+            note_id="note_42",
             title="Serialization Test",
             snippet="snippet text",
             score=0.75,
@@ -88,7 +88,7 @@ class TestSearchResultModel:
         )
         data = result.model_dump()
         assert data == {
-            "note_id": 42,
+            "note_id": "note_42",
             "title": "Serialization Test",
             "snippet": "snippet text",
             "score": 0.75,
@@ -118,7 +118,7 @@ class TestSearchSuccess:
 
         assert len(results) == 2
         assert all(isinstance(r, SearchResult) for r in results)
-        assert results[0].note_id == 1
+        assert results[0].note_id == "1"
         assert results[0].title == "Python Guide"
         assert results[0].snippet == "Learn <b>Python</b> basics"
         assert results[0].score == 0.9
@@ -231,7 +231,7 @@ class TestLimitOffset:
         results = await engine.search("test", limit=10, offset=5)
 
         assert len(results) == 1
-        assert results[0].note_id == 10
+        assert results[0].note_id == "10"
 
 
 # ---------------------------------------------------------------------------
@@ -258,9 +258,9 @@ class TestScoreSorting:
 
         assert len(results) == 3
         assert results[0].score >= results[1].score >= results[2].score
-        assert results[0].note_id == 3
-        assert results[1].note_id == 1
-        assert results[2].note_id == 2
+        assert results[0].note_id == "3"
+        assert results[1].note_id == "1"
+        assert results[2].note_id == "2"
 
     @pytest.mark.asyncio
     async def test_sql_orders_by_rank_desc(self):

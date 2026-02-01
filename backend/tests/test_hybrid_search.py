@@ -23,7 +23,7 @@ from app.search.engine import HybridSearchEngine, SearchResult
 
 
 def _sr(
-    note_id: int,
+    note_id: int | str,
     title: str = "Note",
     snippet: str = "snippet",
     score: float = 0.5,
@@ -31,7 +31,7 @@ def _sr(
 ) -> SearchResult:
     """Shortcut to build a SearchResult for tests."""
     return SearchResult(
-        note_id=note_id,
+        note_id=str(note_id) if isinstance(note_id, int) else note_id,
         title=title,
         snippet=snippet,
         score=score,
@@ -82,7 +82,7 @@ class TestRRFMergeBasic:
 
         assert len(merged) == 4
         merged_ids = {r.note_id for r in merged}
-        assert merged_ids == {1, 2, 3, 4}
+        assert merged_ids == {"1", "2", "3", "4"}
         assert all(r.search_type == "hybrid" for r in merged)
 
     def test_rrf_merge_score_calculation(self):
@@ -105,11 +105,11 @@ class TestRRFMergeBasic:
 
         scores_by_id = {r.note_id: r.score for r in merged}
         # note_id=1 only in FTS at rank 0: 1/(60+0) = 1/60
-        assert scores_by_id[1] == pytest.approx(1 / 60, abs=1e-10)
+        assert scores_by_id["1"] == pytest.approx(1 / 60, abs=1e-10)
         # note_id=2 only in FTS at rank 1: 1/(60+1) = 1/61
-        assert scores_by_id[2] == pytest.approx(1 / 61, abs=1e-10)
+        assert scores_by_id["2"] == pytest.approx(1 / 61, abs=1e-10)
         # note_id=3 only in semantic at rank 0: 1/(60+0) = 1/60
-        assert scores_by_id[3] == pytest.approx(1 / 60, abs=1e-10)
+        assert scores_by_id["3"] == pytest.approx(1 / 60, abs=1e-10)
 
 
 # ---------------------------------------------------------------------------
@@ -136,11 +136,11 @@ class TestRRFMergeDuplicates:
         # note_id=1 appears in both: FTS rank 0 + semantic rank 0
         # score = 1/(60+0) + 1/(60+0) = 2/60
         scores_by_id = {r.note_id: r.score for r in merged}
-        assert scores_by_id[1] == pytest.approx(2 / 60, abs=1e-10)
+        assert scores_by_id["1"] == pytest.approx(2 / 60, abs=1e-10)
         # note_id=2: only FTS rank 1 -> 1/61
-        assert scores_by_id[2] == pytest.approx(1 / 61, abs=1e-10)
+        assert scores_by_id["2"] == pytest.approx(1 / 61, abs=1e-10)
         # note_id=3: only semantic rank 1 -> 1/61
-        assert scores_by_id[3] == pytest.approx(1 / 61, abs=1e-10)
+        assert scores_by_id["3"] == pytest.approx(1 / 61, abs=1e-10)
 
     def test_duplicate_merged_count(self):
         """Duplicate note_ids produce a single entry in the merged result."""
@@ -150,7 +150,7 @@ class TestRRFMergeDuplicates:
         merged = HybridSearchEngine.rrf_merge(fts_results, semantic_results, k=60)
 
         assert len(merged) == 1
-        assert merged[0].note_id == 1
+        assert merged[0].note_id == "1"
         assert merged[0].search_type == "hybrid"
 
 
@@ -174,8 +174,8 @@ class TestRRFMergeOneSide:
         assert len(merged) == 2
         assert all(r.search_type == "hybrid" for r in merged)
         scores_by_id = {r.note_id: r.score for r in merged}
-        assert scores_by_id[1] == pytest.approx(1 / 60, abs=1e-10)
-        assert scores_by_id[2] == pytest.approx(1 / 61, abs=1e-10)
+        assert scores_by_id["1"] == pytest.approx(1 / 60, abs=1e-10)
+        assert scores_by_id["2"] == pytest.approx(1 / 61, abs=1e-10)
 
     def test_only_semantic_results(self):
         """When FTS returns nothing, semantic results are returned with RRF scores."""
@@ -231,7 +231,7 @@ class TestRRFMergeSorting:
         # score = 1/61 + 1/60 = (60+61)/(60*61) > 1/60
         # note_id=1: FTS rank 0 only -> 1/60
         # note_id=3: semantic rank 1 only -> 1/61
-        assert merged[0].note_id == 2  # highest score (both lists)
+        assert merged[0].note_id == "2"  # highest score (both lists)
         assert merged[0].score > merged[1].score
         assert merged[-1].score <= merged[0].score
 
@@ -402,8 +402,8 @@ class TestProgressiveSearchPhase2:
         phase2 = phases[1]
         assert all(r.search_type == "hybrid" for r in phase2)
         merged_ids = {r.note_id for r in phase2}
-        assert 1 in merged_ids
-        assert 2 in merged_ids
+        assert "1" in merged_ids
+        assert "2" in merged_ids
 
     @pytest.mark.asyncio
     async def test_progressive_empty_query_no_yields(self):
@@ -443,7 +443,7 @@ class TestFTSError:
 
         assert len(results) == 1
         assert results[0].search_type == "hybrid"
-        assert results[0].note_id == 1
+        assert results[0].note_id == "1"
 
 
 # ---------------------------------------------------------------------------
@@ -469,4 +469,4 @@ class TestSemanticError:
 
         assert len(results) == 1
         assert results[0].search_type == "hybrid"
-        assert results[0].note_id == 1
+        assert results[0].note_id == "1"

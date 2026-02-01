@@ -43,6 +43,7 @@ class NoteItem(BaseModel):
 
     note_id: str
     title: str
+    snippet: str = ""
     notebook: str | None = None
     tags: list[str] = []
     created_at: str | None = None
@@ -58,10 +59,18 @@ class NoteListResponse(BaseModel):
     total: int
 
 
+class AttachmentItem(BaseModel):
+    """Attachment metadata for a note."""
+
+    name: str
+    url: str
+
+
 class NoteDetailResponse(NoteItem):
     """Full note detail including content."""
 
     content: str
+    attachments: list[AttachmentItem] = []
 
 
 class NotebookItem(BaseModel):
@@ -115,20 +124,63 @@ def _unix_to_iso(ts: int | float | None) -> str | None:
     return datetime.fromtimestamp(ts, tz=UTC).isoformat()
 
 
-def _note_to_item(raw: dict) -> NoteItem:
+def _normalize_tags(raw: dict) -> list[str]:
+    """Normalize Synology tag field to a flat list of strings.
+
+    Synology may return tags as a list, a dict, or None.
+    """
+    tag_raw = raw.get("tag", [])
+    if isinstance(tag_raw, dict):
+        return list(tag_raw.values()) if tag_raw else []
+    if isinstance(tag_raw, list):
+        return tag_raw
+    return []
+
+
+def _parse_attachments(note_data: dict, nas_url: str = "") -> list[AttachmentItem]:
+    """Parse Synology attachment field into AttachmentItem list.
+
+    Args:
+        note_data: Raw note dict from Synology.
+        nas_url: Base NAS URL for constructing download links.
+    """
+    raw_attachments = note_data.get("attachment", [])
+    if not raw_attachments or not isinstance(raw_attachments, list):
+        return []
+
+    items: list[AttachmentItem] = []
+    for att in raw_attachments:
+        name = att.get("name", att.get("file_name", ""))
+        file_id = att.get("id", att.get("file_id", ""))
+        if name:
+            url = f"{nas_url}/webapi/NoteStation/note_attachment/{file_id}" if file_id and nas_url else ""
+            items.append(AttachmentItem(name=name, url=url))
+    return items
+
+
+def _note_to_item(raw: dict, notebook_map: dict[str, str] | None = None) -> NoteItem:
     """Convert a raw Synology note dict to a NoteItem schema.
 
     Args:
-        raw: Dictionary with object_id, title, parent_id, tag, ctime, mtime.
+        raw: Dictionary with object_id, title, parent_id, tag, ctime, mtime, brief.
+        notebook_map: Optional mapping of parent_id (UUID) to notebook name.
 
     Returns:
         Populated NoteItem instance.
     """
+    parent_id = raw.get("parent_id")
+    notebook_name = None
+    if notebook_map and parent_id:
+        notebook_name = notebook_map.get(parent_id, parent_id)
+    elif parent_id:
+        notebook_name = parent_id
+
     return NoteItem(
         note_id=raw.get("object_id", ""),
         title=raw.get("title", ""),
-        notebook=raw.get("parent_id"),
-        tags=raw.get("tag", []) or [],
+        snippet=raw.get("brief", ""),
+        notebook=notebook_name,
+        tags=_normalize_tags(raw),
         created_at=_unix_to_iso(raw.get("ctime")),
         updated_at=_unix_to_iso(raw.get("mtime")),
     )
@@ -163,7 +215,19 @@ async def list_notes(
     raw_notes = data.get("notes", [])
     total = data.get("total", 0)
 
-    items = [_note_to_item(n) for n in raw_notes]
+    # Build notebook_map: object_id -> title for human-readable notebook names
+    notebook_map: dict[str, str] = {}
+    try:
+        raw_notebooks = await ns_service.list_notebooks()
+        notebook_map = {
+            nb.get("object_id", ""): nb.get("title", "")
+            for nb in raw_notebooks
+            if nb.get("object_id")
+        }
+    except Exception:
+        logger.warning("Failed to fetch notebooks for name resolution")
+
+    items = [_note_to_item(n, notebook_map) for n in raw_notes]
 
     return NoteListResponse(
         items=items,
@@ -202,14 +266,41 @@ async def get_note(
             detail=f"Note not found: {note_id}",
         ) from None
 
+    # Resolve notebook name from parent_id
+    parent_id = note.get("parent_id")
+    notebook_name = parent_id
+    if parent_id:
+        try:
+            raw_notebooks = await ns_service.list_notebooks()
+            nb_map = {
+                nb.get("object_id", ""): nb.get("title", "")
+                for nb in raw_notebooks
+                if nb.get("object_id")
+            }
+            notebook_name = nb_map.get(parent_id, parent_id)
+        except Exception:
+            logger.warning("Failed to fetch notebooks for name resolution")
+
+    # Parse attachments
+    from app.api.settings import get_nas_config
+
+    nas_url = ""
+    try:
+        nas_url = get_nas_config().get("url", "")
+    except Exception:
+        pass
+    attachments = _parse_attachments(note, nas_url)
+
     return NoteDetailResponse(
         note_id=note.get("object_id", note_id),
         title=note.get("title", ""),
-        notebook=note.get("parent_id"),
-        tags=note.get("tag", []) or [],
+        snippet=note.get("brief", ""),
+        notebook=notebook_name,
+        tags=_normalize_tags(note),
         created_at=_unix_to_iso(note.get("ctime")),
         updated_at=_unix_to_iso(note.get("mtime")),
         content=note.get("content", ""),
+        attachments=attachments,
     )
 
 

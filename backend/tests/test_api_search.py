@@ -35,7 +35,7 @@ def _make_search_results(
     """Create a list of mock SearchResult objects."""
     return [
         SearchResult(
-            note_id=i + 1,
+            note_id=f"note_{i + 1}",
             title=f"Note {i + 1}",
             snippet=f"Matching <b>snippet</b> for note {i + 1}",
             score=1.0 - i * 0.1,
@@ -96,7 +96,7 @@ class TestHybridSearch:
         assert data["search_type"] == "hybrid"
         assert data["total"] == 3
         assert len(data["results"]) == 3
-        assert data["results"][0]["note_id"] == 1
+        assert data["results"][0]["note_id"] == "note_1"
         assert data["results"][0]["title"] == "Note 1"
         assert data["results"][0]["search_type"] == "hybrid"
 

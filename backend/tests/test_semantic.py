@@ -24,7 +24,7 @@ FAKE_EMBEDDING = [0.1] * 1536  # 1536-dimensional fake embedding vector
 
 
 def _make_mock_row(
-    note_id: int,
+    note_id: int | str,
     title: str,
     chunk_text: str,
     cosine_distance: float,
@@ -35,7 +35,7 @@ def _make_mock_row(
     with a cosine_distance column from pgvector's <=> operator.
     """
     row = MagicMock()
-    row.note_id = note_id
+    row.note_id = str(note_id) if isinstance(note_id, int) else note_id
     row.title = title
     row.chunk_text = chunk_text
     row.cosine_distance = cosine_distance
@@ -89,7 +89,7 @@ class TestSemanticSearchSuccess:
 
         assert len(results) == 2
         assert all(isinstance(r, SearchResult) for r in results)
-        assert results[0].note_id == 1
+        assert results[0].note_id == "1"
         assert results[0].title == "Python Guide"
         assert results[0].search_type == "semantic"
         assert results[1].search_type == "semantic"
@@ -221,7 +221,7 @@ class TestLimitOffset:
         results = await engine.search("test", limit=10, offset=5)
 
         assert len(results) == 1
-        assert results[0].note_id == 10
+        assert results[0].note_id == "10"
 
 
 # ---------------------------------------------------------------------------
@@ -366,7 +366,7 @@ class TestNotesJoin:
 
         assert len(results) == 1
         assert results[0].title == "Research Notes"
-        assert results[0].note_id == 1
+        assert results[0].note_id == "1"
 
     @pytest.mark.asyncio
     async def test_sql_contains_join(self):

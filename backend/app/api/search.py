@@ -56,7 +56,7 @@ class SearchType(str, Enum):
 class SearchResultResponse(BaseModel):
     """A single search result in the API response."""
 
-    note_id: int
+    note_id: str
     title: str
     snippet: str
     score: float

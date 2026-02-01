@@ -3,6 +3,7 @@
 // @TEST frontend/src/__tests__/NoteDetail.test.tsx
 
 import ReactMarkdown from 'react-markdown'
+import rehypeRaw from 'rehype-raw'
 import rehypeSanitize from 'rehype-sanitize'
 import { cn } from '@/lib/utils'
 
@@ -35,7 +36,7 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
         className
       )}
     >
-      <ReactMarkdown rehypePlugins={[rehypeSanitize]}>
+      <ReactMarkdown rehypePlugins={[rehypeRaw, rehypeSanitize]}>
         {content}
       </ReactMarkdown>
     </div>
