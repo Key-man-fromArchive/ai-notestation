@@ -15,18 +15,31 @@ import {
   RefreshCw,
   AlertCircle,
   Clock,
+  Notebook,
+  BookOpen,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface Note {
   note_id: string
   title: string
+  snippet: string
+  notebook: string | null
   updated_at: string | null
 }
 
 interface NotesResponse {
   items: Note[]
   total: number
+}
+
+interface NotebookItem {
+  name: string
+  note_count: number
+}
+
+interface NotebooksResponse {
+  items: NotebookItem[]
 }
 
 export default function Dashboard() {
@@ -36,6 +49,15 @@ export default function Dashboard() {
     queryKey: ['notes', 'recent'],
     queryFn: () => apiClient.get('/notes?limit=5'),
   })
+
+  const { data: notebooksData } = useQuery<NotebooksResponse>({
+    queryKey: ['notebooks'],
+    queryFn: () => apiClient.get('/notebooks'),
+  })
+
+  // Compute total from sum of notebook counts (more accurate than paginated total)
+  const totalNotes = notebooksData?.items?.reduce((sum, nb) => sum + nb.note_count, 0) ?? data?.total ?? 0
+  const totalNotebooks = notebooksData?.items?.length ?? 0
 
   return (
     <div className="flex flex-col gap-6">
@@ -71,104 +93,142 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* 빠른 액션 */}
-      <div>
-        <h3 className="text-lg font-semibold mb-3">빠른 액션</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Link
-            to="/search"
-            className={cn(
-              'flex items-center gap-3 p-4 border border-input rounded-md',
-              'hover:bg-muted/50 transition-colors duration-200',
-              'motion-reduce:transition-none'
-            )}
-          >
-            <Search className="h-6 w-6 text-primary" aria-hidden="true" />
-            <div>
-              <div className="font-semibold">검색</div>
-              <div className="text-sm text-muted-foreground">
-                노트 검색하기
-              </div>
+      {/* 통계 카드 + 동기화 상태 */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <Link
+          to="/notes"
+          className="p-4 border border-border rounded-lg hover:border-primary/30 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+              <FileText className="h-5 w-5 text-primary" aria-hidden="true" />
             </div>
-          </Link>
+            <div>
+              <div className="text-2xl font-bold">{totalNotes}</div>
+              <div className="text-xs text-muted-foreground">전체 노트</div>
+            </div>
+          </div>
+        </Link>
 
-          <Link
-            to="/ai"
-            className={cn(
-              'flex items-center gap-3 p-4 border border-input rounded-md',
-              'hover:bg-muted/50 transition-colors duration-200',
-              'motion-reduce:transition-none'
-            )}
-          >
-            <Sparkles className="h-6 w-6 text-primary" aria-hidden="true" />
-            <div>
-              <div className="font-semibold">AI 작업</div>
-              <div className="text-sm text-muted-foreground">
-                AI로 노트 분석
-              </div>
+        <Link
+          to="/notes"
+          className="p-4 border border-border rounded-lg hover:border-primary/30 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+              <BookOpen className="h-5 w-5 text-primary" aria-hidden="true" />
             </div>
-          </Link>
+            <div>
+              <div className="text-2xl font-bold">{totalNotebooks}</div>
+              <div className="text-xs text-muted-foreground">노트북</div>
+            </div>
+          </div>
+        </Link>
 
-          <button
-            onClick={() => triggerSync()}
-            disabled={syncStatus === 'syncing'}
-            className={cn(
-              'flex items-center gap-3 p-4 border border-input rounded-md',
-              'hover:bg-muted/50 transition-colors duration-200',
-              'motion-reduce:transition-none',
-              'text-left',
-              'disabled:opacity-50 disabled:cursor-not-allowed'
-            )}
-          >
-            <RefreshCw
-              className={cn(
-                'h-6 w-6 text-primary',
-                syncStatus === 'syncing' && 'animate-spin'
-              )}
-              aria-hidden="true"
-            />
+        <div className="p-4 border border-border rounded-lg">
+          <div className="flex items-center gap-3">
+            <div className={cn(
+              'flex h-10 w-10 items-center justify-center rounded-lg',
+              syncStatus === 'error' ? 'bg-destructive/10' : 'bg-green-500/10'
+            )}>
+              <RefreshCw
+                className={cn(
+                  'h-5 w-5',
+                  syncStatus === 'syncing' && 'animate-spin text-yellow-600',
+                  syncStatus === 'error' && 'text-destructive',
+                  syncStatus !== 'syncing' && syncStatus !== 'error' && 'text-green-600',
+                )}
+                aria-hidden="true"
+              />
+            </div>
             <div>
-              <div className="font-semibold">동기화</div>
-              <div className="text-sm text-muted-foreground">
-                {syncStatus === 'syncing' ? '동기화 중...' : 'NAS와 동기화'}
+              <div className="text-sm font-semibold">
+                {syncStatus === 'idle' && '대기 중'}
+                {syncStatus === 'syncing' && '동기화 중...'}
+                {syncStatus === 'completed' && '동기화 완료'}
+                {syncStatus === 'error' && '동기화 오류'}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {lastSync
+                  ? new Date(lastSync).toLocaleString('ko-KR')
+                  : '동기화 기록 없음'}
               </div>
             </div>
-          </button>
+          </div>
         </div>
       </div>
 
-      {/* 동기화 상태 */}
-      <div className="p-4 border border-input rounded-md">
-        <h3 className="text-lg font-semibold mb-3">동기화 상태</h3>
-        <div className="flex items-center gap-2 mb-2">
-          <div
+      {/* 빠른 액션 */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <Link
+          to="/search"
+          className={cn(
+            'flex items-center gap-3 p-4 border border-border rounded-lg',
+            'hover:border-primary/30 hover:bg-muted/30 transition-colors duration-200',
+            'motion-reduce:transition-none'
+          )}
+        >
+          <Search className="h-5 w-5 text-primary" aria-hidden="true" />
+          <div>
+            <div className="font-semibold text-sm">노트 검색</div>
+            <div className="text-xs text-muted-foreground">
+              키워드, 의미 검색
+            </div>
+          </div>
+        </Link>
+
+        <Link
+          to="/ai"
+          className={cn(
+            'flex items-center gap-3 p-4 border border-border rounded-lg',
+            'hover:border-primary/30 hover:bg-muted/30 transition-colors duration-200',
+            'motion-reduce:transition-none'
+          )}
+        >
+          <Sparkles className="h-5 w-5 text-primary" aria-hidden="true" />
+          <div>
+            <div className="font-semibold text-sm">AI 분석</div>
+            <div className="text-xs text-muted-foreground">
+              노트 요약, 인사이트
+            </div>
+          </div>
+        </Link>
+
+        <button
+          onClick={() => triggerSync()}
+          disabled={syncStatus === 'syncing'}
+          className={cn(
+            'flex items-center gap-3 p-4 border border-border rounded-lg',
+            'hover:border-primary/30 hover:bg-muted/30 transition-colors duration-200',
+            'motion-reduce:transition-none',
+            'text-left',
+            'disabled:opacity-50 disabled:cursor-not-allowed'
+          )}
+        >
+          <RefreshCw
             className={cn(
-              'h-3 w-3 rounded-full',
-              syncStatus === 'idle' && 'bg-green-500',
-              syncStatus === 'syncing' && 'bg-yellow-500 animate-pulse',
-              syncStatus === 'completed' && 'bg-green-500',
-              syncStatus === 'error' && 'bg-red-500'
+              'h-5 w-5 text-primary',
+              syncStatus === 'syncing' && 'animate-spin'
             )}
             aria-hidden="true"
           />
-          <span className="text-sm font-medium">
-            {syncStatus === 'idle' && '대기 중'}
-            {syncStatus === 'syncing' && '동기화 중'}
-            {syncStatus === 'completed' && '완료'}
-            {syncStatus === 'error' && '오류'}
-          </span>
-        </div>
-        {lastSync && (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Clock className="h-3 w-3" aria-hidden="true" />
-            마지막 동기화: {new Date(lastSync).toLocaleString('ko-KR')}
+          <div>
+            <div className="font-semibold text-sm">NAS 동기화</div>
+            <div className="text-xs text-muted-foreground">
+              {syncStatus === 'syncing' ? '동기화 중...' : '노트 데이터 갱신'}
+            </div>
           </div>
-        )}
+        </button>
       </div>
 
       {/* 최근 노트 */}
       <div>
-        <h3 className="text-lg font-semibold mb-3">최근 노트</h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-lg font-semibold">최근 노트</h3>
+          <Link to="/notes" className="text-sm text-primary hover:text-primary/80">
+            전체 보기
+          </Link>
+        </div>
         {isLoading ? (
           <LoadingSpinner className="py-8" />
         ) : data?.items && data.items.length > 0 ? (
@@ -178,21 +238,39 @@ export default function Dashboard() {
                 <Link
                   to={`/notes/${note.note_id}`}
                   className={cn(
-                    'flex items-center gap-3 p-3 border border-input rounded-md',
-                    'hover:bg-muted/50 transition-colors duration-200',
+                    'block p-4 border border-border rounded-lg',
+                    'hover:border-primary/30 hover:bg-muted/30 transition-colors duration-200',
                     'motion-reduce:transition-none'
                   )}
                 >
-                  <FileText
-                    className="h-5 w-5 text-muted-foreground flex-shrink-0"
-                    aria-hidden="true"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium text-foreground truncate">
-                      {note.title}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {note.updated_at ? new Date(note.updated_at).toLocaleString('ko-KR') : ''}
+                  <div className="flex items-start gap-3">
+                    <FileText
+                      className="h-5 w-5 mt-0.5 text-muted-foreground flex-shrink-0"
+                      aria-hidden="true"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-foreground truncate">
+                        {note.title}
+                      </div>
+                      {note.snippet && (
+                        <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
+                          {note.snippet}
+                        </p>
+                      )}
+                      <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground">
+                        {note.notebook && (
+                          <span className="flex items-center gap-1">
+                            <Notebook className="h-3 w-3" aria-hidden="true" />
+                            {note.notebook}
+                          </span>
+                        )}
+                        {note.updated_at && (
+                          <span className="flex items-center gap-1">
+                            <Clock className="h-3 w-3" aria-hidden="true" />
+                            {new Date(note.updated_at).toLocaleDateString('ko-KR')}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </Link>
