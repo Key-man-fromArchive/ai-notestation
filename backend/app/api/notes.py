@@ -309,20 +309,36 @@ async def list_notebooks(
     current_user: dict = Depends(get_current_user),  # noqa: B008
     ns_service: NoteStationService = Depends(_get_ns_service),  # noqa: B008
 ) -> NotebooksListResponse:
-    """Retrieve all notebooks.
+    """Retrieve all notebooks with computed note counts.
+
+    Synology may not return accurate ``note_count`` values, so we
+    fetch a page of notes and count per ``parent_id`` ourselves.
 
     Requires JWT authentication via Bearer token.
 
     Returns:
-        NotebooksListResponse with notebook items mapped from Synology data.
+        NotebooksListResponse with notebook items and computed counts.
     """
     raw_notebooks = await ns_service.list_notebooks()
+
+    # Compute note counts per notebook by fetching notes
+    note_counts: dict[str, int] = {}
+    try:
+        notes_data = await ns_service.list_notes(offset=0, limit=500)
+        for note in notes_data.get("notes", []):
+            parent_id = note.get("parent_id", "")
+            if parent_id:
+                note_counts[parent_id] = note_counts.get(parent_id, 0) + 1
+    except Exception:
+        logger.warning("Failed to compute notebook note counts")
+
     items = [
         NotebookItem(
             name=nb.get("title", ""),
-            note_count=nb.get("note_count", 0),
+            note_count=note_counts.get(nb.get("object_id", ""), nb.get("note_count", 0)),
         )
         for nb in raw_notebooks
+        if nb.get("title", "").strip()  # skip empty-named notebooks
     ]
     return NotebooksListResponse(items=items)
 

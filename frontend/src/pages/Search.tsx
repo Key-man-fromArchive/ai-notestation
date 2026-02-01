@@ -4,6 +4,7 @@
 
 import { useState, useEffect } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
+import DOMPurify from 'dompurify'
 import { useSearch } from '@/hooks/useSearch'
 import { SearchBar } from '@/components/SearchBar'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
@@ -116,9 +117,14 @@ export default function Search() {
                     <h3 className="font-semibold text-foreground mb-2">
                       {result.title}
                     </h3>
-                    <p className="text-sm text-muted-foreground line-clamp-2">
-                      {result.snippet}
-                    </p>
+                    <p
+                      className="text-sm text-muted-foreground line-clamp-2 [&_b]:font-semibold [&_b]:text-foreground"
+                      dangerouslySetInnerHTML={{
+                        __html: DOMPurify.sanitize(result.snippet, {
+                          ALLOWED_TAGS: ['b'],
+                        }),
+                      }}
+                    />
                     <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
                       <span>점수: {(result.score * 100).toFixed(1)}%</span>
                       <span>•</span>
