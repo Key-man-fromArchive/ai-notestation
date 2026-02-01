@@ -38,21 +38,31 @@ const createWrapper = () => {
   )
 }
 
+/** Convert a Record of settings to the array format the real API returns */
+function toSettingsArray(record: Record<string, string>): Array<{ key: string; value: string }> {
+  return Object.entries(record).map(([key, value]) => ({ key, value }))
+}
+
+const DEFAULT_SETTINGS: Record<string, string> = {
+  openai_api_key: '',
+  anthropic_api_key: '',
+  google_api_key: '',
+  zhipuai_api_key: '',
+  nas_url: '',
+  nas_user: '',
+  nas_password: '',
+}
+
 /** Default mock: OpenAI + Google OAuth configured but not connected */
 function mockDefaultApi(overrides?: Record<string, unknown>) {
   vi.mocked(api.apiClient.get).mockImplementation((path: string) => {
     if (path === '/settings') {
+      const merged = {
+        ...DEFAULT_SETTINGS,
+        ...((overrides as Record<string, unknown>)?.settings ?? {}),
+      }
       return Promise.resolve({
-        settings: {
-          openai_api_key: '',
-          anthropic_api_key: '',
-          google_api_key: '',
-          zhipuai_api_key: '',
-          nas_url: '',
-          nas_user: '',
-          nas_password: '',
-          ...((overrides as Record<string, unknown>)?.settings ?? {}),
-        },
+        settings: toSettingsArray(merged as Record<string, string>),
       })
     }
     if (path === '/oauth/openai/config-status') {
@@ -189,15 +199,7 @@ describe('Settings OAuth UI', () => {
     vi.mocked(api.apiClient.get).mockImplementation((path: string) => {
       if (path === '/settings') {
         return Promise.resolve({
-          settings: {
-            openai_api_key: '',
-            anthropic_api_key: 'ant****',
-            google_api_key: '',
-            zhipuai_api_key: '',
-            nas_url: '',
-          nas_user: '',
-          nas_password: '',
-          },
+          settings: toSettingsArray({ ...DEFAULT_SETTINGS, anthropic_api_key: 'ant****' }),
         })
       }
       if (path === '/oauth/openai/config-status') {
@@ -239,15 +241,7 @@ describe('Settings OAuth UI', () => {
     vi.mocked(api.apiClient.get).mockImplementation((path: string) => {
       if (path === '/settings') {
         return Promise.resolve({
-          settings: {
-            openai_api_key: '',
-            anthropic_api_key: '',
-            google_api_key: '',
-            zhipuai_api_key: '',
-            nas_url: '',
-          nas_user: '',
-          nas_password: '',
-          },
+          settings: toSettingsArray(DEFAULT_SETTINGS),
         })
       }
       if (path === '/oauth/openai/config-status') {
@@ -284,15 +278,7 @@ describe('Settings OAuth UI', () => {
     vi.mocked(api.apiClient.get).mockImplementation((path: string) => {
       if (path === '/settings') {
         return Promise.resolve({
-          settings: {
-            openai_api_key: '',
-            anthropic_api_key: '',
-            google_api_key: '',
-            zhipuai_api_key: '',
-            nas_url: '',
-            nas_user: '',
-            nas_password: '',
-          },
+          settings: toSettingsArray(DEFAULT_SETTINGS),
         })
       }
       if (path === '/oauth/google/authorize') {

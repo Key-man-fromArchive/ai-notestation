@@ -75,7 +75,7 @@ export function NoteList({
           const note = notes[virtualItem.index]
           return (
             <div
-              key={note.id}
+              key={note.note_id}
               style={{
                 position: 'absolute',
                 top: 0,

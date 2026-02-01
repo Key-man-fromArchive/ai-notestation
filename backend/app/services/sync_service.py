@@ -72,6 +72,10 @@ class SyncService:
     async def sync_all(self) -> SyncResult:
         """Run a full synchronisation.
 
+        The NoteStation ``list`` API returns summary data (no content).
+        For new or updated notes we fetch the full note via ``get`` to
+        obtain ``content`` (HTML) and ``tag`` metadata.
+
         Returns:
             A :class:`SyncResult` with add/update/delete counts.
 
@@ -82,43 +86,63 @@ class SyncService:
         try:
             now = datetime.now(UTC)
 
-            # 1. Fetch all remote notes
+            # 1. Fetch all remote notes (list – summary only)
             remote_notes = await self._fetch_all_notes()
 
-            # 2. Load existing local notes, keyed by synology_note_id
+            # 2. Build notebook ID -> name lookup
+            notebook_map = await self._fetch_notebook_map()
+
+            # 3. Load existing local notes, keyed by synology_note_id
             existing = await self._get_existing_notes()
 
-            # 3. Build a set of remote IDs for deletion detection
+            # 4. Build a set of remote IDs for deletion detection
             remote_ids: set[str] = set()
 
             added = 0
             updated = 0
 
-            for note_data in remote_notes:
-                note_id = str(note_data["note_id"])
+            for note_summary in remote_notes:
+                # NoteStation API uses ``object_id``, not ``note_id``
+                note_id = str(note_summary["object_id"])
                 remote_ids.add(note_id)
 
-                if note_id not in existing:
-                    # New note -> INSERT
-                    new_note = self._note_to_model(note_data, synced_at=now)
-                    self._db.add(new_note)
-                    added += 1
-                else:
-                    # Existing note -> check if updated
+                is_new = note_id not in existing
+                is_updated = False
+                if not is_new:
                     db_note = existing[note_id]
-                    remote_updated = _unix_to_utc(note_data.get("mtime"))
-                    if remote_updated and remote_updated != db_note.source_updated_at:
-                        self._update_note(db_note, note_data, synced_at=now)
+                    remote_updated = _unix_to_utc(note_summary.get("mtime"))
+                    is_updated = bool(
+                        remote_updated and remote_updated != db_note.source_updated_at
+                    )
+
+                if is_new or is_updated:
+                    # Fetch full note detail (content, tags)
+                    try:
+                        detail = await self._notestation.get_note(note_id)
+                    except Exception:
+                        # If we can't fetch detail, fall back to summary
+                        logger.warning("Failed to fetch detail for note %s, using summary", note_id)
+                        detail = note_summary
+
+                    # Merge summary + detail, resolve notebook name
+                    merged = _merge_note_data(note_summary, detail, notebook_map)
+
+                    if is_new:
+                        new_note = self._note_to_model(merged, synced_at=now)
+                        self._db.add(new_note)
+                        added += 1
+                    else:
+                        self._update_note(existing[note_id], merged, synced_at=now)
                         updated += 1
 
-            # 4. Delete notes that are no longer in NoteStation
+            # 5. Delete notes that are no longer in NoteStation
             deleted = 0
             for syn_id, db_note in existing.items():
                 if syn_id not in remote_ids:
                     await self._db.delete(db_note)
                     deleted += 1
 
-            # 5. Flush all changes
+            # 6. Flush all changes
             await self._db.flush()
 
             total = len(remote_notes)
@@ -146,6 +170,23 @@ class SyncService:
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    async def _fetch_notebook_map(self) -> dict[str, str]:
+        """Fetch all notebooks and return a mapping of object_id -> title.
+
+        Returns:
+            A dict mapping notebook ``object_id`` to notebook ``title``.
+        """
+        try:
+            notebooks = await self._notestation.list_notebooks()
+            return {
+                nb["object_id"]: nb.get("title", "")
+                for nb in notebooks
+                if "object_id" in nb
+            }
+        except Exception:
+            logger.warning("Failed to fetch notebooks for name lookup")
+            return {}
 
     async def _fetch_all_notes(self) -> list[dict]:
         """Fetch all notes from NoteStation using pagination.
@@ -183,13 +224,13 @@ class SyncService:
         return {note.synology_note_id: note for note in notes}
 
     def _note_to_model(self, note_data: dict, synced_at: datetime) -> Note:
-        """Convert a Synology note API response dict to a Note ORM model.
+        """Convert a merged Synology note dict to a Note ORM model.
 
-        Uses :meth:`NoteStationService.extract_text` to derive plain text
-        from the HTML content body.
+        The ``note_data`` dict is expected to have been normalised by
+        :func:`_merge_note_data` so that field names are consistent.
 
         Args:
-            note_data: Raw note dict from the NoteStation API.
+            note_data: Merged note dict (summary + detail).
             synced_at: The timestamp to set as ``synced_at``.
 
         Returns:
@@ -199,15 +240,15 @@ class SyncService:
         content_text = NoteStationService.extract_text(content_html)
 
         return Note(
-            synology_note_id=str(note_data["note_id"]),
+            synology_note_id=str(note_data["object_id"]),
             title=note_data.get("title", ""),
             content_html=content_html,
             content_text=content_text,
             notebook_name=note_data.get("notebook_name"),
             tags=note_data.get("tag"),
-            is_todo=note_data.get("is_todo", False),
-            is_shortcut=note_data.get("is_shortcut", False),
-            source_created_at=_unix_to_utc(note_data.get("creat_time")),
+            is_todo=note_data.get("category") == "todo",
+            is_shortcut=False,
+            source_created_at=_unix_to_utc(note_data.get("ctime")),
             source_updated_at=_unix_to_utc(note_data.get("mtime")),
             synced_at=synced_at,
         )
@@ -217,7 +258,7 @@ class SyncService:
 
         Args:
             db_note: The existing DB model to update in-place.
-            note_data: Raw note dict from the NoteStation API.
+            note_data: Merged note dict (summary + detail).
             synced_at: The timestamp to set as ``synced_at``.
         """
         content_html = note_data.get("content", "")
@@ -227,9 +268,9 @@ class SyncService:
         db_note.content_text = NoteStationService.extract_text(content_html)
         db_note.notebook_name = note_data.get("notebook_name")
         db_note.tags = note_data.get("tag")
-        db_note.is_todo = note_data.get("is_todo", False)
-        db_note.is_shortcut = note_data.get("is_shortcut", False)
-        db_note.source_created_at = _unix_to_utc(note_data.get("creat_time"))
+        db_note.is_todo = note_data.get("category") == "todo"
+        db_note.is_shortcut = False
+        db_note.source_created_at = _unix_to_utc(note_data.get("ctime"))
         db_note.source_updated_at = _unix_to_utc(note_data.get("mtime"))
         db_note.synced_at = synced_at
 
@@ -237,6 +278,36 @@ class SyncService:
 # ------------------------------------------------------------------
 # Module-level utilities
 # ------------------------------------------------------------------
+
+
+def _merge_note_data(
+    summary: dict, detail: dict, notebook_map: dict[str, str]
+) -> dict:
+    """Merge list-summary and get-detail dicts into a normalised form.
+
+    The ``list`` API returns ``object_id``, ``title``, ``ctime``,
+    ``mtime``, ``parent_id``, ``category``, ``brief``.
+    The ``get`` API adds ``content``, ``tag``, ``attachment``, etc.
+
+    This function combines both and resolves ``parent_id`` to a
+    human-readable notebook name.
+    """
+    merged: dict = {**summary, **detail}
+
+    # Resolve notebook name from parent_id
+    parent_id = merged.get("parent_id", "")
+    merged["notebook_name"] = notebook_map.get(parent_id, "")
+
+    # Ensure tag is a list (or None)
+    tag_raw = merged.get("tag")
+    if isinstance(tag_raw, dict):
+        merged["tag"] = list(tag_raw.values()) if tag_raw else None
+    elif isinstance(tag_raw, list):
+        merged["tag"] = tag_raw if tag_raw else None
+    else:
+        merged["tag"] = None
+
+    return merged
 
 
 def _unix_to_utc(timestamp: int | float | None) -> datetime | None:

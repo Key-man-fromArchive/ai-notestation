@@ -5,11 +5,11 @@
  * 노트 목록 아이템
  */
 export interface NoteListItem {
-  id: string
+  note_id: string
   title: string
-  snippet: string
-  notebook: string
-  updated_at: string
+  snippet?: string
+  notebook: string | null
+  updated_at: string | null
   tags: string[]
 }
 
@@ -17,14 +17,14 @@ export interface NoteListItem {
  * 노트 상세 정보
  */
 export interface Note {
-  id: string
+  note_id: string
   title: string
   content: string // Markdown content
-  notebook: string
-  created_at: string
-  updated_at: string
+  notebook: string | null
+  created_at: string | null
+  updated_at: string | null
   tags: string[]
-  attachments: Array<{
+  attachments?: Array<{
     name: string
     url: string
   }>

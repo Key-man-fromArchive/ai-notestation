@@ -19,11 +19,11 @@ Endpoints:
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
-from app.config import get_settings
 from app.services.auth_service import get_current_user
 from app.synology_gateway.client import SynologyApiError, SynologyClient
 from app.synology_gateway.notestation import NoteStationService
@@ -64,6 +64,19 @@ class NoteDetailResponse(NoteItem):
     content: str
 
 
+class NotebookItem(BaseModel):
+    """Summary representation of a notebook."""
+
+    name: str
+    note_count: int = 0
+
+
+class NotebooksListResponse(BaseModel):
+    """List of notebooks."""
+
+    items: list[NotebookItem]
+
+
 # ---------------------------------------------------------------------------
 # Dependency: NoteStationService factory
 # ---------------------------------------------------------------------------
@@ -73,16 +86,19 @@ def _get_ns_service() -> NoteStationService:
     """Create a NoteStationService using app settings.
 
     This function is extracted to allow easy mocking in tests.
-    The SynologyClient is created with configured NAS credentials.
+    The SynologyClient is created with NAS credentials from the
+    settings store (which respects runtime UI overrides).
 
     Returns:
         A NoteStationService wrapping an authenticated SynologyClient.
     """
-    settings = get_settings()
+    from app.api.settings import get_nas_config
+
+    nas = get_nas_config()
     client = SynologyClient(
-        url=settings.SYNOLOGY_URL,
-        user=settings.SYNOLOGY_USER,
-        password=settings.SYNOLOGY_PASSWORD,
+        url=nas["url"],
+        user=nas["user"],
+        password=nas["password"],
     )
     return NoteStationService(client)
 
@@ -92,22 +108,29 @@ def _get_ns_service() -> NoteStationService:
 # ---------------------------------------------------------------------------
 
 
+def _unix_to_iso(ts: int | float | None) -> str | None:
+    """Convert a Unix timestamp to an ISO-8601 string, or None."""
+    if ts is None:
+        return None
+    return datetime.fromtimestamp(ts, tz=UTC).isoformat()
+
+
 def _note_to_item(raw: dict) -> NoteItem:
     """Convert a raw Synology note dict to a NoteItem schema.
 
     Args:
-        raw: Dictionary with note_id, title, notebook, tag, ctime, mtime.
+        raw: Dictionary with object_id, title, parent_id, tag, ctime, mtime.
 
     Returns:
         Populated NoteItem instance.
     """
     return NoteItem(
-        note_id=raw.get("note_id", ""),
+        note_id=raw.get("object_id", ""),
         title=raw.get("title", ""),
-        notebook=raw.get("notebook"),
+        notebook=raw.get("parent_id"),
         tags=raw.get("tag", []) or [],
-        created_at=raw.get("ctime"),
-        updated_at=raw.get("mtime"),
+        created_at=_unix_to_iso(raw.get("ctime")),
+        updated_at=_unix_to_iso(raw.get("mtime")),
     )
 
 
@@ -172,38 +195,45 @@ async def get_note(
         HTTPException 404: If the note is not found.
     """
     try:
-        data = await ns_service.get_note(note_id)
+        note = await ns_service.get_note(note_id)
     except SynologyApiError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Note not found: {note_id}",
         ) from None
 
-    note = data.get("note", data)
     return NoteDetailResponse(
-        note_id=note.get("note_id", note_id),
+        note_id=note.get("object_id", note_id),
         title=note.get("title", ""),
-        notebook=note.get("notebook"),
+        notebook=note.get("parent_id"),
         tags=note.get("tag", []) or [],
-        created_at=note.get("ctime"),
-        updated_at=note.get("mtime"),
+        created_at=_unix_to_iso(note.get("ctime")),
+        updated_at=_unix_to_iso(note.get("mtime")),
         content=note.get("content", ""),
     )
 
 
-@router.get("/notebooks")
+@router.get("/notebooks", response_model=NotebooksListResponse)
 async def list_notebooks(
     current_user: dict = Depends(get_current_user),  # noqa: B008
     ns_service: NoteStationService = Depends(_get_ns_service),  # noqa: B008
-) -> list[dict]:
+) -> NotebooksListResponse:
     """Retrieve all notebooks.
 
     Requires JWT authentication via Bearer token.
 
     Returns:
-        List of notebook dicts from NoteStation.
+        NotebooksListResponse with notebook items mapped from Synology data.
     """
-    return await ns_service.list_notebooks()
+    raw_notebooks = await ns_service.list_notebooks()
+    items = [
+        NotebookItem(
+            name=nb.get("title", ""),
+            note_count=nb.get("note_count", 0),
+        )
+        for nb in raw_notebooks
+    ]
+    return NotebooksListResponse(items=items)
 
 
 @router.get("/tags")

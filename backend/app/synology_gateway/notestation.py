@@ -76,22 +76,22 @@ class NoteStationService:
             limit=limit,
         )
 
-    async def get_note(self, note_id: str) -> dict:
-        """Retrieve a single note by its ID.
+    async def get_note(self, object_id: str) -> dict:
+        """Retrieve a single note by its object ID.
 
         Calls ``SYNO.NoteStation.Note`` / ``get`` (version 1).
 
         Args:
-            note_id: The unique note identifier.
+            object_id: The unique note identifier (``object_id``).
 
         Returns:
-            A dict with the full note data (title, content, metadata).
+            A dict with the full note data (title, content, tags, etc.).
         """
         return await self._client.request(
             f"{self.NOTESTATION_API}.Note",
             "get",
             version=1,
-            note_id=note_id,
+            object_id=object_id,
         )
 
     # ------------------------------------------------------------------

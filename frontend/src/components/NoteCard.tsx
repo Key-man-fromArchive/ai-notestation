@@ -18,15 +18,15 @@ interface NoteCardProps {
  * - hover 효과, focus ring (접근성)
  */
 export function NoteCard({ note, className }: NoteCardProps) {
-  const formattedDate = new Date(note.updated_at).toLocaleDateString('ko-KR', {
+  const formattedDate = note.updated_at ? new Date(note.updated_at).toLocaleDateString('ko-KR', {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
-  })
+  }) : ''
 
   return (
     <Link
-      to={`/notes/${note.id}`}
+      to={`/notes/${note.note_id}`}
       className={cn(
         'block p-4 border border-border rounded-lg',
         'hover:border-primary/50 hover:shadow-sm',
@@ -44,7 +44,7 @@ export function NoteCard({ note, className }: NoteCardProps) {
 
       {/* 스니펫 (2줄 제한) */}
       <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
-        {note.snippet}
+        {note.snippet || ''}
       </p>
 
       {/* 메타정보 */}
@@ -52,11 +52,11 @@ export function NoteCard({ note, className }: NoteCardProps) {
         {/* 노트북 */}
         <div className="flex items-center gap-1">
           <Notebook className="h-3 w-3" aria-hidden="true" />
-          <span>{note.notebook}</span>
+          <span>{note.notebook || ''}</span>
         </div>
 
         {/* 수정일 */}
-        <time dateTime={note.updated_at}>{formattedDate}</time>
+        {note.updated_at && <time dateTime={note.updated_at}>{formattedDate}</time>}
 
         {/* 태그 */}
         {note.tags.length > 0 && (

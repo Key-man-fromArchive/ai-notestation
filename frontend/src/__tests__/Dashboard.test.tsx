@@ -37,7 +37,7 @@ describe('Dashboard Page', () => {
 
   it('renders dashboard title', () => {
     vi.mocked(api.apiClient.get).mockResolvedValue({
-      notes: [],
+      items: [],
     })
 
     render(<Dashboard />, { wrapper: createWrapper() })
@@ -48,9 +48,9 @@ describe('Dashboard Page', () => {
     vi.mocked(api.apiClient.get).mockImplementation((path: string) => {
       if (path.includes('/notes')) {
         return Promise.resolve({
-          notes: [
-            { id: '1', title: 'Recent Note 1', updated_at: '2026-01-30T00:00:00Z' },
-            { id: '2', title: 'Recent Note 2', updated_at: '2026-01-29T00:00:00Z' },
+          items: [
+            { note_id: '1', title: 'Recent Note 1', updated_at: '2026-01-30T00:00:00Z' },
+            { note_id: '2', title: 'Recent Note 2', updated_at: '2026-01-29T00:00:00Z' },
           ],
           total: 2,
         })
@@ -77,7 +77,7 @@ describe('Dashboard Page', () => {
           last_sync: '2026-01-30T00:00:00Z',
         })
       }
-      return Promise.resolve({ notes: [], total: 0 })
+      return Promise.resolve({ items: [], total: 0 })
     })
 
     render(<Dashboard />, { wrapper: createWrapper() })
@@ -95,7 +95,7 @@ describe('Dashboard Page', () => {
           error: 'NAS connection failed',
         })
       }
-      return Promise.resolve({ notes: [], total: 0 })
+      return Promise.resolve({ items: [], total: 0 })
     })
 
     render(<Dashboard />, { wrapper: createWrapper() })
@@ -107,7 +107,7 @@ describe('Dashboard Page', () => {
 
   it('displays quick action links', async () => {
     vi.mocked(api.apiClient.get).mockResolvedValue({
-      notes: [],
+      items: [],
       total: 0,
     })
 

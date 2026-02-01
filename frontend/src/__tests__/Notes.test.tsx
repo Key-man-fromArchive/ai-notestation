@@ -21,7 +21,7 @@ vi.mock('@/lib/api', () => ({
 const mockNotesResponse: NotesResponse = {
   items: [
     {
-      id: '1',
+      note_id: '1',
       title: 'Test Note 1',
       snippet: 'This is test note 1',
       notebook: 'Work',
@@ -29,7 +29,7 @@ const mockNotesResponse: NotesResponse = {
       tags: ['tag1'],
     },
     {
-      id: '2',
+      note_id: '2',
       title: 'Test Note 2',
       snippet: 'This is test note 2',
       notebook: 'Personal',

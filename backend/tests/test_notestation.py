@@ -123,7 +123,7 @@ class TestGetNote:
             "SYNO.NoteStation.Note",
             "get",
             version=1,
-            note_id="n001",
+            object_id="n001",
         )
 
 

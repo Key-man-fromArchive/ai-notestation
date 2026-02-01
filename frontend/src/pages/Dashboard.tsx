@@ -19,13 +19,13 @@ import {
 import { cn } from '@/lib/utils'
 
 interface Note {
-  id: string
+  note_id: string
   title: string
-  updated_at: string
+  updated_at: string | null
 }
 
 interface NotesResponse {
-  notes: Note[]
+  items: Note[]
   total: number
 }
 
@@ -171,12 +171,12 @@ export default function Dashboard() {
         <h3 className="text-lg font-semibold mb-3">최근 노트</h3>
         {isLoading ? (
           <LoadingSpinner className="py-8" />
-        ) : data && data.notes.length > 0 ? (
+        ) : data?.items && data.items.length > 0 ? (
           <ul className="space-y-2" role="list">
-            {data.notes.map((note) => (
-              <li key={note.id}>
+            {data.items.map((note) => (
+              <li key={note.note_id}>
                 <Link
-                  to={`/notes/${note.id}`}
+                  to={`/notes/${note.note_id}`}
                   className={cn(
                     'flex items-center gap-3 p-3 border border-input rounded-md',
                     'hover:bg-muted/50 transition-colors duration-200',
@@ -192,7 +192,7 @@ export default function Dashboard() {
                       {note.title}
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      {new Date(note.updated_at).toLocaleString('ko-KR')}
+                      {note.updated_at ? new Date(note.updated_at).toLocaleString('ko-KR') : ''}
                     </div>
                   </div>
                 </Link>

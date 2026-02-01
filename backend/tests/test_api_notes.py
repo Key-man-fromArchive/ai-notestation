@@ -112,20 +112,20 @@ class TestListNotes:
             list_notes_return={
                 "notes": [
                     {
-                        "note_id": "n1",
+                        "object_id": "n1",
                         "title": "Test Note 1",
-                        "notebook": "Default",
+                        "parent_id": "nb-default",
                         "tag": ["python", "fastapi"],
-                        "ctime": "2025-01-01T00:00:00",
-                        "mtime": "2025-01-02T00:00:00",
+                        "ctime": 1704067200,
+                        "mtime": 1704153600,
                     },
                     {
-                        "note_id": "n2",
+                        "object_id": "n2",
                         "title": "Test Note 2",
-                        "notebook": None,
+                        "parent_id": None,
                         "tag": [],
-                        "ctime": "2025-01-03T00:00:00",
-                        "mtime": "2025-01-04T00:00:00",
+                        "ctime": 1704240000,
+                        "mtime": 1704326400,
                     },
                 ],
                 "total": 2,
@@ -159,9 +159,9 @@ class TestListNotes:
             list_notes_return={
                 "notes": [
                     {
-                        "note_id": "n3",
+                        "object_id": "n3",
                         "title": "Page 2 Note",
-                        "notebook": "Lab",
+                        "parent_id": "nb-lab",
                         "tag": [],
                         "ctime": None,
                         "mtime": None,
@@ -237,15 +237,13 @@ class TestGetNote:
 
         mock_ns = _make_mock_ns_service(
             get_note_return={
-                "note": {
-                    "note_id": "n42",
-                    "title": "Detailed Note",
-                    "notebook": "Research",
-                    "tag": ["biology"],
-                    "content": "<p>Hello <strong>world</strong></p>",
-                    "ctime": "2025-06-15T10:30:00",
-                    "mtime": "2025-06-16T14:00:00",
-                }
+                "object_id": "n42",
+                "title": "Detailed Note",
+                "parent_id": "nb-research",
+                "tag": ["biology"],
+                "content": "<p>Hello <strong>world</strong></p>",
+                "ctime": 1718444200,
+                "mtime": 1718543600,
             }
         )
         _setup_overrides(app, mock_ns)
@@ -260,7 +258,7 @@ class TestGetNote:
             assert data["note_id"] == "n42"
             assert data["title"] == "Detailed Note"
             assert data["content"] == "<p>Hello <strong>world</strong></p>"
-            assert data["notebook"] == "Research"
+            assert data["notebook"] == "nb-research"
             assert data["tags"] == ["biology"]
 
             mock_ns.get_note.assert_called_once_with("n42")
@@ -317,8 +315,8 @@ class TestListNotebooks:
 
         mock_ns = _make_mock_ns_service(
             list_notebooks_return=[
-                {"notebook_id": "nb1", "name": "Research"},
-                {"notebook_id": "nb2", "name": "Personal"},
+                {"object_id": "nb1", "title": "Research"},
+                {"object_id": "nb2", "title": "Personal"},
             ]
         )
         _setup_overrides(app, mock_ns)
@@ -330,9 +328,9 @@ class TestListNotebooks:
 
             assert response.status_code == 200
             data = response.json()
-            assert isinstance(data, list)
-            assert len(data) == 2
-            assert data[0]["name"] == "Research"
+            assert "items" in data
+            assert len(data["items"]) == 2
+            assert data["items"][0]["name"] == "Research"
         finally:
             _clear_overrides(app)
 

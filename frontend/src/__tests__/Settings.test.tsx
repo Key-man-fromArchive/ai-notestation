@@ -61,13 +61,13 @@ describe('Settings Page', () => {
     vi.mocked(api.apiClient.get).mockImplementation((path: string) => {
       if (path === '/settings') {
         return Promise.resolve({
-          settings: {
-            openai_api_key: 'sk-****',
-            anthropic_api_key: 'ant****',
-            nas_url: 'https://nas.example.com',
-            nas_user: 'admin',
-            nas_password: '****',
-          },
+          settings: [
+            { key: 'nas_url', value: 'https://nas.example.com' },
+            { key: 'nas_user', value: 'admin' },
+            { key: 'nas_password', value: '****' },
+            { key: 'openai_api_key', value: 'sk-****' },
+            { key: 'anthropic_api_key', value: 'ant****' },
+          ],
         })
       }
       // OAuth status endpoints

@@ -304,7 +304,16 @@ export default function Settings() {
     error,
   } = useQuery<SettingsData>({
     queryKey: ['settings'],
-    queryFn: () => apiClient.get('/settings'),
+    queryFn: async () => {
+      const response = await apiClient.get<{
+        settings: Array<{ key: string; value: string }>
+      }>('/settings')
+      const settingsMap: Record<string, string> = {}
+      for (const s of response.settings) {
+        settingsMap[s.key] = s.value
+      }
+      return { settings: settingsMap }
+    },
   })
 
   const updateMutation = useMutation({

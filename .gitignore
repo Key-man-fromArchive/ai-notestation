@@ -53,3 +53,17 @@ worktree/
 
 # Alembic
 backend/alembic/versions/__pycache__/
+
+# MCP tools
+.playwright-mcp/
+.serena/
+
+# Test artifacts
+frontend/e2e-screenshots/
+frontend/test-results/
+
+# Debug / scratch
+backend/test_nb.py
+
+# Runtime logs
+logs/

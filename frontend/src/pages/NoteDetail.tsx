@@ -58,11 +58,11 @@ export default function NoteDetail() {
     return null
   }
 
-  const formattedDate = new Date(note.updated_at).toLocaleDateString('ko-KR', {
+  const formattedDate = note.updated_at ? new Date(note.updated_at).toLocaleDateString('ko-KR', {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
-  })
+  }) : ''
 
   return (
     <div className="h-full overflow-y-auto">
@@ -84,11 +84,11 @@ export default function NoteDetail() {
           {/* 노트북 */}
           <div className="flex items-center gap-1.5">
             <Notebook className="h-4 w-4" aria-hidden="true" />
-            <span>{note.notebook}</span>
+            <span>{note.notebook || ''}</span>
           </div>
 
           {/* 수정일 */}
-          <time dateTime={note.updated_at}>{formattedDate}</time>
+          {note.updated_at && <time dateTime={note.updated_at}>{formattedDate}</time>}
 
           {/* 태그 */}
           {note.tags.length > 0 && (
@@ -105,14 +105,14 @@ export default function NoteDetail() {
         </article>
 
         {/* 첨부파일 */}
-        {note.attachments.length > 0 && (
+        {(note.attachments?.length ?? 0) > 0 && (
           <section className="border-t border-border pt-6">
             <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
               <Paperclip className="h-5 w-5" aria-hidden="true" />
               첨부파일
             </h2>
             <ul className="space-y-2">
-              {note.attachments.map((attachment, index) => (
+              {note.attachments?.map((attachment, index) => (
                 <li key={index}>
                   <a
                     href={attachment.url}

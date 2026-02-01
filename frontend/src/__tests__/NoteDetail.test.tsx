@@ -19,7 +19,7 @@ vi.mock('@/lib/api', () => ({
 }))
 
 const mockNote: Note = {
-  id: '1',
+  note_id: '1',
   title: 'Test Note',
   content: '# Heading\n\nThis is **markdown** content.\n\n```js\nconsole.log("test")\n```',
   notebook: 'Work',
