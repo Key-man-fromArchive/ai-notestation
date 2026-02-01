@@ -1,18 +1,19 @@
 # @TASK P3-T3.5 - ZhipuAI Provider implementation
 # @SPEC docs/plans/2026-01-29-labnote-ai-design.md#AI-Router
-"""ZhipuAI provider for GLM models.
+"""ZhipuAI (Z.ai) provider for GLM models.
 
 Integrates with the ZhipuAI SDK (OpenAI-compatible interface) to provide
-access to GLM-4 and GLM-4-Flash models. The SDK is sync-only, so all
+access to GLM-4.7 series models. The SDK is sync-only, so all
 blocking calls are wrapped with ``asyncio.to_thread``.
 
 Supported models:
-- GLM-4 (glm-4): 128K context window
-- GLM-4-Flash (glm-4-flash): 128K context window
+- GLM-4.7-Flash (glm-4.7-flash): Free tier, fast inference
+- GLM-4.7 (glm-4.7): Full model (requires credits)
+- GLM-4-Plus (glm-4-plus): Previous generation (requires credits)
 
 Usage:
     provider = ZhipuAIProvider(api_key="your-key")
-    response = await provider.chat(messages, model="glm-4")
+    response = await provider.chat(messages, model="glm-4.7-flash")
 """
 
 from __future__ import annotations
@@ -31,15 +32,22 @@ _PROVIDER_NAME = "zhipuai"
 
 _AVAILABLE_MODELS = [
     ModelInfo(
-        id="glm-4",
-        name="GLM-4",
+        id="glm-4.7-flash",
+        name="GLM-4.7 Flash",
         provider=_PROVIDER_NAME,
         max_tokens=128000,
         supports_streaming=True,
     ),
     ModelInfo(
-        id="glm-4-flash",
-        name="GLM-4-Flash",
+        id="glm-4.7",
+        name="GLM-4.7",
+        provider=_PROVIDER_NAME,
+        max_tokens=128000,
+        supports_streaming=True,
+    ),
+    ModelInfo(
+        id="glm-4-plus",
+        name="GLM-4 Plus",
         provider=_PROVIDER_NAME,
         max_tokens=128000,
         supports_streaming=True,

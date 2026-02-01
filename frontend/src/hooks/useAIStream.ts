@@ -3,6 +3,7 @@
 // @TEST src/__tests__/useAIStream.test.ts
 
 import { useState, useRef, useCallback } from 'react'
+import { apiClient } from '@/lib/api'
 
 interface StreamOptions {
   message: string
@@ -38,12 +39,23 @@ export function useAIStream() {
     abortControllerRef.current = new AbortController()
 
     try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      }
+      const token = apiClient.getToken()
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+
       const response = await fetch('/api/ai/stream', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(options),
+        headers,
+        body: JSON.stringify({
+          feature: options.feature,
+          content: options.message,
+          model: options.model || undefined,
+          options: options.note_ids ? { note_ids: options.note_ids } : undefined,
+        }),
         signal: abortControllerRef.current.signal,
       })
 

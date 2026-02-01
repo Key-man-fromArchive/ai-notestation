@@ -222,6 +222,16 @@ async def update_setting(
     _get_store()[key] = body.value
     logger.info("Setting '%s' updated by user", key)
 
+    # Reset the AI router singleton when API keys change
+    if key.endswith("_api_key") and key != "nas_password":
+        try:
+            from app.api.ai import reset_ai_router
+
+            reset_ai_router()
+            logger.info("AI router reset due to key change: %s", key)
+        except Exception:
+            logger.warning("Failed to reset AI router after key change")
+
     return SettingUpdateResponse(
         key=key,
         value=_mask_value(key, _get_store()[key]),

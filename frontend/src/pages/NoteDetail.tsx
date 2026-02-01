@@ -6,6 +6,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Notebook, Tag, Paperclip, Image, File, AlertCircle, Calendar } from 'lucide-react'
 import { useNote } from '@/hooks/useNote'
 import { MarkdownRenderer } from '@/components/MarkdownRenderer'
+import { NoteAIPanel } from '@/components/NoteAIPanel'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
 import { EmptyState } from '@/components/EmptyState'
 
@@ -117,6 +118,11 @@ export default function NoteDetail() {
               ))}
             </div>
           )}
+        </div>
+
+        {/* AI 분석 패널 */}
+        <div className="mb-6">
+          <NoteAIPanel noteContent={note.content} noteTitle={note.title} />
         </div>
 
         {/* 마크다운 콘텐츠 */}

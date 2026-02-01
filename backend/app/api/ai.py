@@ -42,19 +42,51 @@ router = APIRouter(prefix="/ai", tags=["ai"])
 _ai_router: AIRouter | None = None
 
 
+def _inject_settings_keys() -> None:
+    """Push API keys from the settings store into environment variables.
+
+    The settings store holds runtime overrides set via the Settings UI.
+    The AIRouter reads ``os.environ`` during ``_auto_detect``, so we
+    sync the two before creating the router.
+    """
+    import os
+
+    from app.api.settings import _get_store
+
+    store = _get_store()
+    mapping = {
+        "openai_api_key": "OPENAI_API_KEY",
+        "anthropic_api_key": "ANTHROPIC_API_KEY",
+        "google_api_key": "GOOGLE_API_KEY",
+        "zhipuai_api_key": "ZHIPUAI_API_KEY",
+    }
+    for store_key, env_key in mapping.items():
+        val = store.get(store_key, "")
+        if val:
+            os.environ[env_key] = val
+
+
 def get_ai_router() -> AIRouter:
     """Return the singleton AIRouter instance.
 
-    Lazily initialized on first call.  The router auto-detects
-    available providers from environment variables.
+    Lazily initialized on first call.  Before creation, API keys from
+    the in-memory settings store are synced to environment variables so
+    the router's auto-detection picks them up.
 
     Returns:
         AIRouter singleton.
     """
     global _ai_router  # noqa: PLW0603
     if _ai_router is None:
+        _inject_settings_keys()
         _ai_router = AIRouter()
     return _ai_router
+
+
+def reset_ai_router() -> None:
+    """Invalidate the AIRouter singleton so it is re-created on next use."""
+    global _ai_router  # noqa: PLW0603
+    _ai_router = None
 
 
 def _get_oauth_service() -> OAuthService:

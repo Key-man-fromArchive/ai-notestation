@@ -2,9 +2,9 @@
 // @SPEC docs/plans/2026-01-29-labnote-ai-design.md#노트-목록
 // @TEST frontend/src/__tests__/Notes.test.tsx
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { FileText, AlertCircle, FolderOpen, Folder, BookOpen } from 'lucide-react'
+import { FileText, AlertCircle, FolderOpen, Folder, BookOpen, Search, X } from 'lucide-react'
 import { useNotes } from '@/hooks/useNotes'
 import { useNotebooks } from '@/hooks/useNotebooks'
 import { NoteList } from '@/components/NoteList'
@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils'
 export default function Notes() {
   const [searchParams, setSearchParams] = useSearchParams()
   const selectedNotebook = searchParams.get('notebook') || undefined
+  const [filterText, setFilterText] = useState('')
 
   // 노트 목록 데이터
   const {
@@ -34,6 +35,17 @@ export default function Notes() {
 
   // 총 노트 수 (첫 페이지의 total)
   const totalNotes = data?.pages[0]?.total ?? 0
+
+  // 클라이언트 사이드 필터링
+  const filteredNotes = useMemo(() => {
+    if (!filterText.trim()) return allNotes
+    const lower = filterText.toLowerCase()
+    return allNotes.filter(
+      (note) =>
+        note.title.toLowerCase().includes(lower) ||
+        (note.snippet && note.snippet.toLowerCase().includes(lower))
+    )
+  }, [allNotes, filterText])
 
   // 노트북을 활성(count > 0) / 비활성(count === 0)으로 분리 후 정렬
   const { activeNotebooks, emptyNotebooks } = useMemo(() => {
@@ -202,14 +214,42 @@ export default function Notes() {
 
       {/* 우측: 노트 목록 */}
       <main className="flex-1 overflow-hidden">
-        <div className="h-full p-6">
-          <div className="flex items-baseline gap-3 mb-6">
-            <h1 className="text-2xl font-bold text-foreground">
-              {selectedNotebook || '모든 노트'}
-            </h1>
-            <span className="text-sm text-muted-foreground">
-              {totalNotes}개
-            </span>
+        <div className="h-full p-6 flex flex-col">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="flex items-baseline gap-3 flex-1 min-w-0">
+              <h1 className="text-2xl font-bold text-foreground truncate">
+                {selectedNotebook || '모든 노트'}
+              </h1>
+              <span className="text-sm text-muted-foreground shrink-0">
+                {filterText ? `${filteredNotes.length} / ${totalNotes}개` : `${totalNotes}개`}
+              </span>
+            </div>
+          </div>
+
+          {/* 빠른 필터 */}
+          <div className="relative mb-4">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" aria-hidden="true" />
+            <input
+              type="text"
+              value={filterText}
+              onChange={(e) => setFilterText(e.target.value)}
+              placeholder="노트 필터링..."
+              className={cn(
+                'flex h-9 w-full rounded-lg border border-input bg-background pl-9 pr-8 py-2',
+                'text-sm text-foreground placeholder:text-muted-foreground',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                'transition-colors'
+              )}
+            />
+            {filterText && (
+              <button
+                onClick={() => setFilterText('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded text-muted-foreground hover:text-foreground transition-colors"
+                aria-label="필터 초기화"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
 
           {allNotes.length === 0 ? (
@@ -222,10 +262,20 @@ export default function Notes() {
                 onClick: () => handleNotebookChange(null),
               } : undefined}
             />
+          ) : filteredNotes.length === 0 ? (
+            <EmptyState
+              icon={Search}
+              title="일치하는 노트가 없습니다"
+              description={`"${filterText}"에 해당하는 노트를 찾을 수 없습니다`}
+              action={{
+                label: '필터 초기화',
+                onClick: () => setFilterText(''),
+              }}
+            />
           ) : (
             <NoteList
-              notes={allNotes}
-              hasNextPage={hasNextPage ?? false}
+              notes={filteredNotes}
+              hasNextPage={filterText ? false : (hasNextPage ?? false)}
               isFetchingNextPage={isFetchingNextPage}
               fetchNextPage={fetchNextPage}
             />

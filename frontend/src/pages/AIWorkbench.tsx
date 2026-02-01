@@ -60,7 +60,7 @@ const features: {
 
 export default function AIWorkbench() {
   const [selectedFeature, setSelectedFeature] = useState<AIFeature>('insight')
-  const [selectedModel, setSelectedModel] = useState('gpt-4')
+  const [selectedModel, setSelectedModel] = useState('')
 
   // AI 키 설정 확인
   const { isError: isKeyMissing } = useQuery({

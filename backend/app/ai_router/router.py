@@ -20,6 +20,7 @@ Usage:
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from collections.abc import AsyncIterator
@@ -321,9 +322,9 @@ class AIRouter:
                 model=model_name,
                 **kwargs,
             ):
-                yield f"data: {chunk}\n\n"
+                yield f"data: {json.dumps({'chunk': chunk})}\n\n"
         except ProviderError as exc:
-            yield f"event: error\ndata: {exc.message}\n\n"
+            yield f"event: error\ndata: {json.dumps({'error': exc.message})}\n\n"
             return
 
         yield "data: [DONE]\n\n"

@@ -1,6 +1,7 @@
 // @TASK P5-T5.3 - AI 모델 선택기
 // @SPEC docs/plans/2026-01-29-labnote-ai-design.md#ai-workbench-페이지
 
+import { useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { apiClient } from '@/lib/api'
 import { cn } from '@/lib/utils'
@@ -31,6 +32,16 @@ export function ModelSelector({ value, onChange, className }: ModelSelectorProps
     queryKey: ['ai', 'models'],
     queryFn: () => apiClient.get('/ai/models'),
   })
+
+  // Auto-select first model if current value doesn't match any available model
+  useEffect(() => {
+    if (data?.models.length) {
+      const ids = data.models.map((m) => m.id)
+      if (!value || !ids.includes(value)) {
+        onChange(data.models[0].id)
+      }
+    }
+  }, [data, value, onChange])
 
   if (isLoading) {
     return (

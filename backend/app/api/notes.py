@@ -207,6 +207,7 @@ def _note_to_item(raw: dict, notebook_map: dict[str, str] | None = None) -> Note
 async def list_notes(
     offset: int = Query(0, ge=0, description="Number of notes to skip"),
     limit: int = Query(50, ge=1, le=200, description="Maximum notes to return"),
+    notebook: str | None = Query(None, description="Filter by notebook name"),
     current_user: dict = Depends(get_current_user),  # noqa: B008
     ns_service: NoteStationService = Depends(_get_ns_service),  # noqa: B008
 ) -> NoteListResponse:
@@ -217,16 +218,13 @@ async def list_notes(
     Args:
         offset: Pagination offset.
         limit: Page size (max 200).
+        notebook: Optional notebook name to filter by.
         current_user: Injected authenticated user.
         ns_service: Injected NoteStation service.
 
     Returns:
         Paginated response with note items, offset, limit, and total count.
     """
-    data = await ns_service.list_notes(offset=offset, limit=limit)
-    raw_notes = data.get("notes", [])
-    total = data.get("total", 0)
-
     # Build notebook_map: object_id -> title for human-readable notebook names
     notebook_map: dict[str, str] = {}
     try:
@@ -239,7 +237,28 @@ async def list_notes(
     except Exception:
         logger.warning("Failed to fetch notebooks for name resolution")
 
-    items = [_note_to_item(n, notebook_map) for n in raw_notes]
+    if notebook:
+        # Resolve notebook name → object_id(s)
+        target_ids = {
+            oid for oid, name in notebook_map.items() if name == notebook
+        }
+        if not target_ids:
+            return NoteListResponse(items=[], offset=offset, limit=limit, total=0)
+
+        # Fetch all notes and filter by parent_id server-side
+        # (Synology API does not support parent_id filtering natively)
+        all_data = await ns_service.list_notes(offset=0, limit=500)
+        all_notes = all_data.get("notes", [])
+        filtered = [n for n in all_notes if n.get("parent_id") in target_ids]
+
+        total = len(filtered)
+        page = filtered[offset : offset + limit]
+        items = [_note_to_item(n, notebook_map) for n in page]
+    else:
+        data = await ns_service.list_notes(offset=offset, limit=limit)
+        raw_notes = data.get("notes", [])
+        total = data.get("total", 0)
+        items = [_note_to_item(n, notebook_map) for n in raw_notes]
 
     return NoteListResponse(
         items=items,
