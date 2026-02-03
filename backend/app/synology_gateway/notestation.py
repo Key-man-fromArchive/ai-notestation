@@ -56,24 +56,38 @@ class NoteStationService:
     # Notes
     # ------------------------------------------------------------------
 
-    async def list_notes(self, offset: int = 0, limit: int = 50) -> dict:
-        """Retrieve a paginated list of notes.
+    async def list_notes(
+        self,
+        offset: int | None = None,
+        limit: int | None = None,
+    ) -> dict:
+        """Retrieve a list of notes.
 
         Calls ``SYNO.NoteStation.Note`` / ``list`` (version 1).
 
+        When *offset* and *limit* are both ``None`` the request is sent
+        **without** pagination parameters, which – according to observed
+        Synology behaviour – returns **all** notes at once (the same
+        approach used by the ``synology-api`` reference library).
+
         Args:
-            offset: Number of notes to skip (for pagination).
-            limit: Maximum number of notes to return.
+            offset: Number of notes to skip.  Pass ``None`` to omit.
+            limit: Maximum number of notes to return.  Pass ``None`` to omit.
 
         Returns:
             A dict containing ``notes`` (list) and ``total`` (int).
         """
+        extra: dict[str, object] = {}
+        if offset is not None:
+            extra["offset"] = offset
+        if limit is not None:
+            extra["limit"] = limit
+
         return await self._client.request(
             f"{self.NOTESTATION_API}.Note",
             "list",
             version=1,
-            offset=offset,
-            limit=limit,
+            **extra,
         )
 
     async def get_note(self, object_id: str) -> dict:

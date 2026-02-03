@@ -26,7 +26,11 @@ import re
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.database import get_db
+from app.models import NoteImage
 from app.services.auth_service import get_current_user
 from app.synology_gateway.client import SynologyApiError, SynologyClient
 from app.synology_gateway.notestation import NoteStationService
@@ -237,6 +241,12 @@ async def list_notes(
     except Exception:
         logger.warning("Failed to fetch notebooks for name resolution")
 
+    # Synology NoteStation API has a bug: when offset/limit are passed,
+    # the returned `total` equals the returned note count, not the true total.
+    # Workaround: always fetch ALL notes first (no params), then slice locally.
+    all_data = await ns_service.list_notes()
+    all_notes = all_data.get("notes", [])
+
     if notebook:
         # Resolve notebook name → object_id(s)
         target_ids = {
@@ -245,20 +255,15 @@ async def list_notes(
         if not target_ids:
             return NoteListResponse(items=[], offset=offset, limit=limit, total=0)
 
-        # Fetch all notes and filter by parent_id server-side
-        # (Synology API does not support parent_id filtering natively)
-        all_data = await ns_service.list_notes(offset=0, limit=500)
-        all_notes = all_data.get("notes", [])
+        # Filter by parent_id
         filtered = [n for n in all_notes if n.get("parent_id") in target_ids]
-
         total = len(filtered)
         page = filtered[offset : offset + limit]
         items = [_note_to_item(n, notebook_map) for n in page]
     else:
-        data = await ns_service.list_notes(offset=offset, limit=limit)
-        raw_notes = data.get("notes", [])
-        total = data.get("total", 0)
-        items = [_note_to_item(n, notebook_map) for n in raw_notes]
+        total = len(all_notes)
+        page = all_notes[offset : offset + limit]
+        items = [_note_to_item(n, notebook_map) for n in page]
 
     return NoteListResponse(
         items=items,
@@ -273,6 +278,7 @@ async def get_note(
     note_id: str,
     current_user: dict = Depends(get_current_user),  # noqa: B008
     ns_service: NoteStationService = Depends(_get_ns_service),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> NoteDetailResponse:
     """Retrieve a single note by ID, including its full content.
 
@@ -282,6 +288,7 @@ async def get_note(
         note_id: The unique note identifier.
         current_user: Injected authenticated user.
         ns_service: Injected NoteStation service.
+        db: Database session for image lookups.
 
     Returns:
         Full note detail with content.
@@ -324,6 +331,20 @@ async def get_note(
             if isinstance(a, dict) and a.get("ref"):
                 att_lookup[a["ref"]] = a
 
+    # Fetch extracted images from database for this note
+    image_map: dict[str, NoteImage] = {}
+    try:
+        result = await db.execute(
+            select(NoteImage).where(NoteImage.synology_note_id == note_id)
+        )
+        for img in result.scalars():
+            image_map[img.ref] = img
+            # Also index by name so content refs (which use name, not ref) can match
+            if img.name:
+                image_map[img.name] = img
+    except Exception:
+        logger.warning("Failed to fetch images for note %s", note_id)
+
     return NoteDetailResponse(
         note_id=note.get("object_id", note_id),
         title=note.get("title", ""),
@@ -332,7 +353,7 @@ async def get_note(
         tags=_normalize_tags(note),
         created_at=_unix_to_iso(note.get("ctime")),
         updated_at=_unix_to_iso(note.get("mtime")),
-        content=_rewrite_image_urls(note.get("content", ""), att_lookup),
+        content=_rewrite_image_urls(note.get("content", ""), note_id, att_lookup, image_map),
         attachments=attachments,
     )
 
@@ -354,10 +375,11 @@ async def list_notebooks(
     """
     raw_notebooks = await ns_service.list_notebooks()
 
-    # Compute note counts per notebook by fetching notes
+    # Compute note counts per notebook by fetching ALL notes (no params).
+    # Synology API returns wrong totals when offset/limit are passed.
     note_counts: dict[str, int] = {}
     try:
-        notes_data = await ns_service.list_notes(offset=0, limit=500)
+        notes_data = await ns_service.list_notes()
         for note in notes_data.get("notes", []):
             parent_id = note.get("parent_id", "")
             if parent_id:
@@ -461,19 +483,23 @@ _NOTESTATION_IMG_RE = re.compile(
 
 def _rewrite_image_urls(
     html: str,
+    note_id: str,
     attachment_lookup: dict[str, dict] | None = None,
+    image_map: dict[str, "NoteImage"] | None = None,
 ) -> str:
-    """Replace NoteStation image tags with placeholder markers.
+    """Replace NoteStation image tags with either real image URLs or placeholders.
 
-    Since Synology NoteStation does not expose a public API for downloading
-    embedded note images, we replace ``<img ref="...">`` tags with
-    ``<img>`` elements whose ``alt`` attribute encodes metadata for the
-    frontend to render as styled placeholder cards.
+    If an image has been extracted from an NSX export and exists in the database,
+    we produce an ``<img src="/api/images/{note_id}/{ref}">`` tag. Otherwise,
+    we produce a placeholder ``<img alt="notestation-image:...">`` tag for the
+    frontend to render as a styled card.
 
     Args:
         html: HTML content from NoteStation.
+        note_id: The note's object_id for constructing image URLs.
         attachment_lookup: Dict mapping attachment refs/IDs to metadata dicts
                            with keys like ``name``, ``width``, ``height``.
+        image_map: Dict mapping image refs to NoteImage DB records (if available).
     """
     if not html:
         return html
@@ -501,9 +527,40 @@ def _rewrite_image_urls(
                         height = str(att["height"])
                     break
 
-        # Produce an <img> with a recognizable alt prefix for the frontend.
-        # The src is omitted so no network request fires; rehype-sanitize
-        # preserves <img> tags and their alt/width/height attributes.
+        # Check if we have an extracted image for this ref
+        img_record = None
+        if image_map:
+            # Direct lookup by decoded name or attachment name
+            img_record = image_map.get(decoded_name)
+            # Decoded name may have a timestamp prefix (e.g. "1770102482260ns_attach_...")
+            # Try matching by suffix against known image names
+            if not img_record:
+                for candidate in image_map.values():
+                    if candidate.name and decoded_name.endswith(candidate.name):
+                        img_record = candidate
+                        break
+
+        if img_record:
+            # Use dimensions from DB if available (more reliable than attachment metadata)
+            if img_record.width:
+                width = str(img_record.width)
+            if img_record.height:
+                height = str(img_record.height)
+
+            # Produce a real <img> tag with API URL
+            # Use the DB ref (NSX attachment key) for the URL path
+            from urllib.parse import quote
+            safe_ref = quote(img_record.ref, safe="")
+            parts = [f'<img src="/api/images/{note_id}/{safe_ref}"']
+            parts.append(f' alt="{display_name}"')
+            if width:
+                parts.append(f' width="{width}"')
+            if height:
+                parts.append(f' height="{height}"')
+            parts.append(' class="notestation-image" loading="lazy" />')
+            return "".join(parts)
+
+        # No extracted image available - produce a placeholder
         parts = [f'<img alt="notestation-image:{display_name}"']
         if width:
             parts.append(f' width="{width}"')

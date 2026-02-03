@@ -159,7 +159,17 @@ class OAuthService:
         await db.flush()
 
         # Build URL
-        callback_url = f"{self._settings.APP_BASE_URL}/oauth/callback"
+        # Google OAuth rejects private-IP redirect URIs; always use localhost.
+        base_url = self._settings.APP_BASE_URL
+        if provider == "google":
+            from urllib.parse import urlparse
+
+            parsed = urlparse(base_url)
+            host = parsed.hostname or ""
+            if host not in ("localhost", "127.0.0.1") and not host.endswith(".com"):
+                base_url = f"http://localhost:{parsed.port or 3000}"
+
+        callback_url = f"{base_url}/oauth/callback"
 
         params: dict[str, str] = {
             "response_type": "code",
@@ -237,7 +247,18 @@ class OAuthService:
             raise OAuthError("Missing PKCE code_verifier", provider)
 
         config = _PROVIDER_CONFIG[provider]
-        callback_url = f"{self._settings.APP_BASE_URL}/oauth/callback"
+
+        # Google OAuth rejects private-IP redirect URIs; must match authorize step.
+        base_url = self._settings.APP_BASE_URL
+        if provider == "google":
+            from urllib.parse import urlparse
+
+            parsed = urlparse(base_url)
+            host = parsed.hostname or ""
+            if host not in ("localhost", "127.0.0.1") and not host.endswith(".com"):
+                base_url = f"http://localhost:{parsed.port or 3000}"
+
+        callback_url = f"{base_url}/oauth/callback"
 
         # Exchange code for token
         token_data: dict[str, str] = {

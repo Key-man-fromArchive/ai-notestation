@@ -50,6 +50,10 @@ class Settings(BaseSettings):
     GOOGLE_OAUTH_CLIENT_ID: str = ""
     GOOGLE_OAUTH_CLIENT_SECRET: str = ""
 
+    # --- NSX Image Storage ---
+    NSX_IMAGES_PATH: str = "/data/nsx_images"  # Path to store extracted images
+    NSX_EXPORTS_PATH: str = "/data/nsx_exports"  # Path for NSX export files
+
     @property
     def async_database_url(self) -> str:
         """Ensure the database URL uses the asyncpg driver."""

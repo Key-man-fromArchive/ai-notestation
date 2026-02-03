@@ -60,8 +60,8 @@ class TestListNotes:
         assert result["notes"][0]["note_id"] == "n001"
 
     @pytest.mark.asyncio
-    async def test_list_notes_default_offset_limit(self, notestation_service, mock_client):
-        """list_notes sends offset=0, limit=50 by default."""
+    async def test_list_notes_default_no_pagination(self, notestation_service, mock_client):
+        """list_notes sends NO offset/limit by default (fetch all at once)."""
         mock_client.request.return_value = {"notes": [], "total": 0}
 
         await notestation_service.list_notes()
@@ -70,8 +70,6 @@ class TestListNotes:
             "SYNO.NoteStation.Note",
             "list",
             version=1,
-            offset=0,
-            limit=50,
         )
 
     @pytest.mark.asyncio

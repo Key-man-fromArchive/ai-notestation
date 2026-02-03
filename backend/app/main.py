@@ -13,7 +13,13 @@ from app.database import engine
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Manage application lifespan: startup and shutdown events."""
-    # Startup: database connection is established via engine on first use
+    # Startup: create all database tables if they don't exist
+    from app.database import Base
+    from app import models  # noqa: F401 - Import models to register them with Base
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
     yield
     # Shutdown: dispose the async engine connection pool
     await engine.dispose()
@@ -58,6 +64,10 @@ app.include_router(ai_router, prefix="/api")
 from app.api.oauth import router as oauth_router
 
 app.include_router(oauth_router, prefix="/api")
+
+from app.api.nsx import router as nsx_router
+
+app.include_router(nsx_router, prefix="/api")
 
 
 @app.get("/api/health", tags=["health"])

@@ -36,11 +36,15 @@ services:
     environment:
       # Ensure DATABASE_URL points to the db service
       DATABASE_URL: postgresql+asyncpg://labnote:labnote@db:5432/labnote
+      # NSX images storage path
+      NSX_IMAGES_PATH: /data/nsx_images
     depends_on:
       db:
         condition: service_healthy
     volumes:
       - ./backend:/app
+      - nsx_images:/data/nsx_images
+      - nsx_exports:/data/nsx_exports
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     restart: unless-stopped
     networks:
@@ -65,6 +69,8 @@ services:
 
 volumes:
   pgdata:
+  nsx_images:
+  nsx_exports:
 
 networks:
   labnote-net:

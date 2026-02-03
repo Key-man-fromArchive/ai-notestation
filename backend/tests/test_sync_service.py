@@ -769,10 +769,11 @@ class TestPagination:
     """NoteStation notes should be fetched across multiple pages."""
 
     @pytest.mark.asyncio
-    async def test_fetches_multiple_pages(self, sync_service, mock_notestation, mock_db):
-        """When total > page size, multiple calls are made."""
-        # Page 1: 2 notes, total=3
-        page_1 = {
+    async def test_fetches_remaining_via_pagination(self, sync_service, mock_notestation, mock_db):
+        """When the initial uncapped request returns fewer notes than total,
+        the remaining notes are fetched via paginated follow-up calls."""
+        # Initial call (no offset/limit): returns 2 notes but total=3
+        initial_response = {
             "notes": [
                 {
                     "object_id": "n001",
@@ -795,8 +796,8 @@ class TestPagination:
             ],
             "total": 3,
         }
-        # Page 2: 1 note
-        page_2 = {
+        # Paginated follow-up: 1 remaining note
+        paginated_response = {
             "notes": [
                 {
                     "object_id": "n003",
@@ -811,7 +812,7 @@ class TestPagination:
             "total": 3,
         }
 
-        mock_notestation.list_notes.side_effect = [page_1, page_2]
+        mock_notestation.list_notes.side_effect = [initial_response, paginated_response]
         mock_notestation.list_notebooks.return_value = SAMPLE_NOTEBOOKS
 
         # get_note returns detail for all 3 new notes
@@ -833,8 +834,58 @@ class TestPagination:
 
         assert result.added == 3
         assert result.total == 3
-        # list_notes should have been called twice
+        # list_notes called twice: 1st without pagination, 2nd with offset/limit
         assert mock_notestation.list_notes.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_single_request_returns_all(self, sync_service, mock_notestation, mock_db):
+        """When the initial uncapped request returns all notes, no pagination is needed."""
+        all_at_once = {
+            "notes": [
+                {
+                    "object_id": "n001",
+                    "title": "Note 1",
+                    "brief": "1",
+                    "ctime": 1706500000,
+                    "mtime": 1706500100,
+                    "parent_id": "nb-1",
+                    "category": "note",
+                },
+                {
+                    "object_id": "n002",
+                    "title": "Note 2",
+                    "brief": "2",
+                    "ctime": 1706500000,
+                    "mtime": 1706500100,
+                    "parent_id": "nb-1",
+                    "category": "note",
+                },
+            ],
+            "total": 2,
+        }
+
+        mock_notestation.list_notes.return_value = all_at_once
+        mock_notestation.list_notebooks.return_value = SAMPLE_NOTEBOOKS
+
+        async def _get_note(note_id):
+            details = {
+                "n001": {"object_id": "n001", "title": "Note 1", "content": "<p>1</p>", "tag": [], "ctime": 1706500000, "mtime": 1706500100, "parent_id": "nb-1", "category": "note"},
+                "n002": {"object_id": "n002", "title": "Note 2", "content": "<p>2</p>", "tag": [], "ctime": 1706500000, "mtime": 1706500100, "parent_id": "nb-1", "category": "note"},
+            }
+            return details[note_id]
+
+        mock_notestation.get_note.side_effect = _get_note
+
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = []
+        mock_db.execute.return_value = mock_result
+
+        result = await sync_service.sync_all()
+
+        assert result.added == 2
+        assert result.total == 2
+        # list_notes called only once (no pagination needed)
+        assert mock_notestation.list_notes.await_count == 1
 
 
 # ---------------------------------------------------------------------------

@@ -30,8 +30,8 @@ from app.synology_gateway.notestation import NoteStationService
 
 logger = logging.getLogger(__name__)
 
-# Default page size for paginated note fetching
-_PAGE_SIZE = 50
+# Page size used when the API does not return all notes at once.
+_PAGE_SIZE = 500
 
 
 @dataclass
@@ -189,27 +189,59 @@ class SyncService:
             return {}
 
     async def _fetch_all_notes(self) -> list[dict]:
-        """Fetch all notes from NoteStation using pagination.
+        """Fetch all notes from NoteStation.
+
+        Strategy:
+        1. First request **without** offset/limit so the API returns
+           every note in a single response (observed Synology behaviour,
+           matching the ``synology-api`` reference library).
+        2. If the server still returns fewer notes than ``total``
+           (i.e. it caps a single response), fall back to paginated
+           fetching for the remaining notes.
 
         Returns:
-            A flat list of note dicts from all pages.
+            A flat list of note dicts.
         """
-        all_notes: list[dict] = []
-        offset = 0
+        # --- Phase 1: attempt a single uncapped request ---------------
+        data = await self._notestation.list_notes()
+        all_notes: list[dict] = data.get("notes", [])
+        total = data.get("total", 0)
 
-        while True:
-            data = await self._notestation.list_notes(offset=offset, limit=_PAGE_SIZE)
-            notes = data.get("notes", [])
-            total = data.get("total", 0)
+        logger.info(
+            "NoteStation list (no pagination): received %d notes, total=%d",
+            len(all_notes),
+            total,
+        )
 
-            all_notes.extend(notes)
+        if not all_notes:
+            return all_notes
 
-            # If we've fetched all notes, stop
-            if len(all_notes) >= total or not notes:
-                break
+        # --- Phase 2: paginate if the server capped the response ------
+        if total > len(all_notes):
+            logger.info(
+                "Server capped response at %d notes (total=%d), "
+                "fetching remaining via pagination...",
+                len(all_notes),
+                total,
+            )
+            offset = len(all_notes)
+            while offset < total:
+                page = await self._notestation.list_notes(
+                    offset=offset, limit=_PAGE_SIZE,
+                )
+                notes = page.get("notes", [])
+                if not notes:
+                    break
+                all_notes.extend(notes)
+                offset += len(notes)
+                logger.debug(
+                    "Pagination: fetched %d notes so far (offset=%d, total=%d)",
+                    len(all_notes),
+                    offset,
+                    total,
+                )
 
-            offset += len(notes)
-
+        logger.info("Total notes fetched from NoteStation: %d", len(all_notes))
         return all_notes
 
     async def _get_existing_notes(self) -> dict[str, Note]:

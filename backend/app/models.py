@@ -71,6 +71,33 @@ class Setting(Base):
     )
 
 
+class NoteImage(Base):
+    """Images extracted from NoteStation NSX exports.
+
+    Maps note attachment references to extracted image files,
+    enabling image serving through our API.
+    """
+
+    __tablename__ = "note_images"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    synology_note_id: Mapped[str] = mapped_column(String(255), index=True)
+    ref: Mapped[str] = mapped_column(String(512))  # Original reference in note content
+    name: Mapped[str] = mapped_column(String(512))  # Human-readable filename
+    md5: Mapped[str] = mapped_column(String(32))  # MD5 hash from NSX
+    file_path: Mapped[str] = mapped_column(String(1024))  # Path to extracted file
+    mime_type: Mapped[str] = mapped_column(String(100), default="image/png")
+    width: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    height: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("synology_note_id", "ref", name="uq_note_images_note_ref"),
+        Index("idx_note_images_note_id", "synology_note_id"),
+        Index("idx_note_images_md5", "md5"),
+    )
+
+
 class OAuthToken(Base):
     """OAuth tokens for provider authentication (Google, OpenAI)."""
 
