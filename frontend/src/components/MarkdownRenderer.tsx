@@ -9,9 +9,14 @@ import rehypeRaw from 'rehype-raw'
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
 import { cn } from '@/lib/utils'
 
-// Custom sanitize schema that allows our API image URLs and classes
+// Custom sanitize schema that allows our API image URLs, table styles, etc.
 const sanitizeSchema = {
   ...defaultSchema,
+  tagNames: [
+    ...(defaultSchema.tagNames || []),
+    'colgroup',
+    'col',
+  ],
   attributes: {
     ...defaultSchema.attributes,
     img: [
@@ -23,6 +28,15 @@ const sanitizeSchema = {
       'loading',
       ['className', 'notestation-image'],
     ],
+    // Allow style on table elements for NoteStation HTML tables
+    table: [...(defaultSchema.attributes?.table || []), 'style'],
+    thead: [...(defaultSchema.attributes?.thead || []), 'style'],
+    tbody: [...(defaultSchema.attributes?.tbody || []), 'style'],
+    tr: [...(defaultSchema.attributes?.tr || []), 'style'],
+    td: [...(defaultSchema.attributes?.td || []), 'style', 'rowSpan', 'colSpan'],
+    th: [...(defaultSchema.attributes?.th || []), 'style', 'rowSpan', 'colSpan'],
+    col: ['style', 'width', 'span'],
+    colgroup: ['style', 'span'],
   },
 }
 
@@ -135,6 +149,35 @@ function NoteStationImage({
  * as styled cards with filename and dimensions.
  */
 const markdownComponents: Components = {
+  // Wrap tables in a scrollable container to handle wide NoteStation tables
+  table: ({ children, ...props }) => (
+    <div className="overflow-x-auto my-4 not-prose">
+      <table
+        className="min-w-full border-collapse border border-border text-sm"
+        {...props}
+      >
+        {children}
+      </table>
+    </div>
+  ),
+  td: ({ children, style, ...props }) => (
+    <td
+      className="border border-border px-2 py-1.5 text-foreground align-top"
+      style={style}
+      {...props}
+    >
+      {children}
+    </td>
+  ),
+  th: ({ children, style, ...props }) => (
+    <th
+      className="border border-border px-2 py-1.5 bg-muted font-semibold text-foreground align-top"
+      style={style}
+      {...props}
+    >
+      {children}
+    </th>
+  ),
   img: ({ alt, width, height, src, ...props }) => {
     // Check if this is a NoteStation embedded image placeholder
     if (alt?.startsWith(NOTESTATION_IMAGE_PREFIX)) {
@@ -179,7 +222,7 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
         'prose-blockquote:border-l-primary prose-blockquote:text-muted-foreground',
         'prose-ul:text-foreground prose-ol:text-foreground',
         'prose-li:text-foreground prose-li:marker:text-muted-foreground',
-        'prose-table:text-foreground prose-th:bg-muted',
+        'prose-table:text-foreground',
         'prose-img:rounded-lg prose-img:border prose-img:border-border',
         className
       )}
