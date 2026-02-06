@@ -257,7 +257,7 @@ class OAuthService:
         config = _PROVIDER_CONFIG[provider]
 
         if provider == "anthropic":
-            return await self._exchange_anthropic_code(code, state, code_verifier, token_row, db)
+            return await self._exchange_anthropic_code(code, code_verifier, code_verifier, token_row, db)
 
         base_url = self._settings.APP_BASE_URL
         callback_url = f"{base_url}/oauth/callback"

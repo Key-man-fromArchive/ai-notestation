@@ -135,10 +135,15 @@ export function OAuthSection({ provider, label }: OAuthSectionProps) {
     await startDeviceFlow()
   }
 
-  const handleCopy = async (text: string) => {
-    await navigator.clipboard.writeText(text)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+  const handleCopy = async (text: string | null) => {
+    if (!text) return
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch (err) {
+      console.error('Failed to copy:', err)
+    }
   }
 
   const handleCodePasteSubmit = async () => {
