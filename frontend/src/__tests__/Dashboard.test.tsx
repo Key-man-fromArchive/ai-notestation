@@ -56,7 +56,7 @@ describe('Dashboard Page', () => {
         })
       }
       if (path === '/sync/status') {
-        return Promise.resolve({ status: 'idle', last_sync: '2026-01-30T00:00:00Z' })
+        return Promise.resolve({ status: 'idle', last_sync_at: '2026-01-30T00:00:00Z', notes_synced: null, error_message: null })
       }
       return Promise.reject(new Error('Unknown path'))
     })
@@ -74,7 +74,9 @@ describe('Dashboard Page', () => {
       if (path === '/sync/status') {
         return Promise.resolve({
           status: 'idle',
-          last_sync: '2026-01-30T00:00:00Z',
+          last_sync_at: '2026-01-30T00:00:00Z',
+          notes_synced: 10,
+          error_message: null,
         })
       }
       return Promise.resolve({ items: [], total: 0 })
@@ -92,7 +94,9 @@ describe('Dashboard Page', () => {
       if (path === '/sync/status') {
         return Promise.resolve({
           status: 'error',
-          error: 'NAS connection failed',
+          last_sync_at: null,
+          notes_synced: null,
+          error_message: 'Synology authentication failed (error code: 400)',
         })
       }
       return Promise.resolve({ items: [], total: 0 })
@@ -101,7 +105,9 @@ describe('Dashboard Page', () => {
     render(<Dashboard />, { wrapper: createWrapper() })
 
     await waitFor(() => {
-      expect(screen.getByText(/NAS 연결에 실패했습니다/i)).toBeInTheDocument()
+      expect(screen.getByText(/NAS 동기화에 실패했습니다/i)).toBeInTheDocument()
+      // Check that the user-friendly message is shown
+      expect(screen.getByText(/NAS 계정 정보가 올바르지 않습니다/i)).toBeInTheDocument()
     })
   })
 

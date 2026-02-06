@@ -333,9 +333,16 @@ class OAuthService:
         config = _PROVIDER_CONFIG["anthropic"]
         client_id = self._settings.ANTHROPIC_OAUTH_CLIENT_ID
 
+        auth_code = code
+        auth_state = state
+        if "#" in code:
+            parts = code.split("#")
+            auth_code = parts[0]
+            auth_state = parts[1] if len(parts) > 1 else state
+
         token_data = {
-            "code": code,
-            "state": state,
+            "code": auth_code,
+            "state": auth_state,
             "grant_type": "authorization_code",
             "client_id": client_id,
             "redirect_uri": config["redirect_uri"],

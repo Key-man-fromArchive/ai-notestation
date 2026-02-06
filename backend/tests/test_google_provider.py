@@ -314,7 +314,7 @@ class TestGoogleProviderAvailableModels:
     """Tests for GoogleProvider.available_models()."""
 
     def test_available_models_returns_expected(self) -> None:
-        """available_models() returns Gemini 2.0 Flash and 1.5 Pro."""
+        """available_models() returns Gemini 3, 2.5, and 2.0 models."""
         with patch("app.ai_router.providers.google.genai") as mock_genai:
             mock_genai.Client.return_value = MagicMock()
 
@@ -323,19 +323,16 @@ class TestGoogleProviderAvailableModels:
             provider = GoogleProvider(api_key="test-key")
             models = provider.available_models()
 
-            assert len(models) == 2
+            assert len(models) >= 5
             assert all(isinstance(m, ModelInfo) for m in models)
 
-            # Gemini 2.0 Flash
-            flash = next(m for m in models if m.id == "gemini-2.0-flash")
-            assert flash.name == "Gemini 2.0 Flash"
-            assert flash.provider == "google"
-            assert flash.max_tokens == 1_048_576  # 1M
-            assert flash.supports_streaming is True
+            model_ids = [m.id for m in models]
+            assert "gemini-3-pro" in model_ids
+            assert "gemini-3-flash" in model_ids
+            assert "gemini-2.5-flash" in model_ids
+            assert "gemini-2.0-flash" in model_ids
 
-            # Gemini 1.5 Pro
-            pro = next(m for m in models if m.id == "gemini-1.5-pro")
-            assert pro.name == "Gemini 1.5 Pro"
-            assert pro.provider == "google"
-            assert pro.max_tokens == 2_097_152  # 2M
-            assert pro.supports_streaming is True
+            for m in models:
+                assert m.provider == "google"
+                assert m.max_tokens >= 1_000_000
+                assert m.supports_streaming is True

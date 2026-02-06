@@ -54,17 +54,59 @@ _GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta"
 
 _AVAILABLE_MODELS = [
     ModelInfo(
+        id="gemini-3-pro",
+        name="Gemini 3 Pro",
+        provider=_PROVIDER_NAME,
+        max_tokens=2_097_152,
+        supports_streaming=True,
+    ),
+    ModelInfo(
+        id="gemini-3-flash",
+        name="Gemini 3 Flash",
+        provider=_PROVIDER_NAME,
+        max_tokens=1_048_576,
+        supports_streaming=True,
+    ),
+    ModelInfo(
+        id="gemini-2.5-pro",
+        name="Gemini 2.5 Pro",
+        provider=_PROVIDER_NAME,
+        max_tokens=2_097_152,
+        supports_streaming=True,
+    ),
+    ModelInfo(
+        id="gemini-2.5-flash",
+        name="Gemini 2.5 Flash",
+        provider=_PROVIDER_NAME,
+        max_tokens=1_048_576,
+        supports_streaming=True,
+    ),
+    ModelInfo(
+        id="gemini-2.5-flash-lite",
+        name="Gemini 2.5 Flash Lite",
+        provider=_PROVIDER_NAME,
+        max_tokens=1_048_576,
+        supports_streaming=True,
+    ),
+    ModelInfo(
         id="gemini-2.0-flash",
         name="Gemini 2.0 Flash",
         provider=_PROVIDER_NAME,
-        max_tokens=1_048_576,  # 1M
+        max_tokens=1_048_576,
         supports_streaming=True,
     ),
     ModelInfo(
         id="gemini-1.5-pro",
         name="Gemini 1.5 Pro",
         provider=_PROVIDER_NAME,
-        max_tokens=2_097_152,  # 2M
+        max_tokens=2_097_152,
+        supports_streaming=True,
+    ),
+    ModelInfo(
+        id="gemini-1.5-flash",
+        name="Gemini 1.5 Flash",
+        provider=_PROVIDER_NAME,
+        max_tokens=1_048_576,
         supports_streaming=True,
     ),
 ]
@@ -90,10 +132,12 @@ def _convert_messages(
             system_parts.append(msg.content)
         else:
             role = "model" if msg.role == "assistant" else msg.role
-            contents.append({
-                "role": role,
-                "parts": [{"text": msg.content}],
-            })
+            contents.append(
+                {
+                    "role": role,
+                    "parts": [{"text": msg.content}],
+                }
+            )
 
     system_instruction = "\n".join(system_parts) if system_parts else None
     return contents, system_instruction
@@ -141,9 +185,7 @@ class GoogleProvider(AIProvider):
     # SDK helpers (API key mode)
     # ------------------------------------------------------------------
 
-    def _build_config(
-        self, system_instruction: str | None, **kwargs: Any
-    ) -> types.GenerateContentConfig | None:
+    def _build_config(self, system_instruction: str | None, **kwargs: Any) -> types.GenerateContentConfig | None:
         if system_instruction is not None:
             return types.GenerateContentConfig(
                 system_instruction=system_instruction,
@@ -329,9 +371,7 @@ class GoogleProvider(AIProvider):
 
         try:
             async with httpx.AsyncClient(timeout=120.0) as client:
-                async with client.stream(
-                    "POST", url, json=body, headers=self._rest_headers()
-                ) as resp:
+                async with client.stream("POST", url, json=body, headers=self._rest_headers()) as resp:
                     if resp.status_code != 200:
                         error_body = await resp.aread()
                         raise ProviderError(

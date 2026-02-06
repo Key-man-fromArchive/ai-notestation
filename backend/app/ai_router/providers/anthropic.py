@@ -75,9 +75,7 @@ class AnthropicProvider(AIProvider):
             else:
                 api_messages.append({"role": msg.role, "content": msg.content})
 
-        system_text: str | anthropic.NotGiven = (
-            "\n\n".join(system_parts) if system_parts else anthropic.NOT_GIVEN
-        )
+        system_text: str | anthropic.NotGiven = "\n\n".join(system_parts) if system_parts else anthropic.NOT_GIVEN
         return system_text, api_messages
 
     # ------------------------------------------------------------------
@@ -173,10 +171,51 @@ class AnthropicProvider(AIProvider):
                 message=str(exc.message),
             ) from exc
 
-    # @TASK P3-T3.3 - Available models list
     def available_models(self) -> list[ModelInfo]:
         """Return the list of supported Claude models."""
         return [
+            ModelInfo(
+                id="claude-opus-4-6",
+                name="Claude Opus 4.6",
+                provider="anthropic",
+                max_tokens=200_000,
+                supports_streaming=True,
+            ),
+            ModelInfo(
+                id="claude-sonnet-4-5",
+                name="Claude Sonnet 4.5",
+                provider="anthropic",
+                max_tokens=200_000,
+                supports_streaming=True,
+            ),
+            ModelInfo(
+                id="claude-haiku-4-5",
+                name="Claude Haiku 4.5",
+                provider="anthropic",
+                max_tokens=200_000,
+                supports_streaming=True,
+            ),
+            ModelInfo(
+                id="claude-opus-4-5",
+                name="Claude Opus 4.5",
+                provider="anthropic",
+                max_tokens=200_000,
+                supports_streaming=True,
+            ),
+            ModelInfo(
+                id="claude-sonnet-4-0",
+                name="Claude Sonnet 4",
+                provider="anthropic",
+                max_tokens=200_000,
+                supports_streaming=True,
+            ),
+            ModelInfo(
+                id="claude-3-7-sonnet-latest",
+                name="Claude 3.7 Sonnet",
+                provider="anthropic",
+                max_tokens=200_000,
+                supports_streaming=True,
+            ),
             ModelInfo(
                 id="claude-3-5-sonnet-20241022",
                 name="Claude 3.5 Sonnet",

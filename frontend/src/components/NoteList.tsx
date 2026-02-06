@@ -29,8 +29,9 @@ export function NoteList({
   const virtualizer = useVirtualizer({
     count: notes.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 100, // 노트 카드 예상 높이 (px)
-    overscan: 5, // 스크롤 시 미리 렌더링할 아이템 수
+    estimateSize: () => 108,
+    overscan: 5,
+    gap: 8,
   })
 
   // 무한 스크롤: 마지막 아이템에 가까워지면 다음 페이지 로드
@@ -85,7 +86,7 @@ export function NoteList({
                 transform: `translateY(${virtualItem.start}px)`,
               }}
             >
-              <NoteCard note={note} className="mb-2" />
+              <NoteCard note={note} />
             </div>
           )
         })}

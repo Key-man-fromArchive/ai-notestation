@@ -31,8 +31,44 @@ _PROVIDER_NAME = "openai-codex"
 _CODEX_BASE_URL = "https://chatgpt.com/backend-api"
 
 _SUPPORTED_MODELS: list[ModelInfo] = [
-    ModelInfo(id="gpt-4o", name="GPT-4o (ChatGPT)", provider=_PROVIDER_NAME, max_tokens=128000, supports_streaming=True),
-    ModelInfo(id="gpt-4o-mini", name="GPT-4o mini (ChatGPT)", provider=_PROVIDER_NAME, max_tokens=128000, supports_streaming=True),
+    ModelInfo(
+        id="gpt-5.2", name="GPT-5.2 (ChatGPT)", provider=_PROVIDER_NAME, max_tokens=400_000, supports_streaming=True
+    ),
+    ModelInfo(
+        id="gpt-5.2-pro",
+        name="GPT-5.2 Pro (ChatGPT)",
+        provider=_PROVIDER_NAME,
+        max_tokens=400_000,
+        supports_streaming=True,
+    ),
+    ModelInfo(
+        id="gpt-5.1", name="GPT-5.1 (ChatGPT)", provider=_PROVIDER_NAME, max_tokens=400_000, supports_streaming=True
+    ),
+    ModelInfo(id="gpt-5", name="GPT-5 (ChatGPT)", provider=_PROVIDER_NAME, max_tokens=400_000, supports_streaming=True),
+    ModelInfo(
+        id="gpt-5-mini",
+        name="GPT-5 mini (ChatGPT)",
+        provider=_PROVIDER_NAME,
+        max_tokens=200_000,
+        supports_streaming=True,
+    ),
+    ModelInfo(id="o3", name="o3 (ChatGPT)", provider=_PROVIDER_NAME, max_tokens=200_000, supports_streaming=True),
+    ModelInfo(
+        id="o3-mini", name="o3 mini (ChatGPT)", provider=_PROVIDER_NAME, max_tokens=200_000, supports_streaming=True
+    ),
+    ModelInfo(
+        id="o4-mini", name="o4 mini (ChatGPT)", provider=_PROVIDER_NAME, max_tokens=200_000, supports_streaming=True
+    ),
+    ModelInfo(
+        id="gpt-4o", name="GPT-4o (ChatGPT)", provider=_PROVIDER_NAME, max_tokens=128_000, supports_streaming=True
+    ),
+    ModelInfo(
+        id="gpt-4o-mini",
+        name="GPT-4o mini (ChatGPT)",
+        provider=_PROVIDER_NAME,
+        max_tokens=128_000,
+        supports_streaming=True,
+    ),
 ]
 
 
@@ -165,9 +201,7 @@ class ChatGPTCodexProvider(AIProvider):
 
         try:
             async with httpx.AsyncClient(timeout=120.0) as client:
-                async with client.stream(
-                    "POST", url, json=body, headers=self._build_headers()
-                ) as resp:
+                async with client.stream("POST", url, json=body, headers=self._build_headers()) as resp:
                     if resp.status_code != 200:
                         error_body = await resp.aread()
                         raise ProviderError(

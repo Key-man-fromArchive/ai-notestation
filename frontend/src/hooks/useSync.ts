@@ -7,8 +7,9 @@ import { apiClient } from '@/lib/api'
 
 interface SyncStatus {
   status: 'idle' | 'syncing' | 'completed' | 'error'
-  last_sync?: string
-  error?: string
+  last_sync_at: string | null
+  notes_synced: number | null
+  error_message: string | null
 }
 
 /**
@@ -40,8 +41,9 @@ export function useSync() {
 
   return {
     status: data?.status || 'idle',
-    lastSync: data?.last_sync,
-    error: data?.error,
+    lastSync: data?.last_sync_at,
+    notesSynced: data?.notes_synced,
+    error: data?.error_message,
     isLoading,
     triggerSync: triggerMutation.mutateAsync,
     isSyncing: triggerMutation.isPending,

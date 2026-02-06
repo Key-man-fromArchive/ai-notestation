@@ -20,6 +20,7 @@ from app.ai_router.schemas import AIResponse, Message, ModelInfo, ProviderError,
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def api_key() -> str:
     return "sk-ant-test-key-for-testing"
@@ -70,6 +71,7 @@ def _make_mock_response(
 # ---------------------------------------------------------------------------
 # chat - success
 # ---------------------------------------------------------------------------
+
 
 class TestAnthropicChat:
     async def test_chat_success(self, provider: AnthropicProvider, user_messages: list[Message]) -> None:
@@ -133,6 +135,7 @@ class TestAnthropicChat:
 # stream - success
 # ---------------------------------------------------------------------------
 
+
 class TestAnthropicStream:
     async def test_stream_success(self, provider: AnthropicProvider, user_messages: list[Message]) -> None:
         """stream() should yield text chunks from text_stream."""
@@ -190,16 +193,18 @@ class TestAnthropicStream:
 # available_models
 # ---------------------------------------------------------------------------
 
+
 class TestAnthropicModels:
     def test_available_models(self, provider: AnthropicProvider) -> None:
         models = provider.available_models()
 
         assert isinstance(models, list)
-        assert len(models) == 2
+        assert len(models) >= 5
 
         model_ids = {m.id for m in models}
-        assert "claude-3-5-sonnet-20241022" in model_ids
-        assert "claude-3-haiku-20240307" in model_ids
+        assert "claude-opus-4-6" in model_ids
+        assert "claude-sonnet-4-5" in model_ids
+        assert "claude-haiku-4-5" in model_ids
 
         for m in models:
             assert isinstance(m, ModelInfo)
@@ -212,12 +217,14 @@ class TestAnthropicModels:
 # Error handling
 # ---------------------------------------------------------------------------
 
+
 class TestAnthropicErrors:
     def test_no_api_key_raises_provider_error(self) -> None:
         """ProviderError should be raised when no API key is available."""
         with patch.dict("os.environ", {}, clear=True):
             # Remove ANTHROPIC_API_KEY from env if present
             import os
+
             env = os.environ.copy()
             env.pop("ANTHROPIC_API_KEY", None)
             with patch.dict("os.environ", env, clear=True):

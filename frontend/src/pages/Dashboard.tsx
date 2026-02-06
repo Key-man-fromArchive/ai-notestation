@@ -80,9 +80,22 @@ export default function Dashboard() {
           />
           <div className="flex-1">
             <h3 className="font-semibold text-destructive mb-1">
-              NAS 연결에 실패했습니다
+              NAS 동기화에 실패했습니다
             </h3>
-            <p className="text-sm text-destructive/80 mb-2">{syncError}</p>
+            <p className="text-sm text-destructive/80 mb-2">
+              {syncError?.includes('400')
+                ? 'NAS 계정 정보가 올바르지 않습니다. 사용자 이름과 비밀번호를 확인해주세요.'
+                : syncError?.includes('401')
+                  ? 'NAS 계정이 비활성화되어 있습니다.'
+                  : syncError?.includes('timeout') || syncError?.includes('connect')
+                    ? 'NAS에 연결할 수 없습니다. 네트워크 연결과 NAS 주소를 확인해주세요.'
+                    : syncError || '알 수 없는 오류가 발생했습니다.'}
+            </p>
+            {syncError && (
+              <p className="text-xs text-muted-foreground mb-2 font-mono">
+                {syncError}
+              </p>
+            )}
             <Link
               to="/settings"
               className="inline-block px-4 py-2 bg-destructive text-destructive-foreground rounded-md text-sm hover:bg-destructive/90 transition-colors"

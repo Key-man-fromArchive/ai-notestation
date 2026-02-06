@@ -318,22 +318,24 @@ class TestOpenAIProviderStream:
 class TestOpenAIProviderAvailableModels:
     """Tests for available_models()."""
 
-    def test_returns_gpt4o_and_gpt4o_mini(self) -> None:
-        """available_models() returns GPT-4o and GPT-4o-mini."""
+    def test_returns_multiple_models(self) -> None:
+        """available_models() returns GPT-5, GPT-4, and o-series models."""
         from app.ai_router.providers.openai import OpenAIProvider
 
         provider = OpenAIProvider(api_key="sk-test-key")
         models = provider.available_models()
 
-        assert len(models) == 2
+        assert len(models) >= 10
         assert all(isinstance(m, ModelInfo) for m in models)
 
         model_ids = [m.id for m in models]
+        assert "gpt-5.2" in model_ids
+        assert "gpt-5-mini" in model_ids
         assert "gpt-4o" in model_ids
-        assert "gpt-4o-mini" in model_ids
+        assert "o3" in model_ids
 
     def test_models_have_correct_metadata(self) -> None:
-        """Each model has correct provider, max_tokens, and streaming support."""
+        """Each model has correct provider and streaming support."""
         from app.ai_router.providers.openai import OpenAIProvider
 
         provider = OpenAIProvider(api_key="sk-test-key")
@@ -341,7 +343,7 @@ class TestOpenAIProviderAvailableModels:
 
         for model in models:
             assert model.provider == "openai"
-            assert model.max_tokens == 128000
+            assert model.max_tokens >= 128_000
             assert model.supports_streaming is True
 
     def test_model_names(self) -> None:
@@ -352,5 +354,5 @@ class TestOpenAIProviderAvailableModels:
         models = provider.available_models()
         model_map = {m.id: m for m in models}
 
+        assert "GPT-5.2" in model_map["gpt-5.2"].name
         assert "GPT-4o" in model_map["gpt-4o"].name
-        assert "GPT-4o" in model_map["gpt-4o-mini"].name or "mini" in model_map["gpt-4o-mini"].name.lower()

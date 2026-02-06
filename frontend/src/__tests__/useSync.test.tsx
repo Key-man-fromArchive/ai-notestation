@@ -35,7 +35,9 @@ describe('useSync hook', () => {
   it('returns sync status', async () => {
     vi.mocked(api.apiClient.get).mockResolvedValue({
       status: 'idle',
-      last_sync: '2026-01-30T00:00:00Z',
+      last_sync_at: '2026-01-30T00:00:00Z',
+      notes_synced: 42,
+      error_message: null,
     })
 
     const { result } = renderHook(() => useSync(), {
@@ -45,12 +47,16 @@ describe('useSync hook', () => {
     await waitFor(() => {
       expect(result.current.status).toBe('idle')
       expect(result.current.lastSync).toBe('2026-01-30T00:00:00Z')
+      expect(result.current.notesSynced).toBe(42)
     })
   })
 
   it('triggers sync', async () => {
     vi.mocked(api.apiClient.get).mockResolvedValue({
       status: 'idle',
+      last_sync_at: null,
+      notes_synced: null,
+      error_message: null,
     })
 
     vi.mocked(api.apiClient.post).mockResolvedValue({
@@ -72,7 +78,9 @@ describe('useSync hook', () => {
   it('handles sync error', async () => {
     vi.mocked(api.apiClient.get).mockResolvedValue({
       status: 'error',
-      error: 'NAS connection failed',
+      last_sync_at: null,
+      notes_synced: null,
+      error_message: 'NAS connection failed',
     })
 
     const { result } = renderHook(() => useSync(), {
