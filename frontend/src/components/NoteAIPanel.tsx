@@ -1,10 +1,8 @@
-// AI analysis panel for NoteDetail page
-// Provides quick AI actions (insight, spellcheck, writing) on the current note
-
 import { useState } from 'react'
 import { useAIStream } from '@/hooks/useAIStream'
 import { MarkdownRenderer } from './MarkdownRenderer'
 import { LoadingSpinner } from './LoadingSpinner'
+import { ModelSelector } from './ModelSelector'
 import { cn } from '@/lib/utils'
 import { apiClient } from '@/lib/api'
 import {
@@ -14,8 +12,6 @@ import {
   FileEdit,
   Copy,
   Check,
-  ChevronDown,
-  ChevronUp,
   X,
 } from 'lucide-react'
 
@@ -37,18 +33,18 @@ export function NoteAIPanel({ noteId, noteContent, noteTitle }: NoteAIPanelProps
   const [isOpen, setIsOpen] = useState(false)
   const [copied, setCopied] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [selectedModel, setSelectedModel] = useState('')
   const { content, isStreaming, error, startStream, reset } = useAIStream()
 
   const handleAction = async (action: QuickAction) => {
     reset()
-    // Strip HTML tags for AI input
     const plainText = noteContent.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
-    const truncated = plainText.slice(0, 8000) // Limit to avoid token overflow
+    const truncated = plainText.slice(0, 8000)
 
     await startStream({
       message: truncated,
       feature: action,
-      model: undefined as unknown as string, // Let backend auto-select
+      model: selectedModel || undefined,
     })
   }
 
@@ -99,26 +95,33 @@ export function NoteAIPanel({ noteId, noteContent, noteTitle }: NoteAIPanelProps
         </button>
       </div>
 
-      {/* Action buttons */}
-      <div className="flex gap-2 px-4 py-3 border-b border-border">
-        {actions.map((action) => {
-          const Icon = action.icon
-          return (
-            <button
-              key={action.id}
-              onClick={() => handleAction(action.id)}
-              disabled={isStreaming}
-              className={cn(
-                'flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md',
-                'border border-input hover:border-primary/30 hover:bg-primary/5',
-                'transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
-              )}
-            >
-              <Icon className="h-3.5 w-3.5" />
-              {action.label}
-            </button>
-          )
-        })}
+      {/* Model selector + Action buttons */}
+      <div className="flex flex-wrap items-center gap-3 px-4 py-3 border-b border-border">
+        <ModelSelector
+          value={selectedModel}
+          onChange={setSelectedModel}
+          className="text-xs py-1.5 px-2 min-w-[140px]"
+        />
+        <div className="flex gap-2">
+          {actions.map((action) => {
+            const Icon = action.icon
+            return (
+              <button
+                key={action.id}
+                onClick={() => handleAction(action.id)}
+                disabled={isStreaming}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md',
+                  'border border-input hover:border-primary/30 hover:bg-primary/5',
+                  'transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
+                )}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                {action.label}
+              </button>
+            )
+          })}
+        </div>
       </div>
 
       {/* Result area */}
