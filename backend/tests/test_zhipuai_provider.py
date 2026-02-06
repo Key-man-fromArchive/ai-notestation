@@ -6,7 +6,7 @@ Covers:
 - chat success with mocked ZhipuAI client
 - chat TokenUsage conversion
 - stream success with mocked streaming response
-- available_models verification (GLM-4, GLM-4-Flash)
+- available_models verification (GLM-4.7, GLM-4.7 Flash, GLM-4 Plus)
 - API key missing raises ProviderError
 - SDK error converted to ProviderError
 
@@ -57,7 +57,7 @@ def _make_chat_response(
             completion_tokens=completion_tokens,
             total_tokens=total_tokens,
         ),
-        model="glm-4",
+        model="glm-4.7",
     )
 
 
@@ -158,9 +158,7 @@ class TestZhipuAIProvider:
         _mock_zhipuai_sdk.ZhipuAI.assert_called_with(api_key="test-key")
         assert provider is not None
 
-    def test_init_with_env_api_key(
-        self, _mock_zhipuai_sdk: MagicMock, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_init_with_env_api_key(self, _mock_zhipuai_sdk: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
         """Provider reads API key from ZHIPUAI_API_KEY env var."""
         monkeypatch.setenv("ZHIPUAI_API_KEY", "env-key")
         cls = _get_provider_class()
@@ -194,18 +192,18 @@ class TestZhipuAIProvider:
             Message(role="system", content="You are helpful."),
             Message(role="user", content="Hello"),
         ]
-        result = await provider.chat(messages, model="glm-4")
+        result = await provider.chat(messages, model="glm-4.7")
 
         assert isinstance(result, AIResponse)
         assert result.content == "GLM says hi"
-        assert result.model == "glm-4"
+        assert result.model == "glm-4.7"
         assert result.provider == "zhipuai"
         assert result.finish_reason == "stop"
 
         # Verify the SDK was called with correct args
         mock_client.chat.completions.create.assert_called_once()
         call_kwargs = mock_client.chat.completions.create.call_args
-        assert call_kwargs.kwargs["model"] == "glm-4"
+        assert call_kwargs.kwargs["model"] == "glm-4.7"
         assert len(call_kwargs.kwargs["messages"]) == 2
         assert call_kwargs.kwargs["messages"][0] == {"role": "system", "content": "You are helpful."}
 
@@ -224,7 +222,7 @@ class TestZhipuAIProvider:
 
         provider = _make_provider(_mock_zhipuai_sdk)
         messages = [Message(role="user", content="Count tokens")]
-        result = await provider.chat(messages, model="glm-4")
+        result = await provider.chat(messages, model="glm-4.7")
 
         assert result.usage is not None
         assert isinstance(result.usage, TokenUsage)
@@ -243,7 +241,7 @@ class TestZhipuAIProvider:
         messages = [Message(role="user", content="fail")]
 
         with pytest.raises(ProviderError) as exc_info:
-            await provider.chat(messages, model="glm-4")
+            await provider.chat(messages, model="glm-4.7")
         assert exc_info.value.provider == "zhipuai"
         assert "SDK boom" in exc_info.value.message
 
@@ -262,7 +260,7 @@ class TestZhipuAIProvider:
         messages = [Message(role="user", content="Stream test")]
 
         collected: list[str] = []
-        async for token in provider.stream(messages, model="glm-4-flash"):
+        async for token in provider.stream(messages, model="glm-4.7-flash"):
             collected.append(token)
 
         # None chunks should be skipped
@@ -283,22 +281,22 @@ class TestZhipuAIProvider:
         messages = [Message(role="user", content="fail stream")]
 
         with pytest.raises(ProviderError) as exc_info:
-            async for _ in provider.stream(messages, model="glm-4"):
+            async for _ in provider.stream(messages, model="glm-4.7"):
                 pass
         assert exc_info.value.provider == "zhipuai"
 
     # -- available_models ---------------------------------------------------
 
     def test_available_models(self, _mock_zhipuai_sdk: MagicMock) -> None:
-        """available_models() returns GLM-4 and GLM-4-Flash with correct metadata."""
+        """available_models() returns the supported GLM models with metadata."""
         provider = _make_provider(_mock_zhipuai_sdk)
         models = provider.available_models()
 
         assert isinstance(models, list)
-        assert len(models) == 2
+        assert len(models) == 3
 
         model_ids = {m.id for m in models}
-        assert model_ids == {"glm-4", "glm-4-flash"}
+        assert model_ids == {"glm-4.7", "glm-4.7-flash", "glm-4-plus"}
 
         for m in models:
             assert isinstance(m, ModelInfo)
@@ -308,5 +306,6 @@ class TestZhipuAIProvider:
 
         # Check names
         model_map = {m.id: m for m in models}
-        assert model_map["glm-4"].name == "GLM-4"
-        assert model_map["glm-4-flash"].name == "GLM-4-Flash"
+        assert model_map["glm-4.7"].name == "GLM-4.7"
+        assert model_map["glm-4.7-flash"].name == "GLM-4.7 Flash"
+        assert model_map["glm-4-plus"].name == "GLM-4 Plus"

@@ -16,10 +16,16 @@ for serving via the image endpoint.
 from __future__ import annotations
 
 import asyncio
+import base64
+import hashlib
+import json
 import logging
+import re
 import shutil
+import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
+from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
@@ -29,9 +35,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.database import async_session_factory, get_db
-from app.models import NoteImage
+from app.models import Note, NoteAttachment, NoteImage
 from app.services.auth_service import get_current_user
-from app.services.nsx_parser import NsxParser
+from app.services.nsx_parser import NoteRecord, NsxParser
+from app.synology_gateway.notestation import NoteStationService
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -63,6 +70,14 @@ class NsxImportStatusResponse(BaseModel):
     errors: list[str] = []
 
 
+class NsxExportResponse(BaseModel):
+    """Response for NSX export endpoint."""
+
+    filename: str
+    note_count: int
+    notebook_count: int
+
+
 # ---------------------------------------------------------------------------
 # In-memory import state
 # ---------------------------------------------------------------------------
@@ -82,6 +97,81 @@ class ImportState:
 
 
 _import_state = ImportState()
+
+
+def _unix_to_utc(timestamp: int | float | None) -> datetime | None:
+    """Convert Unix timestamp to UTC datetime."""
+    if timestamp is None:
+        return None
+    try:
+        return datetime.fromtimestamp(timestamp, tz=UTC)
+    except (OSError, TypeError, ValueError):
+        return None
+
+
+def _normalize_tags(tags: list | dict | None) -> list[str] | None:
+    """Normalize tag field to a list of strings."""
+    if tags is None:
+        return None
+    if isinstance(tags, dict):
+        return list(tags.values()) if tags else None
+    if isinstance(tags, list):
+        return tags if tags else None
+    return None
+
+
+def _compute_md5(file_path: Path) -> str:
+    digest = hashlib.md5()
+    with open(file_path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _build_notebook_map(notes: list[Note]) -> dict[str, str]:
+    notebook_names = sorted({note.notebook_name for note in notes if note.notebook_name})
+    return {name: f"notebook_{uuid4().hex}" for name in notebook_names}
+
+
+def _encode_ref(name: str) -> str:
+    return base64.b64encode(name.encode("utf-8")).decode("utf-8")
+
+
+def _rewrite_content_for_nsx(
+    html: str,
+    image_map: dict[str, NoteImage],
+    attachment_name_map: dict[str, str],
+) -> str:
+    if not html:
+        return html
+
+    def _replace(match: re.Match) -> str:
+        src = match.group(1)
+        if src.startswith("/api/images/"):
+            ref = src.split("/")[-1]
+            img = image_map.get(ref)
+            if img:
+                ref_name = img.name or img.ref
+                ref_b64 = _encode_ref(ref_name)
+                return (
+                    '<img class="syno-notestation-image-object" '
+                    'src="webman/3rdparty/NoteStation/images/transparent.gif" '
+                    f'ref="{ref_b64}" />'
+                )
+        if src.startswith("/api/files/"):
+            file_id = src.split("/")[-1]
+            ref_name = attachment_name_map.get(file_id)
+            if ref_name:
+                ref_b64 = _encode_ref(ref_name)
+                return (
+                    '<img class="syno-notestation-image-object" '
+                    'src="webman/3rdparty/NoteStation/images/transparent.gif" '
+                    f'ref="{ref_b64}" />'
+                )
+        return match.group(0)
+
+    img_src_re = re.compile(r'<img\b[^>]*?src="([^"]+)"[^>]*/?>', re.IGNORECASE)
+    return img_src_re.sub(_replace, html)
 
 
 # ---------------------------------------------------------------------------
@@ -111,8 +201,11 @@ async def _run_import_background(nsx_path: Path, state: ImportState) -> None:
         state.images_extracted = result.images_extracted
         state.errors = result.errors
 
-        # Save image mappings to database
+        # Save notes and image mappings to database
         async with async_session_factory() as session:
+            if result.notes:
+                await _upsert_notes(session, result.notes)
+
             for att in result.attachments:
                 # Check if mapping already exists
                 existing = await session.execute(
@@ -169,6 +262,59 @@ async def _run_import_background(nsx_path: Path, state: ImportState) -> None:
             nsx_path.unlink(missing_ok=True)
         except Exception:
             pass
+
+
+async def _upsert_notes(
+    session: AsyncSession,
+    notes: list[NoteRecord],
+) -> None:
+    """Insert or update notes parsed from an NSX export."""
+    if not notes:
+        return
+
+    note_ids = [note.note_id for note in notes]
+    existing_result = await session.execute(select(Note).where(Note.synology_note_id.in_(note_ids)))
+    existing_map = {note.synology_note_id: note for note in existing_result.scalars().all()}
+
+    synced_at = datetime.now(UTC)
+
+    for record in notes:
+        content_html = record.content_html or ""
+        content_text = NoteStationService.extract_text(content_html)
+        tags = _normalize_tags(record.tags)
+        source_created_at = _unix_to_utc(record.ctime)
+        source_updated_at = _unix_to_utc(record.mtime)
+        is_todo = record.category == "todo"
+
+        if record.note_id in existing_map:
+            db_note = existing_map[record.note_id]
+            db_note.title = record.title
+            db_note.content_html = content_html
+            db_note.content_text = content_text
+            db_note.notebook_name = record.notebook_name
+            db_note.tags = tags
+            db_note.is_todo = is_todo
+            db_note.is_shortcut = False
+            db_note.source_created_at = source_created_at
+            db_note.source_updated_at = source_updated_at
+            db_note.synced_at = synced_at
+            continue
+
+        session.add(
+            Note(
+                synology_note_id=record.note_id,
+                title=record.title,
+                content_html=content_html,
+                content_text=content_text,
+                notebook_name=record.notebook_name,
+                tags=tags,
+                is_todo=is_todo,
+                is_shortcut=False,
+                source_created_at=source_created_at,
+                source_updated_at=source_updated_at,
+                synced_at=synced_at,
+            )
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -246,6 +392,129 @@ async def get_import_status(
     )
 
 
+@router.get("/nsx/export", response_model=NsxExportResponse)
+async def export_nsx(
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> NsxExportResponse:
+    """Export notes and attachments as an NSX archive."""
+    export_dir = Path(settings.NSX_EXPORTS_PATH) / "exports"
+    export_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+    export_path = export_dir / f"labnote_export_{timestamp}.nsx"
+
+    notes_result = await db.execute(select(Note))
+    notes = notes_result.scalars().all()
+
+    attachments_result = await db.execute(select(NoteAttachment))
+    attachments = attachments_result.scalars().all()
+
+    images_result = await db.execute(select(NoteImage))
+    images = images_result.scalars().all()
+
+    notebook_map = _build_notebook_map(notes)
+
+    attachments_by_note: dict[int, list[NoteAttachment]] = {}
+    for att in attachments:
+        attachments_by_note.setdefault(att.note_id, []).append(att)
+
+    images_by_note: dict[str, list[NoteImage]] = {}
+    for img in images:
+        images_by_note.setdefault(img.synology_note_id, []).append(img)
+
+    file_cache: set[str] = set()
+
+    with zipfile.ZipFile(export_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        notebook_ids = list(notebook_map.values())
+        note_ids = [note.synology_note_id for note in notes]
+
+        config = {
+            "note": note_ids,
+            "notebook": notebook_ids,
+        }
+        archive.writestr("config.json", json.dumps(config, ensure_ascii=False))
+
+        for name, nb_id in notebook_map.items():
+            notebook_payload = {
+                "object_id": nb_id,
+                "title": name,
+            }
+            archive.writestr(nb_id, json.dumps(notebook_payload, ensure_ascii=False))
+
+        for note in notes:
+            note_images = images_by_note.get(note.synology_note_id, [])
+            image_map = {img.ref: img for img in note_images}
+
+            attachment_name_map: dict[str, str] = {}
+            attachment_payload: dict[str, dict] = {}
+
+            for img in note_images:
+                if not img.file_path:
+                    continue
+                file_path = Path(img.file_path)
+                if not file_path.exists():
+                    continue
+                md5 = img.md5 or _compute_md5(file_path)
+                file_key = f"file_{md5}"
+                if file_key not in file_cache:
+                    archive.write(file_path, arcname=file_key)
+                    file_cache.add(file_key)
+
+                export_name = img.name or img.ref
+                attachment_payload[export_name] = {
+                    "md5": md5,
+                    "name": export_name,
+                    "type": img.mime_type or "image/png",
+                    "width": img.width,
+                    "height": img.height,
+                }
+
+            for att in attachments_by_note.get(note.id, []):
+                uploads_dir = Path(settings.UPLOADS_PATH)
+                file_path = uploads_dir / att.file_id
+                if not file_path.exists():
+                    continue
+                md5 = _compute_md5(file_path)
+                file_key = f"file_{md5}"
+                if file_key not in file_cache:
+                    archive.write(file_path, arcname=file_key)
+                    file_cache.add(file_key)
+
+                export_name = att.name
+                attachment_name_map[att.file_id] = export_name
+                attachment_payload[export_name] = {
+                    "md5": md5,
+                    "name": export_name,
+                    "type": att.mime_type or "application/octet-stream",
+                }
+
+            content = _rewrite_content_for_nsx(
+                note.content_html,
+                image_map,
+                attachment_name_map,
+            )
+
+            note_payload = {
+                "object_id": note.synology_note_id,
+                "title": note.title,
+                "content": content,
+                "parent_id": notebook_map.get(note.notebook_name or ""),
+                "tag": note.tags or [],
+                "ctime": int(note.source_created_at.timestamp()) if note.source_created_at else None,
+                "mtime": int(note.source_updated_at.timestamp()) if note.source_updated_at else None,
+                "category": "note",
+                "attachment": attachment_payload,
+            }
+
+            archive.writestr(note.synology_note_id, json.dumps(note_payload, ensure_ascii=False))
+
+    return NsxExportResponse(
+        filename=export_path.name,
+        note_count=len(notes),
+        notebook_count=len(notebook_map),
+    )
+
+
 @router.get("/images/{note_id}/{ref}")
 async def get_image(
     note_id: str,
@@ -319,9 +588,7 @@ async def get_image_by_md5(
     Raises:
         HTTPException 404: If the image is not found.
     """
-    result = await db.execute(
-        select(NoteImage).where(NoteImage.md5 == md5).limit(1)
-    )
+    result = await db.execute(select(NoteImage).where(NoteImage.md5 == md5).limit(1))
     image = result.scalar_one_or_none()
 
     if not image:

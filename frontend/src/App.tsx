@@ -18,8 +18,11 @@ const NoteDetail = lazy(() => import('./pages/NoteDetail'))
 const Search = lazy(() => import('./pages/Search'))
 const AIWorkbench = lazy(() => import('./pages/AIWorkbench'))
 const Settings = lazy(() => import('./pages/Settings'))
+const Members = lazy(() => import('./pages/Members'))
 const OAuthCallback = lazy(() => import('./pages/OAuthCallback'))
 const Login = lazy(() => import('./pages/Login'))
+const MemberLogin = lazy(() => import('./pages/MemberLogin'))
+const Signup = lazy(() => import('./pages/Signup'))
 
 // Demo pages
 const DemoHub = lazy(() => import('./demo/index'))
@@ -62,6 +65,7 @@ function ProtectedRoutes() {
           <Route path="/search" element={<Search />} />
           <Route path="/ai" element={<AIWorkbench />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/members" element={<Members />} />
           <Route path="/oauth/callback" element={<OAuthCallback />} />
 
           {/* Demo pages */}
@@ -93,6 +97,8 @@ function App() {
           >
             <Routes>
               <Route path="/login" element={<Login />} />
+              <Route path="/member-login" element={<MemberLogin />} />
+              <Route path="/signup" element={<Signup />} />
               <Route path="/*" element={<ProtectedRoutes />} />
             </Routes>
           </Suspense>

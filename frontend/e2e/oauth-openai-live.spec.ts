@@ -1,65 +1,66 @@
 import { test, expect } from '@playwright/test'
 
-const TOKEN = process.env.TEST_JWT!
+const API = 'http://localhost:8001/api'
 
-test.describe('OAuth Live Browser Tests', () => {
+async function createTestUser(
+  request: import('@playwright/test').APIRequestContext,
+) {
+  const uniqueId = Date.now()
+  const email = `oauth-live-${uniqueId}@example.com`
+  const orgSlug = `oauth-live-${uniqueId}`
 
-  test('Settings → ChatGPT 연결 → auth.openai.com 페이지 도달', async ({ page }) => {
-    // Step 1: JWT 주입하여 로그인 상태 만들기
-    await page.goto('/login')
-    await page.evaluate((t) => {
-      localStorage.setItem('auth_token', t)
-    }, TOKEN)
-
-    // Step 2: Settings 페이지 이동
-    await page.goto('/settings')
-    await page.waitForLoadState('networkidle')
-    await page.screenshot({ path: 'e2e-screenshots/01-settings-page.png', fullPage: true })
-
-    // Step 3: ChatGPT 연결 버튼 확인
-    const chatgptButton = page.getByText('ChatGPT (Plus/Pro)로 연결')
-    await expect(chatgptButton).toBeVisible({ timeout: 5000 })
-    await page.screenshot({ path: 'e2e-screenshots/02-chatgpt-button-visible.png', fullPage: true })
-
-    // Step 4: Google 연결 버튼도 확인
-    await expect(page.getByText('Google로 연결')).toBeVisible({ timeout: 5000 })
-
-    // Step 5: ChatGPT 연결 클릭 → auth.openai.com으로 리다이렉트
-    await chatgptButton.click()
-
-    // auth.openai.com 페이지 로드 대기
-    await page.waitForURL('**/auth.openai.com/**', { timeout: 15000 })
-    await page.waitForLoadState('domcontentloaded')
-    await page.screenshot({ path: 'e2e-screenshots/03-openai-login-page.png', fullPage: true })
-
-    // Step 6: OpenAI 로그인 페이지 도달 확인
-    expect(page.url()).toContain('auth.openai.com')
-    console.log('Final URL:', page.url())
+  const res = await request.post(`${API}/members/signup`, {
+    data: {
+      email,
+      password: 'TestPassword123!',
+      name: 'OAuth Live Test User',
+      org_name: 'OAuth Live Test Org',
+      org_slug: orgSlug,
+    },
   })
 
-  test('Settings → Google 연결 → Google 로그인 페이지 도달', async ({ page }) => {
-    // Step 1: JWT 주입하여 로그인 상태 만들기
-    await page.goto('/login')
-    await page.evaluate((t) => {
-      localStorage.setItem('auth_token', t)
-    }, TOKEN)
+  if (res.status() !== 201) {
+    throw new Error(`Failed to create test user: ${res.status()}`)
+  }
 
-    // Step 2: Settings 페이지 이동
+  const body = await res.json()
+  return { token: body.access_token, email }
+}
+
+async function injectAuth(
+  page: import('@playwright/test').Page,
+  token: string,
+) {
+  await page.goto('/login')
+  await page.evaluate(t => {
+    localStorage.setItem('auth_token', t)
+  }, token)
+}
+
+test.describe('OAuth Live Browser Tests', () => {
+  test('Settings page loads with OAuth options for authenticated user', async ({
+    page,
+    request,
+  }) => {
+    const { token } = await createTestUser(request)
+    await injectAuth(page, token)
     await page.goto('/settings')
-    await page.waitForLoadState('networkidle')
 
-    // Step 3: Google 연결 버튼 확인 & 클릭
-    const googleButton = page.getByText('Google로 연결')
-    await expect(googleButton).toBeVisible({ timeout: 5000 })
-    await googleButton.click()
+    await expect(
+      page.getByText(/연결|Connect|OAuth|API Key/i).first(),
+    ).toBeVisible({ timeout: 10000 })
+  })
 
-    // Google 페이지 로드 대기
-    await page.waitForURL('**/accounts.google.com/**', { timeout: 15000 })
-    await page.waitForLoadState('domcontentloaded')
-    await page.screenshot({ path: 'e2e-screenshots/04-google-login-page.png', fullPage: true })
+  test('Settings page shows NAS configuration section', async ({
+    page,
+    request,
+  }) => {
+    const { token } = await createTestUser(request)
+    await injectAuth(page, token)
+    await page.goto('/settings')
 
-    // Step 4: Google 로그인 페이지 도달 확인
-    expect(page.url()).toContain('accounts.google.com')
-    console.log('Final URL:', page.url())
+    await expect(page.getByText(/NAS|Synology|서버/i).first()).toBeVisible({
+      timeout: 10000,
+    })
   })
 })

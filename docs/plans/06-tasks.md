@@ -3,7 +3,7 @@
 ## 메타
 - **설계 문서**: `docs/plans/2026-01-29-labnote-ai-design.md`
 - **스택**: FastAPI (Python 3.12+) + React 19 + Vite + TailwindCSS + PostgreSQL 16 + pgvector
-- **태스크**: 30개 (P0: 5, P1: 4, P2: 5, P3: 7, P4: 6, P5: 3)
+- **태스크**: 36개 (P0: 5, P1: 4, P2: 5, P3: 7, P4: 6, P5: 3, P6: 6)
 - **Git Remote**: `https://github.com/Key-man-fromArchive/ai-notestation.git`
 
 ---
@@ -311,6 +311,68 @@
 
 ---
 
+## P6: Member Auth & Org
+
+### [ ] P6-T6.1: 조직/멤버 스키마 + 마이그레이션
+- **담당**: database-specialist
+- **작업**: orgs, users, memberships, note_access 테이블 설계/마이그레이션
+- **산출물**: `backend/migrations/versions/00x_org_members.py`, `backend/app/models.py`
+- **Worktree**: `worktree/phase-6-auth`
+- **TDD**: RED → GREEN → REFACTOR
+- **병렬**: 독립 실행
+
+### [ ] P6-T6.2: 멤버 인증 API (회원가입/로그인/초대)
+- **담당**: backend-specialist
+- **의존**: T6.1, P4-T4.1 (Mock: `mockDB`)
+- **파일**: `backend/tests/test_api_members.py` → `backend/app/api/members.py`
+- **스펙**: 회원가입, 로그인, 초대/수락, 토큰 갱신
+- **AC**: JWT에 org_id/role 포함, 초대 토큰 만료 처리
+- **Worktree**: `worktree/phase-6-auth`
+- **TDD**: RED → GREEN → REFACTOR
+- **병렬**: T6.3과 병렬 가능 (Mock 사용)
+
+### [ ] P6-T6.3: 노트 접근 제어 (RBAC)
+- **담당**: backend-specialist
+- **의존**: T6.1, P4-T4.2 (Mock: `mockDB`)
+- **파일**: `backend/tests/test_access_control.py` → `backend/app/services/access_control.py`
+- **스펙**: org 단위 접근 + note_access 기반 공유, 역할(OWNER/ADMIN/MEMBER/VIEWER)
+- **AC**: 기본 private, org 공유/개별 공유 정책
+- **Worktree**: `worktree/phase-6-auth`
+- **TDD**: RED → GREEN → REFACTOR
+- **병렬**: T6.2와 병렬 가능 (Mock 사용)
+
+### [ ] P6-T6.4: 로그인/회원 UI
+- **담당**: frontend-specialist
+- **의존**: T6.2 (Mock: `mockAuthAPI`)
+- **파일**: `frontend/src/__tests__/Auth.test.tsx` → `frontend/src/pages/Login.tsx`, `frontend/src/pages/Signup.tsx`
+- **스펙**: 로그인/회원가입 폼, 에러 처리, 토큰 저장
+- **AC**: 보호 라우트 리다이렉트, 토큰 만료 처리
+- **Worktree**: `worktree/phase-6-auth`
+- **TDD**: RED → GREEN → REFACTOR
+- **병렬**: T6.5와 병렬 가능 (Mock 사용)
+
+### [ ] P6-T6.5: 멤버 관리 UI
+- **담당**: frontend-specialist
+- **의존**: T6.2 (Mock: `mockMembersAPI`)
+- **파일**: `frontend/src/__tests__/Members.test.tsx` → `frontend/src/pages/Members.tsx`
+- **스펙**: 멤버 목록/초대/역할 변경/제거
+- **AC**: OWNER/ADMIN 전용 액션 제어
+- **Worktree**: `worktree/phase-6-auth`
+- **TDD**: RED → GREEN → REFACTOR
+- **병렬**: T6.4와 병렬 가능 (Mock 사용)
+
+### [ ] P6-T6.6: 보안/인증 테스트
+- **담당**: test-specialist
+- **의존**: T6.2, T6.3
+- **파일**: `backend/tests/test_authz.py`, `frontend/src/__tests__/AuthGuard.test.tsx`
+- **스펙**: 권한 누락/오류 케이스 테스트, 토큰 만료 경로 검증
+- **AC**: 권한 우회 방지 테스트 통과
+- **Worktree**: `worktree/phase-6-auth`
+- **TDD**: RED → GREEN → REFACTOR
+- **병렬**: T6.2, T6.3 완료 후 실행
+
+---
+
 ## 의존성 그래프
 
 ```mermaid
@@ -363,6 +425,15 @@ flowchart TD
         T5.3[P5-T5.3: Search/AI/Settings]
     end
 
+    subgraph P6 ["Phase 6: Member Auth"]
+        T6.1[P6-T6.1: Org/Member 스키마]
+        T6.2[P6-T6.2: 멤버 인증 API]
+        T6.3[P6-T6.3: 노트 접근 제어]
+        T6.4[P6-T6.4: 로그인/회원 UI]
+        T6.5[P6-T6.5: 멤버 관리 UI]
+        T6.6[P6-T6.6: 인증/권한 테스트]
+    end
+
     T0.1 --> T0.2 & T0.3 & T0.4 & T0.5
 
     T0.3 --> T1.1
@@ -390,6 +461,12 @@ flowchart TD
 
     T0.4 --> T5.1
     T5.1 --> T5.2 & T5.3
+
+    T0.5 --> T6.1
+    T4.1 --> T6.2 & T6.3
+    T6.1 --> T6.2 & T6.3
+    T6.2 --> T6.4 & T6.5
+    T6.3 --> T6.6
 ```
 
 ## 병렬 실행 가능 그룹
@@ -403,3 +480,4 @@ flowchart TD
 | P3 | Group 3a | T3.2, T3.3, T3.4, T3.5, T3.7 (T3.1 완료 후 모두 병렬) |
 | P4 | Group 4a | T4.2, T4.3, T4.4, T4.5, T4.6 (T4.1 완료 후 모두 병렬, Mock 사용) |
 | P5 | Group 5a | T5.2, T5.3 (T5.1 완료 후 병렬) |
+| P6 | Group 6a | T6.2, T6.3 (T6.1 완료 후 병렬), T6.4, T6.5 (T6.2 완료 후 병렬) |

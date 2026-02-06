@@ -7,6 +7,11 @@ import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import App from '../App'
 
+vi.mock('../contexts/AuthContext', () => ({
+  AuthProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  useAuth: () => ({ isAuthenticated: true, isLoading: false }),
+}))
+
 // Mock pages for testing
 vi.mock('../pages/Dashboard', () => ({
   default: () => <div>Dashboard Page</div>,

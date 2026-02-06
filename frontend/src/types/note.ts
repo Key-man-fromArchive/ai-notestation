@@ -25,6 +25,7 @@ export interface Note {
   updated_at: string | null
   tags: string[]
   attachments?: Array<{
+    file_id?: string
     name: string
     url: string
   }>

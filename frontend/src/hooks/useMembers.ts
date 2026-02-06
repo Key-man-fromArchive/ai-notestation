@@ -1,0 +1,82 @@
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { apiClient, ApiError } from '@/lib/api'
+
+export interface Member {
+  id: number
+  user_id: number
+  email: string
+  name: string
+  role: string
+  accepted_at: string | null
+  is_pending: boolean
+}
+
+interface MemberListResponse {
+  members: Member[]
+  total: number
+}
+
+interface InviteRequest {
+  email: string
+  role: string
+}
+
+interface InviteResponse {
+  invite_token: string
+  email: string
+  role: string
+  expires_at: string
+}
+
+interface UpdateRoleRequest {
+  role: string
+}
+
+const MEMBERS_QUERY_KEY = ['members']
+
+export function useMembers() {
+  const queryClient = useQueryClient()
+
+  const {
+    data,
+    isLoading,
+    error,
+    refetch,
+  } = useQuery<MemberListResponse>({
+    queryKey: MEMBERS_QUERY_KEY,
+    queryFn: () => apiClient.get<MemberListResponse>('/members'),
+  })
+
+  const inviteMutation = useMutation<InviteResponse, ApiError, InviteRequest>({
+    mutationFn: (request) => apiClient.post<InviteResponse>('/members/invite', request),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: MEMBERS_QUERY_KEY })
+    },
+  })
+
+  const updateRoleMutation = useMutation<
+    Member,
+    ApiError,
+    { memberId: number; role: string }
+  >({
+    mutationFn: ({ memberId, role }) =>
+      apiClient.put<Member>(`/members/${memberId}/role`, { role } as UpdateRoleRequest),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: MEMBERS_QUERY_KEY })
+    },
+  })
+
+  return {
+    members: data?.members ?? [],
+    total: data?.total ?? 0,
+    isLoading,
+    error,
+    refetch,
+    inviteMember: inviteMutation.mutateAsync,
+    isInviting: inviteMutation.isPending,
+    inviteError: inviteMutation.error,
+    updateRole: updateRoleMutation.mutateAsync,
+    isUpdatingRole: updateRoleMutation.isPending,
+    updateRoleError: updateRoleMutation.error,
+  }
+}

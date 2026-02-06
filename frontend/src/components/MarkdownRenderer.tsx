@@ -37,6 +37,8 @@ const sanitizeSchema = {
     th: [...(defaultSchema.attributes?.th || []), 'style', 'rowSpan', 'colSpan'],
     col: ['style', 'width', 'span'],
     colgroup: ['style', 'span'],
+    span: [...(defaultSchema.attributes?.span || []), 'style'],
+    mark: [...(defaultSchema.attributes?.mark || []), 'style'],
   },
 }
 

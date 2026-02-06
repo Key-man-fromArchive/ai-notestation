@@ -8,6 +8,7 @@ import {
   Search,
   Sparkles,
   Settings,
+  Users,
   LogOut,
   FlaskConical,
 } from 'lucide-react'
@@ -19,6 +20,7 @@ const navItems = [
   { to: '/notes', icon: FileText, label: '노트' },
   { to: '/search', icon: Search, label: '검색' },
   { to: '/ai', icon: Sparkles, label: 'AI 분석' },
+  { to: '/members', icon: Users, label: '멤버' },
   { to: '/settings', icon: Settings, label: '설정' },
 ]
 

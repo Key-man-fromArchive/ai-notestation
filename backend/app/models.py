@@ -20,6 +20,7 @@ class Note(Base):
     synology_note_id: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     title: Mapped[str] = mapped_column(String(500), default="")
     content_html: Mapped[str] = mapped_column(Text, default="")
+    content_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     content_text: Mapped[str] = mapped_column(Text, default="")  # Plaintext extracted from HTML
     notebook_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     tags: Mapped[list | None] = mapped_column(JSONB, nullable=True)  # ["tag1", "tag2"]
@@ -98,6 +99,22 @@ class NoteImage(Base):
     )
 
 
+class NoteAttachment(Base):
+    """Attachments uploaded for notes (files or images)."""
+
+    __tablename__ = "note_attachments"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    note_id: Mapped[int] = mapped_column(Integer, index=True)
+    file_id: Mapped[str] = mapped_column(String(255), index=True)
+    name: Mapped[str] = mapped_column(String(512))
+    mime_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    size: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (Index("idx_note_attachments_note_id", "note_id"),)
+
+
 class OAuthToken(Base):
     """OAuth tokens for provider authentication (Google, OpenAI)."""
 
@@ -123,4 +140,69 @@ class OAuthToken(Base):
         UniqueConstraint("username", "provider", name="uq_oauth_tokens_user_provider"),
         Index("idx_oauth_tokens_username", "username"),
         Index("idx_oauth_tokens_provider", "provider"),
+    )
+
+
+class Organization(Base):
+    __tablename__ = "organizations"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    slug: Mapped[str] = mapped_column(String(100), unique=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), default="")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    email_verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class Membership(Base):
+    __tablename__ = "memberships"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(Integer, index=True)
+    org_id: Mapped[int] = mapped_column(Integer, index=True)
+    role: Mapped[str] = mapped_column(String(20), default="member")
+    invited_by: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    invite_token: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    invite_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "org_id", name="uq_memberships_user_org"),
+        Index("idx_memberships_user_id", "user_id"),
+        Index("idx_memberships_org_id", "org_id"),
+    )
+
+
+class NoteAccess(Base):
+    __tablename__ = "note_access"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    note_id: Mapped[int] = mapped_column(Integer, index=True)
+    user_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    org_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    permission: Mapped[str] = mapped_column(String(20), default="read")
+    granted_by: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index("idx_note_access_note_id", "note_id"),
+        Index("idx_note_access_user_id", "user_id"),
+        Index("idx_note_access_org_id", "org_id"),
     )

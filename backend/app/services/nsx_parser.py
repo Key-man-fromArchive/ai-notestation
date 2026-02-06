@@ -50,6 +50,22 @@ class NsxParseResult:
     images_extracted: int = 0
     errors: list[str] = field(default_factory=list)
     attachments: list[AttachmentInfo] = field(default_factory=list)
+    notes: list["NoteRecord"] = field(default_factory=list)
+
+
+@dataclass
+class NoteRecord:
+    """Normalized note metadata from an NSX export."""
+
+    note_id: str
+    title: str
+    content_html: str
+    tags: list | dict | None
+    parent_id: str | None
+    notebook_name: str | None
+    category: str | None
+    ctime: int | float | None
+    mtime: int | float | None
 
 
 class NsxParser:
@@ -91,15 +107,24 @@ class NsxParser:
                     return result
 
                 note_ids = config.get("note", [])
+                notebook_map = self._parse_notebooks(nsx, config)
                 logger.info("Found %d notes in NSX file", len(note_ids))
 
                 # Process each note
                 for note_id in note_ids:
                     try:
-                        attachments = self._process_note(nsx, note_id)
+                        note_data = self._read_note_data(nsx, note_id)
+                        if note_data is None:
+                            result.errors.append(f"Failed to read note {note_id}")
+                            continue
+
+                        attachments = self._extract_attachments(nsx, note_id, note_data)
                         result.attachments.extend(attachments)
                         result.images_extracted += len(attachments)
                         result.notes_processed += 1
+                        note_record = self._build_note_record(note_id, note_data, notebook_map)
+                        if note_record:
+                            result.notes.append(note_record)
                     except Exception as e:
                         result.errors.append(f"Error processing note {note_id}: {e}")
                         logger.warning("Error processing note %s: %s", note_id, e)
@@ -127,26 +152,23 @@ class NsxParser:
             logger.error("Failed to parse config.json: %s", e)
             return None
 
-    def _process_note(
-        self, nsx: zipfile.ZipFile, note_id: str
-    ) -> list[AttachmentInfo]:
-        """Process a single note and extract its attachments.
-
-        Args:
-            nsx: Open ZipFile object.
-            note_id: The note ID to process.
-
-        Returns:
-            List of extracted AttachmentInfo objects.
-        """
-        attachments: list[AttachmentInfo] = []
-
+    def _read_note_data(self, nsx: zipfile.ZipFile, note_id: str) -> dict | None:
+        """Read and parse a note JSON file from the NSX archive."""
         try:
             note_data = nsx.read(note_id)
-            note = json.loads(note_data.decode("utf-8"))
+            return json.loads(note_data.decode("utf-8"))
         except (KeyError, json.JSONDecodeError) as e:
             logger.warning("Failed to read note %s: %s", note_id, e)
-            return attachments
+            return None
+
+    def _extract_attachments(
+        self,
+        nsx: zipfile.ZipFile,
+        note_id: str,
+        note: dict,
+    ) -> list[AttachmentInfo]:
+        """Extract image attachments from a note payload."""
+        attachments: list[AttachmentInfo] = []
 
         # Get attachment metadata
         att_dict = note.get("attachment", {})
@@ -203,6 +225,56 @@ class NsxParser:
                 logger.warning("Failed to extract attachment %s: %s", ref, e)
 
         return attachments
+
+    @staticmethod
+    def _build_note_record(
+        note_id: str,
+        note: dict,
+        notebook_map: dict[str, str],
+    ) -> NoteRecord | None:
+        """Normalize a note payload into a NoteRecord."""
+        if not isinstance(note, dict):
+            return None
+
+        parent_id = note.get("parent_id")
+        notebook_name = notebook_map.get(parent_id) if parent_id else None
+
+        return NoteRecord(
+            note_id=note_id,
+            title=str(note.get("title", "")),
+            content_html=str(note.get("content", "")),
+            tags=note.get("tag"),
+            parent_id=str(parent_id) if parent_id else None,
+            notebook_name=notebook_name,
+            category=note.get("category"),
+            ctime=note.get("ctime"),
+            mtime=note.get("mtime"),
+        )
+
+    @staticmethod
+    def _parse_notebooks(
+        nsx: zipfile.ZipFile,
+        config: dict,
+    ) -> dict[str, str]:
+        """Parse notebook metadata from NSX config and return id->title mapping."""
+        notebook_ids = config.get("notebook", [])
+        if not isinstance(notebook_ids, list):
+            return {}
+
+        notebook_map: dict[str, str] = {}
+        for notebook_id in notebook_ids:
+            try:
+                raw = nsx.read(notebook_id)
+                notebook = json.loads(raw.decode("utf-8"))
+            except (KeyError, json.JSONDecodeError):
+                continue
+
+            if isinstance(notebook, dict):
+                title = notebook.get("title") or notebook.get("name") or ""
+                if title:
+                    notebook_map[str(notebook_id)] = str(title)
+
+        return notebook_map
 
     @staticmethod
     def _is_image(mime_type: str, filename: str) -> bool:

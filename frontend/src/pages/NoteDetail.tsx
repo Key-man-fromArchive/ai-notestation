@@ -2,18 +2,24 @@
 // @SPEC docs/plans/2026-01-29-labnote-ai-design.md#노트-상세
 // @TEST frontend/src/__tests__/NoteDetail.test.tsx
 
+import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Notebook, Tag, Paperclip, Image, File, AlertCircle, Calendar } from 'lucide-react'
+import { ArrowLeft, Notebook, Tag, Paperclip, Image, File, AlertCircle, Calendar, Pencil, Share2 } from 'lucide-react'
+import { apiClient } from '@/lib/api'
 import { useNote } from '@/hooks/useNote'
 import { MarkdownRenderer } from '@/components/MarkdownRenderer'
 import { NoteAIPanel } from '@/components/NoteAIPanel'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
 import { EmptyState } from '@/components/EmptyState'
+import { NoteEditor } from '@/components/NoteEditor'
+import { NoteSharing } from '@/components/NoteSharing'
 
 export default function NoteDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { data: note, error, isLoading } = useNote(id)
+  const [isEditing, setIsEditing] = useState(false)
+  const [isSharingOpen, setIsSharingOpen] = useState(false)
 
   // 로딩 상태
   if (isLoading) {
@@ -75,7 +81,25 @@ export default function NoteDetail() {
         </button>
 
         {/* 노트 제목 */}
-        <h1 className="text-3xl font-bold text-foreground mb-2">{note.title}</h1>
+        <div className="flex items-start justify-between gap-4 mb-2">
+          <h1 className="text-3xl font-bold text-foreground">{note.title}</h1>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsSharingOpen(true)}
+              className="inline-flex items-center gap-2 text-xs px-2.5 py-1.5 rounded border border-input text-muted-foreground hover:text-foreground hover:border-primary/30"
+            >
+              <Share2 className="h-3.5 w-3.5" />
+              공유
+            </button>
+            <button
+              onClick={() => setIsEditing(true)}
+              className="inline-flex items-center gap-2 text-xs px-2.5 py-1.5 rounded border border-input text-muted-foreground hover:text-foreground hover:border-primary/30"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              편집
+            </button>
+          </div>
+        </div>
 
         {/* 메타정보 */}
         <div className="flex flex-col gap-3 mb-6 pb-6 border-b border-border">
@@ -122,12 +146,25 @@ export default function NoteDetail() {
 
         {/* AI 분석 패널 */}
         <div className="mb-6">
-          <NoteAIPanel noteContent={note.content} noteTitle={note.title} />
+          <NoteAIPanel noteId={note.note_id} noteContent={note.content} noteTitle={note.title} />
         </div>
 
         {/* 마크다운 콘텐츠 */}
         <article className="mb-8">
-          <MarkdownRenderer content={note.content} />
+          {isEditing ? (
+            <NoteEditor
+              noteId={note.note_id}
+              initialContent={note.content}
+              onCancel={() => setIsEditing(false)}
+              onSave={async (html, json) => {
+                await apiClient.put(`/notes/${note.note_id}`, { content: html, content_json: json })
+                setIsEditing(false)
+                window.location.reload()
+              }}
+            />
+          ) : (
+            <MarkdownRenderer content={note.content} />
+          )}
         </article>
 
         {/* 첨부파일 */}
@@ -153,6 +190,17 @@ export default function NoteDetail() {
                     <Icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                     <span className="text-sm text-foreground truncate">{attachment.name}</span>
                     <span className="ml-auto text-xs text-muted-foreground uppercase shrink-0">{ext}</span>
+                    <button
+                      onClick={async () => {
+                        const fileId = attachment.file_id ?? attachment.url.split('/').pop()
+                        if (!fileId) return
+                        await apiClient.delete(`/notes/${note.note_id}/attachments/${fileId}`)
+                        window.location.reload()
+                      }}
+                      className="text-xs text-muted-foreground hover:text-destructive ml-2"
+                    >
+                      삭제
+                    </button>
                   </div>
                 )
               })}
@@ -160,6 +208,12 @@ export default function NoteDetail() {
           </section>
         )}
       </div>
+
+      <NoteSharing
+        noteId={note.id}
+        isOpen={isSharingOpen}
+        onClose={() => setIsSharingOpen(false)}
+      />
     </div>
   )
 }

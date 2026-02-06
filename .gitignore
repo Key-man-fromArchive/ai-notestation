@@ -67,3 +67,9 @@ backend/test_nb.py
 
 # Runtime logs
 logs/
+
+# Large backup/archive files
+nsx_backup/
+oh-my-opencode*/
+*.zip
+backend/data/

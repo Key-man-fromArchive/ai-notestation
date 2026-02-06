@@ -19,6 +19,7 @@ NoteStationService is fully mocked via FastAPI dependency_overrides.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 
 import pytest
@@ -29,15 +30,74 @@ from httpx import ASGITransport, AsyncClient
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _get_app():
     """Import the FastAPI app with notes router included."""
     from app.main import app
+
     return app
 
 
-def _setup_overrides(app, mock_ns):
-    """Override both auth and NoteStationService dependencies."""
+class _ScalarList:
+    def __init__(self, values):
+        self._values = values
+
+    def all(self):
+        return self._values
+
+    def __iter__(self):
+        return iter(self._values)
+
+
+class _Result:
+    def __init__(self, value):
+        self._value = value
+
+    def scalar_one(self):
+        return self._value
+
+    def scalar_one_or_none(self):
+        return self._value
+
+    def scalars(self):
+        return _ScalarList(self._value)
+
+    def all(self):
+        return self._value
+
+
+def _make_note(
+    *,
+    note_id: str,
+    title: str,
+    notebook_name: str | None,
+    content_html: str,
+    content_text: str,
+    updated_at: datetime,
+    created_at: datetime,
+    tags: list[str] | None = None,
+):
+    from app.models import Note
+
+    return Note(
+        synology_note_id=note_id,
+        title=title,
+        content_html=content_html,
+        content_text=content_text,
+        notebook_name=notebook_name,
+        tags=tags,
+        is_todo=False,
+        is_shortcut=False,
+        source_created_at=created_at,
+        source_updated_at=updated_at,
+        synced_at=updated_at,
+    )
+
+
+def _setup_overrides(app, mock_ns=None, mock_db=None):
+    """Override auth, NoteStationService, and DB dependencies."""
     from app.api.notes import _get_ns_service
+    from app.database import get_db
     from app.services.auth_service import get_current_user
 
     async def _fake_current_user():
@@ -47,7 +107,10 @@ def _setup_overrides(app, mock_ns):
         return mock_ns
 
     app.dependency_overrides[get_current_user] = _fake_current_user
-    app.dependency_overrides[_get_ns_service] = _fake_ns_service
+    if mock_ns is not None:
+        app.dependency_overrides[_get_ns_service] = _fake_ns_service
+    if mock_db is not None:
+        app.dependency_overrides[get_db] = lambda: mock_db
     return app
 
 
@@ -69,36 +132,23 @@ def _make_mock_ns_service(
 ):
     """Build a mock NoteStationService with configurable return values."""
     mock_ns = AsyncMock()
-    mock_ns.list_notes = AsyncMock(
-        return_value=list_notes_return or {"notes": [], "total": 0}
-    )
+    mock_ns.list_notes = AsyncMock(return_value=list_notes_return or {"notes": [], "total": 0})
     if get_note_side_effect:
         mock_ns.get_note = AsyncMock(side_effect=get_note_side_effect)
     else:
-        mock_ns.get_note = AsyncMock(
-            return_value=get_note_return or {"note": {}}
-        )
-    mock_ns.list_notebooks = AsyncMock(
-        return_value=list_notebooks_return or []
-    )
-    mock_ns.list_tags = AsyncMock(
-        return_value=list_tags_return or []
-    )
-    mock_ns.list_todos = AsyncMock(
-        return_value=list_todos_return or []
-    )
-    mock_ns.list_shortcuts = AsyncMock(
-        return_value=list_shortcuts_return or []
-    )
-    mock_ns.list_smart = AsyncMock(
-        return_value=list_smart_return or []
-    )
+        mock_ns.get_note = AsyncMock(return_value=get_note_return or {"note": {}})
+    mock_ns.list_notebooks = AsyncMock(return_value=list_notebooks_return or [])
+    mock_ns.list_tags = AsyncMock(return_value=list_tags_return or [])
+    mock_ns.list_todos = AsyncMock(return_value=list_todos_return or [])
+    mock_ns.list_shortcuts = AsyncMock(return_value=list_shortcuts_return or [])
+    mock_ns.list_smart = AsyncMock(return_value=list_smart_return or [])
     return mock_ns
 
 
 # ---------------------------------------------------------------------------
 # GET /api/notes - Note list
 # ---------------------------------------------------------------------------
+
 
 class TestListNotes:
     """Test GET /api/notes endpoint."""
@@ -108,30 +158,33 @@ class TestListNotes:
         """Should return paginated note list."""
         app = _get_app()
 
-        mock_ns = _make_mock_ns_service(
-            list_notes_return={
-                "notes": [
-                    {
-                        "object_id": "n1",
-                        "title": "Test Note 1",
-                        "parent_id": "nb-default",
-                        "tag": ["python", "fastapi"],
-                        "ctime": 1704067200,
-                        "mtime": 1704153600,
-                    },
-                    {
-                        "object_id": "n2",
-                        "title": "Test Note 2",
-                        "parent_id": None,
-                        "tag": [],
-                        "ctime": 1704240000,
-                        "mtime": 1704326400,
-                    },
-                ],
-                "total": 2,
-            }
-        )
-        _setup_overrides(app, mock_ns)
+        now = datetime.now(UTC)
+        notes = [
+            _make_note(
+                note_id="n1",
+                title="Test Note 1",
+                notebook_name="Research",
+                content_html="<p>Hello</p>",
+                content_text="Hello",
+                updated_at=now,
+                created_at=now,
+                tags=["python", "fastapi"],
+            ),
+            _make_note(
+                note_id="n2",
+                title="Test Note 2",
+                notebook_name=None,
+                content_html="<p>World</p>",
+                content_text="World",
+                updated_at=now,
+                created_at=now,
+                tags=[],
+            ),
+        ]
+
+        mock_db = AsyncMock()
+        mock_db.execute = AsyncMock(side_effect=[_Result(2), _Result(notes)])
+        _setup_overrides(app, mock_db=mock_db)
 
         try:
             transport = ASGITransport(app=app)
@@ -155,22 +208,23 @@ class TestListNotes:
         """Should respect offset and limit query parameters."""
         app = _get_app()
 
-        mock_ns = _make_mock_ns_service(
-            list_notes_return={
-                "notes": [
-                    {
-                        "object_id": "n3",
-                        "title": "Page 2 Note",
-                        "parent_id": "nb-lab",
-                        "tag": [],
-                        "ctime": None,
-                        "mtime": None,
-                    },
-                ],
-                "total": 25,
-            }
-        )
-        _setup_overrides(app, mock_ns)
+        now = datetime.now(UTC)
+        notes = [
+            _make_note(
+                note_id="n3",
+                title="Page 2 Note",
+                notebook_name="Lab",
+                content_html="<p>Page</p>",
+                content_text="Page",
+                updated_at=now,
+                created_at=now,
+                tags=[],
+            )
+        ]
+
+        mock_db = AsyncMock()
+        mock_db.execute = AsyncMock(side_effect=[_Result(25), _Result(notes)])
+        _setup_overrides(app, mock_db=mock_db)
 
         try:
             transport = ASGITransport(app=app)
@@ -183,8 +237,6 @@ class TestListNotes:
             assert data["limit"] == 10
             assert data["total"] == 25
             assert len(data["items"]) == 1
-
-            mock_ns.list_notes.assert_called_once_with(offset=10, limit=10)
         finally:
             _clear_overrides(app)
 
@@ -193,10 +245,9 @@ class TestListNotes:
         """Empty result should return valid paginated response."""
         app = _get_app()
 
-        mock_ns = _make_mock_ns_service(
-            list_notes_return={"notes": [], "total": 0}
-        )
-        _setup_overrides(app, mock_ns)
+        mock_db = AsyncMock()
+        mock_db.execute = AsyncMock(side_effect=[_Result(0), _Result([])])
+        _setup_overrides(app, mock_db=mock_db)
 
         try:
             transport = ASGITransport(app=app)
@@ -227,6 +278,7 @@ class TestListNotes:
 # GET /api/notes/{note_id} - Note detail
 # ---------------------------------------------------------------------------
 
+
 class TestGetNote:
     """Test GET /api/notes/{note_id} endpoint."""
 
@@ -235,18 +287,21 @@ class TestGetNote:
         """Should return full note detail with content."""
         app = _get_app()
 
-        mock_ns = _make_mock_ns_service(
-            get_note_return={
-                "object_id": "n42",
-                "title": "Detailed Note",
-                "parent_id": "nb-research",
-                "tag": ["biology"],
-                "content": "<p>Hello <strong>world</strong></p>",
-                "ctime": 1718444200,
-                "mtime": 1718543600,
-            }
+        now = datetime.now(UTC)
+        db_note = _make_note(
+            note_id="n42",
+            title="Detailed Note",
+            notebook_name="Research",
+            content_html="<p>Hello <strong>world</strong></p>",
+            content_text="Hello world",
+            updated_at=now,
+            created_at=now,
+            tags=["biology"],
         )
-        _setup_overrides(app, mock_ns)
+
+        mock_db = AsyncMock()
+        mock_db.execute = AsyncMock(side_effect=[_Result(db_note), _Result([]), _Result([])])
+        _setup_overrides(app, mock_db=mock_db)
 
         try:
             transport = ASGITransport(app=app)
@@ -258,10 +313,8 @@ class TestGetNote:
             assert data["note_id"] == "n42"
             assert data["title"] == "Detailed Note"
             assert data["content"] == "<p>Hello <strong>world</strong></p>"
-            assert data["notebook"] == "nb-research"
+            assert data["notebook"] == "Research"
             assert data["tags"] == ["biology"]
-
-            mock_ns.get_note.assert_called_once_with("n42")
         finally:
             _clear_overrides(app)
 
@@ -272,10 +325,10 @@ class TestGetNote:
 
         app = _get_app()
 
-        mock_ns = _make_mock_ns_service(
-            get_note_side_effect=SynologyApiError(code=408, message="Note not found")
-        )
-        _setup_overrides(app, mock_ns)
+        mock_ns = _make_mock_ns_service(get_note_side_effect=SynologyApiError(code=408, message="Note not found"))
+        mock_db = AsyncMock()
+        mock_db.execute = AsyncMock(return_value=_Result(None))
+        _setup_overrides(app, mock_ns=mock_ns, mock_db=mock_db)
 
         try:
             transport = ASGITransport(app=app)
@@ -305,6 +358,7 @@ class TestGetNote:
 # GET /api/notebooks - Notebook list
 # ---------------------------------------------------------------------------
 
+
 class TestListNotebooks:
     """Test GET /api/notebooks endpoint."""
 
@@ -313,13 +367,16 @@ class TestListNotebooks:
         """Should return list of notebooks."""
         app = _get_app()
 
-        mock_ns = _make_mock_ns_service(
-            list_notebooks_return=[
-                {"object_id": "nb1", "title": "Research"},
-                {"object_id": "nb2", "title": "Personal"},
-            ]
+        mock_db = AsyncMock()
+        mock_db.execute = AsyncMock(
+            return_value=_Result(
+                [
+                    ("Personal", 1),
+                    ("Research", 2),
+                ]
+            )
         )
-        _setup_overrides(app, mock_ns)
+        _setup_overrides(app, mock_db=mock_db)
 
         try:
             transport = ASGITransport(app=app)
@@ -330,7 +387,7 @@ class TestListNotebooks:
             data = response.json()
             assert "items" in data
             assert len(data["items"]) == 2
-            assert data["items"][0]["name"] == "Research"
+            assert data["items"][0]["name"] == "Personal"
         finally:
             _clear_overrides(app)
 
@@ -350,6 +407,7 @@ class TestListNotebooks:
 # ---------------------------------------------------------------------------
 # GET /api/tags - Tag list
 # ---------------------------------------------------------------------------
+
 
 class TestListTags:
     """Test GET /api/tags endpoint."""
@@ -397,6 +455,7 @@ class TestListTags:
 # GET /api/todos - Todo list
 # ---------------------------------------------------------------------------
 
+
 class TestListTodos:
     """Test GET /api/todos endpoint."""
 
@@ -442,6 +501,7 @@ class TestListTodos:
 # GET /api/shortcuts - Shortcut list
 # ---------------------------------------------------------------------------
 
+
 class TestListShortcuts:
     """Test GET /api/shortcuts endpoint."""
 
@@ -486,6 +546,7 @@ class TestListShortcuts:
 # ---------------------------------------------------------------------------
 # GET /api/smart - Smart note list
 # ---------------------------------------------------------------------------
+
 
 class TestListSmart:
     """Test GET /api/smart endpoint."""

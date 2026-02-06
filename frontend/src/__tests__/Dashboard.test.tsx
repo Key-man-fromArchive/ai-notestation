@@ -83,7 +83,7 @@ describe('Dashboard Page', () => {
     render(<Dashboard />, { wrapper: createWrapper() })
 
     await waitFor(() => {
-      expect(screen.getByText(/동기화 상태/i)).toBeInTheDocument()
+      expect(screen.getByText(/대기 중/i)).toBeInTheDocument()
     })
   })
 
@@ -115,7 +115,7 @@ describe('Dashboard Page', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('link', { name: /검색/i })).toBeInTheDocument()
-      expect(screen.getByRole('link', { name: /AI 작업/i })).toBeInTheDocument()
+      expect(screen.getByRole('link', { name: /AI 분석/i })).toBeInTheDocument()
     })
   })
 })

@@ -20,24 +20,33 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
+from uuid import uuid4
 
-import base64
-import re
+from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.database import get_db
-from app.models import NoteImage
+from app.models import Note, NoteAttachment, NoteImage
 from app.services.auth_service import get_current_user
 from app.synology_gateway.client import SynologyApiError, SynologyClient
 from app.synology_gateway.notestation import NoteStationService
+from app.utils.datetime_utils import datetime_to_iso, unix_to_iso
+from app.utils.note_utils import (
+    normalize_db_tags,
+    normalize_tags,
+    rewrite_image_urls,
+    truncate_snippet,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["notes"])
+settings = get_settings()
 
 
 # ---------------------------------------------------------------------------
@@ -69,6 +78,7 @@ class NoteListResponse(BaseModel):
 class AttachmentItem(BaseModel):
     """Attachment metadata for a note."""
 
+    file_id: str | None = None
     name: str
     url: str
 
@@ -78,6 +88,26 @@ class NoteDetailResponse(NoteItem):
 
     content: str
     attachments: list[AttachmentItem] = []
+
+
+class NoteCreateRequest(BaseModel):
+    """Request payload for creating a note."""
+
+    title: str
+    content: str
+    content_json: dict | None = None
+    notebook: str | None = None
+    tags: list[str] | None = None
+
+
+class NoteUpdateRequest(BaseModel):
+    """Request payload for updating a note."""
+
+    title: str | None = None
+    content: str | None = None
+    content_json: dict | None = None
+    notebook: str | None = None
+    tags: list[str] | None = None
 
 
 class NotebookItem(BaseModel):
@@ -124,24 +154,36 @@ def _get_ns_service() -> NoteStationService:
 # ---------------------------------------------------------------------------
 
 
-def _unix_to_iso(ts: int | float | None) -> str | None:
-    """Convert a Unix timestamp to an ISO-8601 string, or None."""
-    if ts is None:
-        return None
-    return datetime.fromtimestamp(ts, tz=UTC).isoformat()
+def _model_to_item(note: Note) -> NoteItem:
+    """Convert a Note ORM model to a NoteItem schema."""
+    updated_at = note.source_updated_at or note.updated_at
+    created_at = note.source_created_at or note.created_at
+
+    return NoteItem(
+        note_id=note.synology_note_id,
+        title=note.title,
+        snippet=truncate_snippet(note.content_text),
+        notebook=note.notebook_name,
+        tags=normalize_db_tags(note.tags),
+        created_at=datetime_to_iso(created_at),
+        updated_at=datetime_to_iso(updated_at),
+    )
 
 
-def _normalize_tags(raw: dict) -> list[str]:
-    """Normalize Synology tag field to a flat list of strings.
-
-    Synology may return tags as a list, a dict, or None.
-    """
-    tag_raw = raw.get("tag", [])
-    if isinstance(tag_raw, dict):
-        return list(tag_raw.values()) if tag_raw else []
-    if isinstance(tag_raw, list):
-        return tag_raw
-    return []
+async def _load_note_attachments(
+    db: AsyncSession,
+    note_id: int,
+) -> list[AttachmentItem]:
+    result = await db.execute(select(NoteAttachment).where(NoteAttachment.note_id == note_id))
+    attachments = result.scalars().all()
+    return [
+        AttachmentItem(
+            file_id=att.file_id,
+            name=att.name,
+            url=f"/api/files/{att.file_id}",
+        )
+        for att in attachments
+    ]
 
 
 def _parse_attachments(note_data: dict) -> list[AttachmentItem]:
@@ -196,9 +238,9 @@ def _note_to_item(raw: dict, notebook_map: dict[str, str] | None = None) -> Note
         title=raw.get("title", ""),
         snippet=raw.get("brief", ""),
         notebook=notebook_name,
-        tags=_normalize_tags(raw),
-        created_at=_unix_to_iso(raw.get("ctime")),
-        updated_at=_unix_to_iso(raw.get("mtime")),
+        tags=normalize_tags(raw),
+        created_at=unix_to_iso(raw.get("ctime")),
+        updated_at=unix_to_iso(raw.get("mtime")),
     )
 
 
@@ -213,7 +255,7 @@ async def list_notes(
     limit: int = Query(50, ge=1, le=200, description="Maximum notes to return"),
     notebook: str | None = Query(None, description="Filter by notebook name"),
     current_user: dict = Depends(get_current_user),  # noqa: B008
-    ns_service: NoteStationService = Depends(_get_ns_service),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> NoteListResponse:
     """Retrieve a paginated list of notes.
 
@@ -224,46 +266,29 @@ async def list_notes(
         limit: Page size (max 200).
         notebook: Optional notebook name to filter by.
         current_user: Injected authenticated user.
-        ns_service: Injected NoteStation service.
+        db: Database session for local notes.
 
     Returns:
         Paginated response with note items, offset, limit, and total count.
     """
-    # Build notebook_map: object_id -> title for human-readable notebook names
-    notebook_map: dict[str, str] = {}
-    try:
-        raw_notebooks = await ns_service.list_notebooks()
-        notebook_map = {
-            nb.get("object_id", ""): nb.get("title", "")
-            for nb in raw_notebooks
-            if nb.get("object_id")
-        }
-    except Exception:
-        logger.warning("Failed to fetch notebooks for name resolution")
-
-    # Synology NoteStation API has a bug: when offset/limit are passed,
-    # the returned `total` equals the returned note count, not the true total.
-    # Workaround: always fetch ALL notes first (no params), then slice locally.
-    all_data = await ns_service.list_notes()
-    all_notes = all_data.get("notes", [])
+    count_stmt = select(func.count()).select_from(Note)
+    stmt = select(Note)
 
     if notebook:
-        # Resolve notebook name → object_id(s)
-        target_ids = {
-            oid for oid, name in notebook_map.items() if name == notebook
-        }
-        if not target_ids:
-            return NoteListResponse(items=[], offset=offset, limit=limit, total=0)
+        count_stmt = count_stmt.where(Note.notebook_name == notebook)
+        stmt = stmt.where(Note.notebook_name == notebook)
 
-        # Filter by parent_id
-        filtered = [n for n in all_notes if n.get("parent_id") in target_ids]
-        total = len(filtered)
-        page = filtered[offset : offset + limit]
-        items = [_note_to_item(n, notebook_map) for n in page]
-    else:
-        total = len(all_notes)
-        page = all_notes[offset : offset + limit]
-        items = [_note_to_item(n, notebook_map) for n in page]
+    stmt = stmt.order_by(
+        Note.source_updated_at.desc().nulls_last(),
+        Note.updated_at.desc().nulls_last(),
+    )
+
+    total_result = await db.execute(count_stmt)
+    total = int(total_result.scalar_one())
+
+    notes_result = await db.execute(stmt.offset(offset).limit(limit))
+    notes = notes_result.scalars().all()
+    items = [_model_to_item(note) for note in notes]
 
     return NoteListResponse(
         items=items,
@@ -296,6 +321,42 @@ async def get_note(
     Raises:
         HTTPException 404: If the note is not found.
     """
+    result = await db.execute(select(Note).where(Note.synology_note_id == note_id))
+    db_note = result.scalar_one_or_none()
+
+    if db_note:
+        image_map: dict[str, NoteImage] = {}
+        try:
+            img_result = await db.execute(select(NoteImage).where(NoteImage.synology_note_id == note_id))
+            for img in img_result.scalars():
+                image_map[img.ref] = img
+                if img.name:
+                    image_map[img.name] = img
+        except Exception:
+            logger.warning("Failed to fetch images for note %s", note_id)
+
+        content = rewrite_image_urls(
+            db_note.content_html or "",
+            note_id,
+            attachment_lookup=None,
+            image_map=image_map,
+        )
+
+        updated_at = db_note.source_updated_at or db_note.updated_at
+        created_at = db_note.source_created_at or db_note.created_at
+
+        return NoteDetailResponse(
+            note_id=db_note.synology_note_id,
+            title=db_note.title,
+            snippet=truncate_snippet(db_note.content_text),
+            notebook=db_note.notebook_name,
+            tags=normalize_db_tags(db_note.tags),
+            created_at=datetime_to_iso(created_at),
+            updated_at=datetime_to_iso(updated_at),
+            content=content,
+            attachments=await _load_note_attachments(db, db_note.id),
+        )
+
     try:
         note = await ns_service.get_note(note_id)
     except SynologyApiError:
@@ -310,11 +371,7 @@ async def get_note(
     if parent_id:
         try:
             raw_notebooks = await ns_service.list_notebooks()
-            nb_map = {
-                nb.get("object_id", ""): nb.get("title", "")
-                for nb in raw_notebooks
-                if nb.get("object_id")
-            }
+            nb_map = {nb.get("object_id", ""): nb.get("title", "") for nb in raw_notebooks if nb.get("object_id")}
             notebook_name = nb_map.get(parent_id, parent_id)
         except Exception:
             logger.warning("Failed to fetch notebooks for name resolution")
@@ -334,9 +391,7 @@ async def get_note(
     # Fetch extracted images from database for this note
     image_map: dict[str, NoteImage] = {}
     try:
-        result = await db.execute(
-            select(NoteImage).where(NoteImage.synology_note_id == note_id)
-        )
+        result = await db.execute(select(NoteImage).where(NoteImage.synology_note_id == note_id))
         for img in result.scalars():
             image_map[img.ref] = img
             # Also index by name so content refs (which use name, not ref) can match
@@ -350,18 +405,194 @@ async def get_note(
         title=note.get("title", ""),
         snippet=note.get("brief", ""),
         notebook=notebook_name,
-        tags=_normalize_tags(note),
-        created_at=_unix_to_iso(note.get("ctime")),
-        updated_at=_unix_to_iso(note.get("mtime")),
-        content=_rewrite_image_urls(note.get("content", ""), note_id, att_lookup, image_map),
+        tags=normalize_tags(note),
+        created_at=unix_to_iso(note.get("ctime")),
+        updated_at=unix_to_iso(note.get("mtime")),
+        content=rewrite_image_urls(note.get("content", ""), note_id, att_lookup, image_map),
         attachments=attachments,
     )
+
+
+@router.post("/notes", response_model=NoteDetailResponse, status_code=status.HTTP_201_CREATED)
+async def create_note(
+    payload: NoteCreateRequest,
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> NoteDetailResponse:
+    """Create a new note in the local database."""
+    now = datetime.now(UTC)
+    note_id = uuid4().hex
+    content_html = payload.content
+    content_text = NoteStationService.extract_text(content_html)
+
+    note = Note(
+        synology_note_id=note_id,
+        title=payload.title,
+        content_html=content_html,
+        content_text=content_text,
+        notebook_name=payload.notebook,
+        tags=payload.tags or None,
+        content_json=payload.content_json,
+        is_todo=False,
+        is_shortcut=False,
+        source_created_at=now,
+        source_updated_at=now,
+        synced_at=now,
+    )
+    db.add(note)
+    await db.flush()
+
+    return NoteDetailResponse(
+        note_id=note.synology_note_id,
+        title=note.title,
+        snippet=truncate_snippet(note.content_text),
+        notebook=note.notebook_name,
+        tags=normalize_db_tags(note.tags),
+        created_at=datetime_to_iso(note.source_created_at),
+        updated_at=datetime_to_iso(note.source_updated_at),
+        content=note.content_html,
+        attachments=[],
+    )
+
+
+@router.put("/notes/{note_id}", response_model=NoteDetailResponse)
+async def update_note(
+    note_id: str,
+    payload: NoteUpdateRequest,
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> NoteDetailResponse:
+    """Update an existing note in the local database."""
+    result = await db.execute(select(Note).where(Note.synology_note_id == note_id))
+    note = result.scalar_one_or_none()
+    if not note:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Note not found: {note_id}",
+        )
+
+    if payload.title is not None:
+        note.title = payload.title
+    if payload.content is not None:
+        note.content_html = payload.content
+        note.content_text = NoteStationService.extract_text(payload.content)
+    if payload.content_json is not None:
+        note.content_json = payload.content_json
+    if payload.notebook is not None:
+        note.notebook_name = payload.notebook
+    if payload.tags is not None:
+        note.tags = payload.tags
+
+    note.source_updated_at = datetime.now(UTC)
+
+    return NoteDetailResponse(
+        note_id=note.synology_note_id,
+        title=note.title,
+        snippet=truncate_snippet(note.content_text),
+        notebook=note.notebook_name,
+        tags=normalize_db_tags(note.tags),
+        created_at=datetime_to_iso(note.source_created_at),
+        updated_at=datetime_to_iso(note.source_updated_at),
+        content=note.content_html,
+        attachments=await _load_note_attachments(db, note.id),
+    )
+
+
+@router.post("/notes/{note_id}/attachments", response_model=AttachmentItem, status_code=status.HTTP_201_CREATED)
+async def add_attachment(
+    note_id: str,
+    file: UploadFile = File(..., description="Attachment file"),
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> AttachmentItem:
+    """Upload a file and associate it with a note."""
+    result = await db.execute(select(Note).where(Note.synology_note_id == note_id))
+    note = result.scalar_one_or_none()
+    if not note:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Note not found: {note_id}",
+        )
+
+    if not file.filename:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Filename is required",
+        )
+
+    uploads_dir = Path(settings.UPLOADS_PATH)
+    uploads_dir.mkdir(parents=True, exist_ok=True)
+
+    suffix = Path(file.filename).suffix
+    file_id = f"{uuid4().hex}{suffix}"
+    target_path = uploads_dir / file_id
+
+    try:
+        with open(target_path, "wb") as f:
+            while True:
+                chunk = await file.read(1024 * 1024)
+                if not chunk:
+                    break
+                f.write(chunk)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"File upload failed: {exc}",
+        ) from exc
+
+    attachment = NoteAttachment(
+        note_id=note.id,
+        file_id=file_id,
+        name=file.filename,
+        mime_type=file.content_type,
+    )
+    db.add(attachment)
+    await db.flush()
+
+    return AttachmentItem(
+        file_id=attachment.file_id,
+        name=attachment.name,
+        url=f"/api/files/{attachment.file_id}",
+    )
+
+
+@router.delete("/notes/{note_id}/attachments/{file_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_attachment(
+    note_id: str,
+    file_id: str,
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> None:
+    """Remove an attachment from a note."""
+    note_result = await db.execute(select(Note).where(Note.synology_note_id == note_id))
+    note = note_result.scalar_one_or_none()
+    if not note:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Note not found: {note_id}",
+        )
+
+    attachment_result = await db.execute(
+        select(NoteAttachment).where(NoteAttachment.note_id == note.id).where(NoteAttachment.file_id == file_id)
+    )
+    attachment = attachment_result.scalar_one_or_none()
+    if not attachment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Attachment not found",
+        )
+
+    await db.delete(attachment)
+
+    file_path = Path(settings.UPLOADS_PATH) / file_id
+    if file_path.exists():
+        file_path.unlink(missing_ok=True)
 
 
 @router.get("/notebooks", response_model=NotebooksListResponse)
 async def list_notebooks(
     current_user: dict = Depends(get_current_user),  # noqa: B008
-    ns_service: NoteStationService = Depends(_get_ns_service),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> NotebooksListResponse:
     """Retrieve all notebooks with computed note counts.
 
@@ -373,28 +604,18 @@ async def list_notebooks(
     Returns:
         NotebooksListResponse with notebook items and computed counts.
     """
-    raw_notebooks = await ns_service.list_notebooks()
+    stmt = (
+        select(Note.notebook_name, func.count())
+        .where(Note.notebook_name.is_not(None))
+        .where(Note.notebook_name != "")
+        .group_by(Note.notebook_name)
+        .order_by(Note.notebook_name.asc())
+    )
 
-    # Compute note counts per notebook by fetching ALL notes (no params).
-    # Synology API returns wrong totals when offset/limit are passed.
-    note_counts: dict[str, int] = {}
-    try:
-        notes_data = await ns_service.list_notes()
-        for note in notes_data.get("notes", []):
-            parent_id = note.get("parent_id", "")
-            if parent_id:
-                note_counts[parent_id] = note_counts.get(parent_id, 0) + 1
-    except Exception:
-        logger.warning("Failed to compute notebook note counts")
+    result = await db.execute(stmt)
+    rows = result.all()
 
-    items = [
-        NotebookItem(
-            name=nb.get("title", ""),
-            note_count=note_counts.get(nb.get("object_id", ""), nb.get("note_count", 0)),
-        )
-        for nb in raw_notebooks
-        if nb.get("title", "").strip()  # skip empty-named notebooks
-    ]
+    items = [NotebookItem(name=row[0], note_count=int(row[1] or 0)) for row in rows]
     return NotebooksListResponse(items=items)
 
 
@@ -472,101 +693,3 @@ async def list_smart(
 #
 # Synology NoteStation does NOT expose a public API for downloading embedded
 # note images (streaming.cgi returns 500, method=streaming returns error 103).
-# We replace these <img> tags with placeholder markers that the frontend
-# renders as styled image cards showing the filename and dimensions.
-
-_NOTESTATION_IMG_RE = re.compile(
-    r'<img\b[^>]*?\bref="([^"]+)"[^>]*/?>',
-    re.IGNORECASE,
-)
-
-
-def _rewrite_image_urls(
-    html: str,
-    note_id: str,
-    attachment_lookup: dict[str, dict] | None = None,
-    image_map: dict[str, "NoteImage"] | None = None,
-) -> str:
-    """Replace NoteStation image tags with either real image URLs or placeholders.
-
-    If an image has been extracted from an NSX export and exists in the database,
-    we produce an ``<img src="/api/images/{note_id}/{ref}">`` tag. Otherwise,
-    we produce a placeholder ``<img alt="notestation-image:...">`` tag for the
-    frontend to render as a styled card.
-
-    Args:
-        html: HTML content from NoteStation.
-        note_id: The note's object_id for constructing image URLs.
-        attachment_lookup: Dict mapping attachment refs/IDs to metadata dicts
-                           with keys like ``name``, ``width``, ``height``.
-        image_map: Dict mapping image refs to NoteImage DB records (if available).
-    """
-    if not html:
-        return html
-
-    def _replace(match: re.Match) -> str:
-        ref_b64 = match.group(1)
-        try:
-            decoded_name = base64.b64decode(ref_b64).decode("utf-8")
-        except Exception:
-            decoded_name = "image"
-
-        # Look up attachment metadata for a human-readable name & dimensions
-        display_name = decoded_name
-        width = ""
-        height = ""
-        if attachment_lookup:
-            for att in attachment_lookup.values():
-                if not isinstance(att, dict):
-                    continue
-                if att.get("ref") == decoded_name or att.get("name") == decoded_name:
-                    display_name = att.get("name", decoded_name)
-                    if att.get("width"):
-                        width = str(att["width"])
-                    if att.get("height"):
-                        height = str(att["height"])
-                    break
-
-        # Check if we have an extracted image for this ref
-        img_record = None
-        if image_map:
-            # Direct lookup by decoded name or attachment name
-            img_record = image_map.get(decoded_name)
-            # Decoded name may have a timestamp prefix (e.g. "1770102482260ns_attach_...")
-            # Try matching by suffix against known image names
-            if not img_record:
-                for candidate in image_map.values():
-                    if candidate.name and decoded_name.endswith(candidate.name):
-                        img_record = candidate
-                        break
-
-        if img_record:
-            # Use dimensions from DB if available (more reliable than attachment metadata)
-            if img_record.width:
-                width = str(img_record.width)
-            if img_record.height:
-                height = str(img_record.height)
-
-            # Produce a real <img> tag with API URL
-            # Use the DB ref (NSX attachment key) for the URL path
-            from urllib.parse import quote
-            safe_ref = quote(img_record.ref, safe="")
-            parts = [f'<img src="/api/images/{note_id}/{safe_ref}"']
-            parts.append(f' alt="{display_name}"')
-            if width:
-                parts.append(f' width="{width}"')
-            if height:
-                parts.append(f' height="{height}"')
-            parts.append(' class="notestation-image" loading="lazy" />')
-            return "".join(parts)
-
-        # No extracted image available - produce a placeholder
-        parts = [f'<img alt="notestation-image:{display_name}"']
-        if width:
-            parts.append(f' width="{width}"')
-        if height:
-            parts.append(f' height="{height}"')
-        parts.append(" />")
-        return "".join(parts)
-
-    return _NOTESTATION_IMG_RE.sub(_replace, html)

@@ -6,6 +6,7 @@ import { useAIStream } from '@/hooks/useAIStream'
 import { MarkdownRenderer } from './MarkdownRenderer'
 import { LoadingSpinner } from './LoadingSpinner'
 import { cn } from '@/lib/utils'
+import { apiClient } from '@/lib/api'
 import {
   Sparkles,
   Lightbulb,
@@ -27,13 +28,15 @@ const actions: { id: QuickAction; label: string; icon: typeof Lightbulb; descrip
 ]
 
 interface NoteAIPanelProps {
+  noteId: string
   noteContent: string
   noteTitle: string
 }
 
-export function NoteAIPanel({ noteContent, noteTitle }: NoteAIPanelProps) {
+export function NoteAIPanel({ noteId, noteContent, noteTitle }: NoteAIPanelProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
   const { content, isStreaming, error, startStream, reset } = useAIStream()
 
   const handleAction = async (action: QuickAction) => {
@@ -53,6 +56,14 @@ export function NoteAIPanel({ noteContent, noteTitle }: NoteAIPanelProps) {
     await navigator.clipboard.writeText(content)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  const handleInsert = async () => {
+    if (!content || isSaving) return
+    setIsSaving(true)
+    const merged = `${noteContent}\n\n---\n\n## AI 요약\n\n${content}`
+    await apiClient.put(`/notes/${noteId}`, { content: merged })
+    window.location.reload()
   }
 
   if (!isOpen) {
@@ -128,17 +139,30 @@ export function NoteAIPanel({ noteContent, noteTitle }: NoteAIPanelProps) {
         {content && (
           <div className="relative">
             {!isStreaming && (
-              <button
-                onClick={handleCopy}
-                className="absolute top-0 right-0 p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                aria-label={copied ? '복사됨' : '결과 복사'}
-              >
-                {copied ? (
-                  <Check className="h-3.5 w-3.5 text-green-600" />
-                ) : (
-                  <Copy className="h-3.5 w-3.5" />
-                )}
-              </button>
+              <div className="absolute top-0 right-0 flex items-center gap-1.5">
+                <button
+                  onClick={handleInsert}
+                  disabled={isSaving}
+                  className={cn(
+                    'px-2 py-1 text-[11px] rounded border border-input text-muted-foreground',
+                    'hover:text-foreground hover:border-primary/40 hover:bg-primary/5 transition-colors',
+                    'disabled:opacity-50 disabled:cursor-not-allowed'
+                  )}
+                >
+                  {isSaving ? '삽입 중...' : '노트에 삽입'}
+                </button>
+                <button
+                  onClick={handleCopy}
+                  className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                  aria-label={copied ? '복사됨' : '결과 복사'}
+                >
+                  {copied ? (
+                    <Check className="h-3.5 w-3.5 text-green-600" />
+                  ) : (
+                    <Copy className="h-3.5 w-3.5" />
+                  )}
+                </button>
+              </div>
             )}
             <MarkdownRenderer content={content} className="text-sm" />
             {isStreaming && (
