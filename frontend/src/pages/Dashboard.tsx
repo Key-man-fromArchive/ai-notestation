@@ -17,6 +17,7 @@ import {
   Clock,
   Notebook,
   BookOpen,
+  ImageOff,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -43,7 +44,7 @@ interface NotebooksResponse {
 }
 
 export default function Dashboard() {
-  const { status: syncStatus, lastSync, error: syncError, triggerSync } = useSync()
+  const { status: syncStatus, lastSync, error: syncError, notesMissingImages, triggerSync } = useSync()
 
   const { data, isLoading } = useQuery<NotesResponse>({
     queryKey: ['notes', 'recent'],
@@ -101,6 +102,33 @@ export default function Dashboard() {
               className="inline-block px-4 py-2 bg-destructive text-destructive-foreground rounded-md text-sm hover:bg-destructive/90 transition-colors"
             >
               설정 확인하기
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {/* 이미지 누락 노트 알림 배너 */}
+      {notesMissingImages > 0 && syncStatus !== 'error' && (
+        <div
+          className="flex items-start gap-3 p-4 bg-amber-500/10 border border-amber-500/20 rounded-md"
+          role="alert"
+        >
+          <ImageOff
+            className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5"
+            aria-hidden="true"
+          />
+          <div className="flex-1">
+            <h3 className="font-semibold text-amber-700 mb-1">
+              {notesMissingImages}개 노트에 이미지가 표시되지 않습니다
+            </h3>
+            <p className="text-sm text-amber-600/80 mb-2">
+              새로 추가된 노트의 이미지를 보려면 NoteStation에서 NSX 파일을 내보내고 가져오기 해주세요.
+            </p>
+            <Link
+              to="/settings"
+              className="inline-block px-4 py-2 bg-amber-600 text-white rounded-md text-sm hover:bg-amber-700 transition-colors"
+            >
+              NSX 가져오기
             </Link>
           </div>
         </div>

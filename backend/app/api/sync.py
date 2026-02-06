@@ -51,6 +51,7 @@ class SyncStatusResponse(BaseModel):
     last_sync_at: str | None = None
     notes_synced: int | None = None
     error_message: str | None = None
+    notes_missing_images: int | None = None  # Notes with image refs but no extracted images
 
 
 # ---------------------------------------------------------------------------
@@ -67,6 +68,7 @@ class SyncState:
         last_sync_at: ISO-8601 timestamp of the last completed sync.
         notes_synced: Total note count from the last successful sync.
         error_message: Error message if the last sync failed.
+        notes_missing_images: Count of notes with image refs but no extracted images.
     """
 
     def __init__(self) -> None:
@@ -75,6 +77,7 @@ class SyncState:
         self.last_sync_at: str | None = None
         self.notes_synced: int | None = None
         self.error_message: str | None = None
+        self.notes_missing_images: int | None = None
 
 
 # Module-level singleton -- shared across requests.
@@ -118,6 +121,26 @@ async def _create_sync_service() -> tuple:
     return service, session
 
 
+async def _count_notes_missing_images() -> int:
+    from sqlalchemy import func, text
+    from app.database import async_session_factory
+    from app.models import Note, NoteImage
+
+    async with async_session_factory() as session:
+        result = await session.execute(
+            text("""
+                SELECT COUNT(DISTINCT n.synology_note_id)
+                FROM notes n
+                WHERE n.content_html ~ '<img[^>]*ref="[^"]+"'
+                AND NOT EXISTS (
+                    SELECT 1 FROM note_images ni
+                    WHERE ni.synology_note_id = n.synology_note_id
+                )
+            """)
+        )
+        return result.scalar() or 0
+
+
 async def _run_sync_background(state: SyncState) -> None:
     """Execute the full synchronisation and update *state* accordingly.
 
@@ -142,13 +165,15 @@ async def _run_sync_background(state: SyncState) -> None:
             state.last_sync_at = result.synced_at.isoformat()
             state.notes_synced = result.total
             state.error_message = None
+            state.notes_missing_images = await _count_notes_missing_images()
 
             logger.info(
-                "Sync completed: total=%d, added=%d, updated=%d, deleted=%d",
+                "Sync completed: total=%d, added=%d, updated=%d, deleted=%d, missing_images=%d",
                 result.total,
                 result.added,
                 result.updated,
                 result.deleted,
+                state.notes_missing_images,
             )
         finally:
             await session.close()
@@ -206,4 +231,5 @@ async def get_sync_status(
         last_sync_at=_sync_state.last_sync_at,
         notes_synced=_sync_state.notes_synced,
         error_message=_sync_state.error_message,
+        notes_missing_images=_sync_state.notes_missing_images,
     )

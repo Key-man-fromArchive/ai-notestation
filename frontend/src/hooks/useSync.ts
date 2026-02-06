@@ -10,6 +10,7 @@ interface SyncStatus {
   last_sync_at: string | null
   notes_synced: number | null
   error_message: string | null
+  notes_missing_images: number | null
 }
 
 /**
@@ -44,6 +45,7 @@ export function useSync() {
     lastSync: data?.last_sync_at,
     notesSynced: data?.notes_synced,
     error: data?.error_message,
+    notesMissingImages: data?.notes_missing_images ?? 0,
     isLoading,
     triggerSync: triggerMutation.mutateAsync,
     isSyncing: triggerMutation.isPending,
