@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { apiClient, ApiError } from '@/lib/api'
+import { apiClient } from '@/lib/api'
 
 interface OAuthStatus {
   connected: boolean
@@ -11,6 +11,7 @@ interface OAuthStatus {
 interface OAuthConfigStatus {
   provider: string
   configured: boolean
+  auth_mode?: 'device_code' | 'code_paste' | 'api_key' | ''
 }
 
 interface OAuthCallbackParams {
@@ -21,6 +22,22 @@ interface OAuthCallbackParams {
 interface OAuthCallbackResponse {
   connected: boolean
   provider: string
+  email?: string
+}
+
+interface DeviceCodeStartResponse {
+  device_code: string
+  user_code: string
+  verification_uri: string
+  verification_uri_complete?: string | null
+  expires_in: number
+  interval: number
+}
+
+interface DeviceCodePollResponse {
+  status: 'pending' | 'completed' | 'expired' | 'denied' | 'slow_down'
+  connected: boolean
+  provider?: string
   email?: string
 }
 
@@ -37,14 +54,14 @@ export function useOAuth(provider: string) {
   const configQuery = useQuery<OAuthConfigStatus>({
     queryKey: ['oauth', 'config', provider],
     queryFn: () => apiClient.get(`/oauth/${provider}/config-status`),
-    enabled: provider === 'openai' || provider === 'google',
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    enabled: provider === 'openai' || provider === 'google' || provider === 'anthropic',
+    staleTime: 5 * 60 * 1000,
   })
 
   const statusQuery = useQuery<OAuthStatus>({
     queryKey: ['oauth', 'status', provider],
     queryFn: () => apiClient.get(`/oauth/${provider}/status`),
-    enabled: provider === 'openai' || provider === 'google',
+    enabled: provider === 'openai' || provider === 'google' || provider === 'anthropic',
   })
 
   const connectMutation = useMutation({
@@ -73,18 +90,45 @@ export function useOAuth(provider: string) {
     },
   })
 
+  const startDeviceFlowMutation = useMutation({
+    mutationFn: () =>
+      apiClient.post<DeviceCodeStartResponse>(`/oauth/${provider}/device/start`, {}),
+  })
+
+  const pollDeviceTokenMutation = useMutation({
+    mutationFn: (deviceCode: string) =>
+      apiClient.post<DeviceCodePollResponse>(`/oauth/${provider}/device/poll`, {
+        device_code: deviceCode,
+      }),
+    onSuccess: data => {
+      if (data.connected) {
+        queryClient.invalidateQueries({ queryKey: ['oauth', 'status', provider] })
+      }
+    },
+  })
+
   return {
     configured: configQuery.data?.configured ?? false,
     connected: statusQuery.data?.connected ?? false,
     email: statusQuery.data?.email ?? null,
+    authMode: configQuery.data?.auth_mode ?? '',
     isLoading: statusQuery.isLoading || configQuery.isLoading,
     isConnecting: connectMutation.isPending,
     isDisconnecting: disconnectMutation.isPending,
     connectError: connectMutation.error,
     connect: connectMutation.mutateAsync,
     authUrl: connectMutation.data?.authorization_url ?? null,
+    authState: connectMutation.data?.state ?? null,
     disconnect: disconnectMutation.mutate,
     exchangeCode: callbackMutation.mutateAsync,
+    isExchangingCode: callbackMutation.isPending,
     callbackError: callbackMutation.error,
+    startDeviceFlow: startDeviceFlowMutation.mutateAsync,
+    deviceFlowData: startDeviceFlowMutation.data ?? null,
+    isStartingDeviceFlow: startDeviceFlowMutation.isPending,
+    deviceFlowError: startDeviceFlowMutation.error,
+    pollDeviceToken: pollDeviceTokenMutation.mutateAsync,
+    isPollingDevice: pollDeviceTokenMutation.isPending,
+    pollError: pollDeviceTokenMutation.error,
   }
 }

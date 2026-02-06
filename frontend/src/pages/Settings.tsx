@@ -335,7 +335,13 @@ function ApiKeysSection({
               {hasOAuth && (
                 <OAuthSection
                   provider={setting.oauthProvider!}
-                  label={setting.oauthProvider === 'google' ? 'Google' : 'ChatGPT (Plus/Pro)'}
+                  label={
+                    setting.oauthProvider === 'google'
+                      ? 'Google'
+                      : setting.oauthProvider === 'anthropic'
+                        ? 'Claude (Pro/Max)'
+                        : 'ChatGPT (Plus/Pro)'
+                  }
                 />
               )}
 

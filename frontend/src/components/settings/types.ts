@@ -49,6 +49,7 @@ export const apiKeySettingsList: Setting[] = [
     label: 'Anthropic API Key',
     type: 'password',
     placeholder: 'ant-...',
+    oauthProvider: 'anthropic',
   },
   {
     key: 'google_api_key',

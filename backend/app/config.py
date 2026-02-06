@@ -47,6 +47,7 @@ class Settings(BaseSettings):
     OAUTH_ENCRYPTION_KEY: str = ""  # Fernet key for token encryption
     APP_BASE_URL: str = "http://localhost:3000"  # Frontend URL for OAuth callback
     OPENAI_OAUTH_CLIENT_ID: str = ""  # Codex CLI client ID (app_EMoamEEZ73f0CkXaXp7hrann)
+    ANTHROPIC_OAUTH_CLIENT_ID: str = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"  # Claude OAuth
     GOOGLE_OAUTH_CLIENT_ID: str = ""
     GOOGLE_OAUTH_CLIENT_SECRET: str = ""
 

@@ -61,11 +61,37 @@ class DisconnectResponse(BaseModel):
 class ConfigStatusResponse(BaseModel):
     provider: str
     configured: bool
+    auth_mode: str = ""
+
+
+class DeviceCodeStartRequest(BaseModel):
+    pass
+
+
+class DeviceCodeStartResponse(BaseModel):
+    device_code: str
+    user_code: str
+    verification_uri: str
+    verification_uri_complete: str | None = None
+    expires_in: int
+    interval: int
+
+
+class DeviceCodePollRequest(BaseModel):
+    device_code: str
+
+
+class DeviceCodePollResponse(BaseModel):
+    status: str
+    connected: bool
+    provider: str | None = None
+    email: str | None = None
 
 
 # ---------------------------------------------------------------------------
 # Dependencies
 # ---------------------------------------------------------------------------
+
 
 def _get_oauth_service() -> OAuthService:
     return OAuthService()
@@ -180,3 +206,65 @@ async def disconnect(
         db=db,
     )
     return DisconnectResponse(**result)
+
+
+@router.post("/{provider}/device/start", response_model=DeviceCodeStartResponse)
+async def start_device_flow(
+    provider: str,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    oauth_service: OAuthService = Depends(_get_oauth_service),
+) -> DeviceCodeStartResponse:
+    """Start Device Authorization Grant flow for headless authentication."""
+    _validate_provider(provider)
+
+    try:
+        result = await oauth_service.start_device_flow(
+            provider=provider,
+            username=current_user["username"],
+            db=db,
+        )
+        return DeviceCodeStartResponse(
+            device_code=str(result["device_code"]),
+            user_code=str(result["user_code"]),
+            verification_uri=str(result["verification_uri"]),
+            verification_uri_complete=result.get("verification_uri_complete"),  # type: ignore[arg-type]
+            expires_in=int(result["expires_in"]),
+            interval=int(result["interval"]),
+        )
+    except OAuthError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=exc.message,
+        ) from exc
+
+
+@router.post("/{provider}/device/poll", response_model=DeviceCodePollResponse)
+async def poll_device_token(
+    provider: str,
+    body: DeviceCodePollRequest,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    oauth_service: OAuthService = Depends(_get_oauth_service),
+) -> DeviceCodePollResponse:
+    """Poll for token after user completes device authorization."""
+    _validate_provider(provider)
+
+    try:
+        result = await oauth_service.poll_device_token(
+            provider=provider,
+            username=current_user["username"],
+            device_code=body.device_code,
+            db=db,
+        )
+        return DeviceCodePollResponse(
+            status=str(result["status"]),
+            connected=bool(result["connected"]),
+            provider=result.get("provider"),  # type: ignore[arg-type]
+            email=result.get("email"),  # type: ignore[arg-type]
+        )
+    except OAuthError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=exc.message,
+        ) from exc
