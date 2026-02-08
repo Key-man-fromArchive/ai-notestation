@@ -45,6 +45,13 @@ class SynologyAuthError(Exception):
         super().__init__(self.message)
 
 
+class Synology2FARequired(Exception):
+    """Raised when 2-factor authentication is required (error code 403)."""
+
+    def __init__(self) -> None:
+        super().__init__("2-factor authentication required")
+
+
 class SynologyApiError(Exception):
     """Raised when a non-auth Synology API call fails.
 
@@ -90,7 +97,7 @@ class SynologyClient:
     # Authentication
     # ------------------------------------------------------------------
 
-    async def login(self) -> str:
+    async def login(self, otp_code: str | None = None) -> str:
         """Log in to the Synology NAS and return the session ID.
 
         Sends a GET request to ``/webapi/auth.cgi`` with
@@ -102,8 +109,9 @@ class SynologyClient:
         Raises:
             SynologyAuthError: If the login response indicates failure
                 (e.g. wrong credentials, account disabled).
+            Synology2FARequired: If 2FA is enabled and otp_code not provided.
         """
-        params = {
+        params: dict[str, str | int] = {
             "api": "SYNO.API.Auth",
             "version": 6,
             "method": "login",
@@ -113,6 +121,10 @@ class SynologyClient:
             "format": "sid",
         }
 
+        if otp_code:
+            params["otp_code"] = otp_code
+            params["enable_device_token"] = "yes"
+
         response = await self._client.get(
             f"{self._url}/webapi/auth.cgi",
             params=params,
@@ -121,6 +133,9 @@ class SynologyClient:
 
         if not data.get("success"):
             error_code = data.get("error", {}).get("code", 0)
+            if error_code == 403:
+                logger.info("Synology 2FA required for user=%s", self._user)
+                raise Synology2FARequired()
             logger.warning("Synology login failed (code=%d)", error_code)
             raise SynologyAuthError(error_code)
 

@@ -22,7 +22,7 @@ from app.services.auth_service import (
     get_current_user,
     verify_token,
 )
-from app.synology_gateway.client import SynologyAuthError, SynologyClient
+from app.synology_gateway.client import Synology2FARequired, SynologyAuthError, SynologyClient
 
 logger = logging.getLogger(__name__)
 
@@ -35,10 +35,9 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 class LoginRequest(BaseModel):
-    """Login request body."""
-
     username: str
     password: str
+    otp_code: str | None = None
 
 
 class TokenResponse(BaseModel):
@@ -95,25 +94,29 @@ def _create_synology_client(username: str, password: str) -> SynologyClient:
 # ---------------------------------------------------------------------------
 
 
-@router.post("/login", response_model=TokenResponse)
-async def login(request: LoginRequest) -> TokenResponse:
-    """Authenticate via Synology NAS and return JWT tokens.
+class TwoFactorRequiredResponse(BaseModel):
+    requires_2fa: bool = True
+    message: str = "2-factor authentication required"
 
-    The user's credentials are forwarded to the Synology NAS.
-    On success, a JWT access + refresh token pair is returned.
 
-    Raises:
-        HTTPException 401: If Synology authentication fails.
-    """
+@router.post("/login")
+async def login(request: LoginRequest) -> TokenResponse | TwoFactorRequiredResponse:
     client = _create_synology_client(request.username, request.password)
 
     try:
-        await client.login()
-    except SynologyAuthError:
-        logger.warning("Login failed for user=%s", request.username)
+        await client.login(otp_code=request.otp_code)
+    except Synology2FARequired:
+        await client.close()
+        return TwoFactorRequiredResponse()
+    except SynologyAuthError as e:
+        await client.close()
+        detail = "Invalid Synology credentials"
+        if e.code == 404:
+            detail = "Invalid OTP code"
+        logger.warning("Login failed for user=%s (code=%d)", request.username, e.code)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid Synology credentials",
+            detail=detail,
             headers={"WWW-Authenticate": "Bearer"},
         ) from None
     finally:

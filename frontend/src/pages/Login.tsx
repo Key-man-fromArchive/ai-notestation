@@ -2,23 +2,18 @@ import { useState, type FormEvent } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { ApiError } from '@/lib/api'
-import { Loader2, FlaskConical, AlertCircle } from 'lucide-react'
+import { Loader2, FlaskConical, AlertCircle, ShieldCheck } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-/**
- * 로그인 페이지
- * - 전체화면 중앙 정렬 (사이드바 없음)
- * - Synology NAS 계정으로 인증
- * - 카드 레이아웃 + 브랜딩
- */
 export default function Login() {
   const { isAuthenticated, login } = useAuth()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [otpCode, setOtpCode] = useState('')
+  const [requires2FA, setRequires2FA] = useState(false)
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  // 이미 로그인 상태면 메인으로 리다이렉트
   if (isAuthenticated) {
     return <Navigate to="/" replace />
   }
@@ -29,10 +24,18 @@ export default function Login() {
     setIsSubmitting(true)
 
     try {
-      await login(username, password)
+      const result = await login(username, password, requires2FA ? otpCode : undefined)
+      if (result.requires2FA) {
+        setRequires2FA(true)
+        setOtpCode('')
+      }
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
-        setError('아이디 또는 비밀번호가 올바르지 않습니다.')
+        if (requires2FA) {
+          setError('OTP 코드가 올바르지 않습니다.')
+        } else {
+          setError('아이디 또는 비밀번호가 올바르지 않습니다.')
+        }
       } else {
         setError('서버에 연결할 수 없습니다. 네트워크를 확인해 주세요.')
       }
@@ -83,8 +86,8 @@ export default function Login() {
                 onChange={(e) => setUsername(e.target.value)}
                 required
                 autoComplete="username"
-                autoFocus
-                disabled={isSubmitting}
+                autoFocus={!requires2FA}
+                disabled={isSubmitting || requires2FA}
                 className={cn(
                   'flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2',
                   'text-sm text-foreground placeholder:text-muted-foreground',
@@ -110,7 +113,7 @@ export default function Login() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 autoComplete="current-password"
-                disabled={isSubmitting}
+                disabled={isSubmitting || requires2FA}
                 className={cn(
                   'flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2',
                   'text-sm text-foreground placeholder:text-muted-foreground',
@@ -122,9 +125,45 @@ export default function Login() {
               />
             </div>
 
+            {requires2FA && (
+              <div className="space-y-1.5">
+                <label
+                  htmlFor="otp"
+                  className="text-sm font-medium text-foreground flex items-center gap-1.5"
+                >
+                  <ShieldCheck className="h-4 w-4 text-primary" />
+                  2단계 인증 코드
+                </label>
+                <input
+                  id="otp"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={6}
+                  value={otpCode}
+                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                  required
+                  autoFocus
+                  autoComplete="one-time-code"
+                  disabled={isSubmitting}
+                  className={cn(
+                    'flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2',
+                    'text-sm text-foreground placeholder:text-muted-foreground tracking-widest text-center font-mono',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                    'disabled:cursor-not-allowed disabled:opacity-50',
+                    'transition-colors'
+                  )}
+                  placeholder="000000"
+                />
+                <p className="text-xs text-muted-foreground">
+                  인증 앱에서 6자리 코드를 입력하세요
+                </p>
+              </div>
+            )}
+
             <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || (requires2FA && otpCode.length !== 6)}
               className={cn(
                 'inline-flex h-10 w-full items-center justify-center rounded-lg',
                 'bg-primary text-primary-foreground font-medium text-sm',
@@ -140,12 +179,28 @@ export default function Login() {
                     className="mr-2 h-4 w-4 animate-spin"
                     aria-hidden="true"
                   />
-                  로그인 중...
+                  {requires2FA ? '인증 중...' : '로그인 중...'}
                 </>
+              ) : requires2FA ? (
+                '인증'
               ) : (
                 '로그인'
               )}
             </button>
+
+            {requires2FA && (
+              <button
+                type="button"
+                onClick={() => {
+                  setRequires2FA(false)
+                  setOtpCode('')
+                  setError('')
+                }}
+                className="text-sm text-muted-foreground hover:text-foreground transition-colors w-full text-center"
+              >
+                다른 계정으로 로그인
+              </button>
+            )}
           </form>
         </div>
 

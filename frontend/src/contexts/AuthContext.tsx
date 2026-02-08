@@ -12,11 +12,15 @@ interface User {
   username: string
 }
 
+interface LoginResult {
+  requires2FA?: boolean
+}
+
 interface AuthContextType {
   user: User | null
   isLoading: boolean
   isAuthenticated: boolean
-  login: (username: string, password: string) => Promise<void>
+  login: (username: string, password: string, otpCode?: string) => Promise<LoginResult>
   logout: () => void
 }
 
@@ -106,16 +110,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     restoreAuth()
   }, [fetchUser, refreshAccessToken])
 
-  const login = useCallback(async (username: string, password: string) => {
+  const login = useCallback(async (username: string, password: string, otpCode?: string): Promise<LoginResult> => {
     const data = await apiClient.post<{
-      access_token: string
-      refresh_token: string
-      token_type: string
-    }>('/auth/login', { username, password })
+      access_token?: string
+      refresh_token?: string
+      token_type?: string
+      requires_2fa?: boolean
+    }>('/auth/login', { username, password, otp_code: otpCode })
 
-    apiClient.setToken(data.access_token)
-    apiClient.setRefreshToken(data.refresh_token)
-    setUser({ username })
+    if (data.requires_2fa) {
+      return { requires2FA: true }
+    }
+
+    if (data.access_token && data.refresh_token) {
+      apiClient.setToken(data.access_token)
+      apiClient.setRefreshToken(data.refresh_token)
+      setUser({ username })
+    }
+
+    return {}
   }, [])
 
   const logout = useCallback(() => {
