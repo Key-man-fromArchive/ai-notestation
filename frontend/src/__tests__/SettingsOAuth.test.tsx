@@ -81,6 +81,14 @@ function mockDefaultApi(overrides?: Record<string, unknown>) {
         (overrides as Record<string, unknown>)?.googleStatus ?? { connected: false, provider: 'google' }
       )
     }
+    if (path === '/oauth/anthropic/config-status') {
+      return Promise.resolve({ configured: true, provider: 'anthropic' })
+    }
+    if (path === '/oauth/anthropic/status') {
+      return Promise.resolve(
+        (overrides as Record<string, unknown>)?.anthropicStatus ?? { connected: false, provider: 'anthropic' }
+      )
+    }
     return Promise.resolve({})
   })
 }
@@ -191,15 +199,15 @@ describe('Settings OAuth UI', () => {
 
     await waitFor(() => {
       const toggleButtons = screen.getAllByText(/API 키로 직접 입력/i)
-      expect(toggleButtons.length).toBe(2) // OpenAI + Google
+      expect(toggleButtons.length).toBe(3) // OpenAI + Google + Anthropic
     })
   })
 
-  it('does not show OAuth for Anthropic and ZhipuAI', async () => {
+  it('shows direct API key input only for ZhipuAI (non-OAuth provider)', async () => {
     vi.mocked(api.apiClient.get).mockImplementation((path: string) => {
       if (path === '/settings') {
         return Promise.resolve({
-          settings: toSettingsArray({ ...DEFAULT_SETTINGS, anthropic_api_key: 'ant****' }),
+          settings: toSettingsArray({ ...DEFAULT_SETTINGS, zhipuai_api_key: 'glm****' }),
         })
       }
       if (path === '/oauth/openai/config-status') {
@@ -214,6 +222,12 @@ describe('Settings OAuth UI', () => {
       if (path === '/oauth/google/status') {
         return Promise.resolve({ connected: false, provider: 'google' })
       }
+      if (path === '/oauth/anthropic/config-status') {
+        return Promise.resolve({ configured: true, provider: 'anthropic' })
+      }
+      if (path === '/oauth/anthropic/status') {
+        return Promise.resolve({ connected: false, provider: 'anthropic' })
+      }
       return Promise.resolve({})
     })
 
@@ -223,15 +237,12 @@ describe('Settings OAuth UI', () => {
       expect(screen.getByRole('heading', { name: /설정/ })).toBeInTheDocument()
     })
 
+    // ZhipuAI has no OAuth, so input is directly visible
     await waitFor(() => {
-      expect(screen.getByLabelText(/Anthropic API Key/i)).toBeInTheDocument()
       expect(screen.getByLabelText(/ZhipuAI API Key/i)).toBeInTheDocument()
     })
 
-    // Verify no OAuth buttons for these providers
-    expect(
-      screen.queryByRole('button', { name: /Anthropic로 연결/i })
-    ).not.toBeInTheDocument()
+    // Verify no OAuth button for ZhipuAI
     expect(
       screen.queryByRole('button', { name: /ZhipuAI로 연결/i })
     ).not.toBeInTheDocument()

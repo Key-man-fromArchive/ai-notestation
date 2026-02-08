@@ -93,8 +93,8 @@ describe('Members Page', () => {
       render(<Members />, { wrapper: createWrapper() })
 
       await waitFor(() => {
-        expect(screen.getByRole('heading', { name: /members/i })).toBeInTheDocument()
-        expect(screen.getByText(/4 total/i)).toBeInTheDocument()
+        expect(screen.getByRole('heading', { name: /멤버/i })).toBeInTheDocument()
+        expect(screen.getByText(/4명/)).toBeInTheDocument()
       })
     })
 
@@ -143,7 +143,7 @@ describe('Members Page', () => {
       render(<Members />, { wrapper: createWrapper() })
 
       await waitFor(() => {
-        const ownerRow = screen.getByText('owner@example.com').closest('div[class*="flex items-center justify-between"]')
+        const ownerRow = screen.getByText('owner@example.com').closest('div[class*="flex items-center justify-between"]') as HTMLElement | null
         expect(ownerRow).toBeInTheDocument()
         expect(within(ownerRow!).queryByText('Edit')).not.toBeInTheDocument()
       })

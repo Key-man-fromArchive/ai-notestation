@@ -69,7 +69,7 @@ describe('useOAuth hook', () => {
   })
 
   it('disables query for unsupported providers', () => {
-    const { result } = renderHook(() => useOAuth('anthropic'), {
+    const { result } = renderHook(() => useOAuth('zhipuai'), {
       wrapper: createWrapper(),
     })
 
@@ -166,7 +166,7 @@ describe('useOAuth hook', () => {
       provider: 'openai',
     })
 
-    const { result } = renderHook(() => useOAuth('openai'), {
+    renderHook(() => useOAuth('openai'), {
       wrapper: createWrapper(),
     })
 

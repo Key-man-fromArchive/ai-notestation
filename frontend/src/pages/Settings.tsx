@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/lib/api'
 import { useSync } from '@/hooks/useSync'
+import { useSearchIndex } from '@/hooks/useSearchIndex'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
 import { EmptyState } from '@/components/EmptyState'
 import {
@@ -20,6 +21,8 @@ import {
   ChevronRight,
   Wifi,
   WifiOff,
+  Search,
+  Database,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -66,7 +69,8 @@ export default function Settings() {
 
   const handleEdit = (key: string, currentValue: string) => {
     setEditingKey(key)
-    setEditValue(currentValue)
+    const isApiKey = key.endsWith('_api_key') || key === 'nas_password'
+    setEditValue(isApiKey ? '' : currentValue)
   }
 
   const handleSave = async (key: string) => {
@@ -107,8 +111,8 @@ export default function Settings() {
   return (
     <div className="flex flex-col gap-6 max-w-3xl">
       <div>
-        <h2 className="text-2xl font-bold mb-2">설정</h2>
-        <p className="text-muted-foreground">LabNote AI의 기본 설정을 관리합니다</p>
+        <h1 className="text-2xl font-bold mb-1">설정</h1>
+        <p className="text-sm text-muted-foreground">LabNote AI의 기본 설정을 관리합니다</p>
       </div>
 
       <NasConnectionSection
@@ -128,6 +132,7 @@ export default function Settings() {
 
       <NsxImportSection />
       <BackupSection />
+      <SearchIndexSection />
 
       <ApiKeysSection
         data={data}
@@ -144,7 +149,7 @@ export default function Settings() {
 
       {updateMutation.isSuccess && (
         <div
-          className="flex items-center gap-2 p-3 bg-green-500/10 border border-green-500/20 rounded-md"
+          className="flex items-center gap-2 p-3 bg-green-500/10 border border-green-500/20 rounded-lg"
           role="status"
         >
           <CheckCircle className="h-5 w-5 text-green-600" aria-hidden="true" />
@@ -154,7 +159,7 @@ export default function Settings() {
 
       {updateMutation.isError && (
         <div
-          className="flex items-center gap-2 p-3 bg-destructive/10 border border-destructive/20 rounded-md"
+          className="flex items-center gap-2 p-3 bg-destructive/10 border border-destructive/20 rounded-lg"
           role="alert"
         >
           <AlertCircle className="h-5 w-5 text-destructive" aria-hidden="true" />
@@ -168,8 +173,8 @@ export default function Settings() {
 interface NasConnectionSectionProps {
   data: SettingsData | undefined
   syncStatus: string
-  lastSync: string | null
-  syncError: string | null
+  lastSync: string | null | undefined
+  syncError: string | null | undefined
   editingKey: string | null
   editValue: string
   isPending: boolean
@@ -226,7 +231,7 @@ function NasConnectionSection({
 
       {syncError && (
         <div
-          className="mb-4 p-3 bg-destructive/10 border border-destructive/20 rounded-md"
+          className="mb-4 p-3 bg-destructive/10 border border-destructive/20 rounded-lg"
           role="alert"
         >
           <p className="text-sm text-destructive">{syncError}</p>
@@ -470,6 +475,105 @@ function ApiKeysSection({
             </div>
           )
         })}
+      </div>
+    </div>
+  )
+}
+
+function SearchIndexSection() {
+  const {
+    status,
+    totalNotes,
+    indexedNotes,
+    pendingNotes,
+    progress,
+    error,
+    triggerIndex,
+    isIndexing,
+  } = useSearchIndex()
+
+  const handleTriggerIndex = () => {
+    triggerIndex()
+  }
+
+  const indexPercentage =
+    totalNotes > 0 ? Math.round((indexedNotes / totalNotes) * 100) : 0
+
+  return (
+    <div className="p-4 border border-input rounded-md">
+      <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
+        <Database className="h-5 w-5" aria-hidden="true" />
+        검색 인덱싱
+      </h3>
+
+      <p className="text-sm text-muted-foreground mb-4">
+        Semantic Search를 위한 노트 임베딩을 생성합니다. OPENAI_API_KEY가
+        설정되어 있어야 합니다.
+      </p>
+
+      <div className="space-y-3 mb-4">
+        <div className="flex justify-between text-sm">
+          <span>전체 노트</span>
+          <span className="font-medium">{totalNotes.toLocaleString()}개</span>
+        </div>
+        <div className="flex justify-between text-sm">
+          <span>인덱싱 완료</span>
+          <span className="font-medium text-green-600">
+            {indexedNotes.toLocaleString()}개 ({indexPercentage}%)
+          </span>
+        </div>
+        <div className="flex justify-between text-sm">
+          <span>인덱싱 대기</span>
+          <span className="font-medium text-amber-600">
+            {pendingNotes.toLocaleString()}개
+          </span>
+        </div>
+
+        {status === 'indexing' && (
+          <div className="mt-2">
+            <div className="h-2 bg-muted rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary transition-all duration-300"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground mt-1 text-center">
+              배치 진행 중... {progress}%
+            </p>
+          </div>
+        )}
+      </div>
+
+      {error && (
+        <div
+          className="mb-4 p-3 bg-destructive/10 border border-destructive/20 rounded-lg"
+          role="alert"
+        >
+          <p className="text-sm text-destructive">{error}</p>
+        </div>
+      )}
+
+      <div className="flex items-center gap-3">
+        <button
+          onClick={handleTriggerIndex}
+          disabled={isIndexing || pendingNotes === 0}
+          className={cn(
+            'flex items-center gap-2 px-4 py-2 rounded-md',
+            'bg-primary text-primary-foreground',
+            'hover:bg-primary/90 transition-colors',
+            'disabled:opacity-50 disabled:cursor-not-allowed',
+          )}
+        >
+          <Search className="h-4 w-4" aria-hidden="true" />
+          {isIndexing ? '인덱싱 중...' : '인덱싱 시작'}
+        </button>
+
+        {status === 'completed' && pendingNotes === 0 && (
+          <div className="flex items-center gap-2 text-green-600">
+            <CheckCircle className="h-4 w-4" aria-hidden="true" />
+            <span className="text-sm">모든 노트가 인덱싱되었습니다</span>
+          </div>
+        )}
       </div>
     </div>
   )

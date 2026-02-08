@@ -67,6 +67,7 @@ describe('Settings Page', () => {
             { key: 'nas_password', value: '****' },
             { key: 'openai_api_key', value: 'sk-****' },
             { key: 'anthropic_api_key', value: 'ant****' },
+            { key: 'zhipuai_api_key', value: 'glm****' },
           ],
         })
       }
@@ -90,13 +91,12 @@ describe('Settings Page', () => {
   it('masks API keys', async () => {
     render(<Settings />, { wrapper: createWrapper() })
 
-    // Anthropic key is always visible (no OAuth)
+    // ZhipuAI key is always visible (no OAuth)
     await waitFor(() => {
-      expect(screen.getByDisplayValue('ant****')).toBeInTheDocument()
+      expect(screen.getByDisplayValue('glm****')).toBeInTheDocument()
     })
 
     // OpenAI key is behind a collapsible toggle (OAuth provider)
-    // Verify the label is present
     expect(screen.getByText(/OpenAI API Key/i)).toBeInTheDocument()
   })
 
