@@ -24,6 +24,7 @@ const Members = lazy(() => import('./pages/Members'))
 const OAuthCallback = lazy(() => import('./pages/OAuthCallback'))
 const Login = lazy(() => import('./pages/Login'))
 const MemberLogin = lazy(() => import('./pages/MemberLogin'))
+const LoginSelect = lazy(() => import('./pages/LoginSelect'))
 const Signup = lazy(() => import('./pages/Signup'))
 const SharedView = lazy(() => import('./pages/SharedView'))
 const Discovery = lazy(() => import('./pages/Discovery'))
@@ -105,7 +106,8 @@ function App() {
             }
           >
             <Routes>
-              <Route path="/login" element={<MemberLogin />} />
+              <Route path="/login" element={<LoginSelect />} />
+              <Route path="/member-login" element={<MemberLogin />} />
               <Route path="/nas-login" element={<Login />} />
               <Route path="/signup" element={<Signup />} />
               <Route path="/shared/:token" element={<SharedView />} />

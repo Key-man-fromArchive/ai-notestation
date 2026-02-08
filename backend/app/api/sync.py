@@ -95,20 +95,17 @@ _sync_state = SyncState()
 # ---------------------------------------------------------------------------
 
 
+class Sync2FARequiredError(Exception):
+    """Raised when NAS account requires 2FA and cannot auto-sync."""
+
+    pass
+
+
 async def _create_sync_service() -> tuple:
-    """Create a SyncService instance with database session.
-
-    Returns:
-        A tuple of (SyncService, AsyncSession) so the caller can manage
-        the session lifecycle.
-
-    Raises:
-        Any exception from session creation or service instantiation.
-    """
     from app.api.settings import get_nas_config
     from app.database import async_session_factory
     from app.services.sync_service import SyncService
-    from app.synology_gateway.client import SynologyClient
+    from app.synology_gateway.client import Synology2FARequired, SynologyClient
     from app.synology_gateway.notestation import NoteStationService
 
     nas = get_nas_config()
@@ -119,7 +116,12 @@ async def _create_sync_service() -> tuple:
         user=nas["user"],
         password=nas["password"],
     )
-    await client.login()
+    try:
+        await client.login()
+    except Synology2FARequired:
+        await client.close()
+        await session.close()
+        raise Sync2FARequiredError("2FA 계정은 자동 동기화를 지원하지 않습니다. NSX 파일을 가져오기하세요.")
 
     notestation = NoteStationService(client)
     service = SyncService(notestation=notestation, db=session)

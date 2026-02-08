@@ -131,14 +131,24 @@ export default function MemberLogin() {
             </button>
           </form>
 
-          <div className="mt-6 text-center text-sm text-muted-foreground">
-            계정이 없으신가요?{' '}
-            <Link
-              to="/signup"
-              className="font-medium text-primary hover:underline"
-            >
-              회원가입
-            </Link>
+          <div className="mt-6 space-y-2 text-center text-sm text-muted-foreground">
+            <div>
+              계정이 없으신가요?{' '}
+              <Link
+                to="/signup"
+                className="font-medium text-primary hover:underline"
+              >
+                회원가입
+              </Link>
+            </div>
+            <div>
+              <Link
+                to="/nas-login"
+                className="text-muted-foreground hover:text-foreground"
+              >
+                Synology NAS로 로그인 →
+              </Link>
+            </div>
           </div>
         </div>
 

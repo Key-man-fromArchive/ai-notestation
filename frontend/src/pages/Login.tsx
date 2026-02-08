@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { ApiError } from '@/lib/api'
 import { Loader2, FlaskConical, AlertCircle, ShieldCheck } from 'lucide-react'
@@ -202,9 +202,17 @@ export default function Login() {
               </button>
             )}
           </form>
+
+          <div className="mt-6 text-center">
+            <Link
+              to="/member-login"
+              className="text-sm text-muted-foreground hover:text-foreground"
+            >
+              멤버 계정으로 로그인 →
+            </Link>
+          </div>
         </div>
 
-        {/* Footer */}
         <p className="text-center text-xs text-muted-foreground mt-6">
           AI-enhanced NoteStation
         </p>

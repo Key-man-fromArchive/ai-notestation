@@ -318,12 +318,7 @@ class NasTestResponse(BaseModel):
 async def test_nas_connection(
     _current_user: dict = Depends(get_current_user),  # noqa: B008
 ) -> NasTestResponse:
-    """Test connectivity to the configured Synology NAS.
-
-    Attempts to authenticate using the current NAS settings.
-    Returns success/failure with a human-readable message.
-    """
-    from app.synology_gateway.client import SynologyAuthError, SynologyClient
+    from app.synology_gateway.client import Synology2FARequired, SynologyAuthError, SynologyClient
 
     nas = get_nas_config()
 
@@ -338,6 +333,8 @@ async def test_nas_connection(
     try:
         await client.login()
         return NasTestResponse(success=True, message="NAS에 성공적으로 연결되었습니다.")
+    except Synology2FARequired:
+        return NasTestResponse(success=True, message="NAS 연결 성공 (2FA 계정)")
     except SynologyAuthError:
         return NasTestResponse(
             success=False,
