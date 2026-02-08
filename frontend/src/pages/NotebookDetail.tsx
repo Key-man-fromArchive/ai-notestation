@@ -1,0 +1,386 @@
+import { useState } from 'react'
+import { useParams, useNavigate, Link } from 'react-router-dom'
+import {
+  ArrowLeft,
+  BookOpen,
+  FileText,
+  Pencil,
+  Share2,
+  Users,
+  AlertCircle,
+  X,
+  Trash2,
+  Shield,
+  Eye,
+  Edit,
+  Network,
+} from 'lucide-react'
+import { useNotebook, useUpdateNotebook, useDeleteNotebook } from '@/hooks/useNotebooks'
+import { useNotebookAccess } from '@/hooks/useNotebookAccess'
+import { ShareDialog } from '@/components/ShareDialog'
+import { useNotes } from '@/hooks/useNotes'
+import { NoteList } from '@/components/NoteList'
+import { LoadingSpinner } from '@/components/LoadingSpinner'
+import { EmptyState } from '@/components/EmptyState'
+import { cn } from '@/lib/utils'
+
+const PERMISSION_OPTIONS = [
+  { value: 'read', label: '읽기', icon: Eye },
+  { value: 'write', label: '편집', icon: Edit },
+  { value: 'admin', label: '관리', icon: Shield },
+]
+
+function PermissionBadge({ permission }: { permission: string }) {
+  const option = PERMISSION_OPTIONS.find(o => o.value === permission)
+  const Icon = option?.icon ?? Eye
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-primary/10 text-primary">
+      <Icon className="h-3 w-3" />
+      {option?.label ?? permission}
+    </span>
+  )
+}
+
+function EditModal({
+  isOpen,
+  onClose,
+  notebookId,
+  initialName,
+  initialDescription,
+}: {
+  isOpen: boolean
+  onClose: () => void
+  notebookId: number
+  initialName: string
+  initialDescription: string | null
+}) {
+  const [name, setName] = useState(initialName)
+  const [description, setDescription] = useState(initialDescription ?? '')
+  const { mutateAsync: updateNotebook, isPending } = useUpdateNotebook()
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!name.trim()) return
+
+    try {
+      await updateNotebook({
+        id: notebookId,
+        data: { name: name.trim(), description: description.trim() || undefined },
+      })
+      onClose()
+    } catch {
+      return
+    }
+  }
+
+  if (!isOpen) return null
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative bg-card rounded-lg shadow-lg w-full max-w-md mx-4 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold">노트북 편집</h2>
+          <button onClick={onClose} className="p-1 rounded hover:bg-accent" aria-label="닫기">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit}>
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="edit-name" className="text-sm font-medium">이름</label>
+              <input
+                id="edit-name"
+                type="text"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                className="w-full mt-1 px-3 py-2 rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                required
+              />
+            </div>
+            <div>
+              <label htmlFor="edit-description" className="text-sm font-medium">설명</label>
+              <textarea
+                id="edit-description"
+                value={description}
+                onChange={e => setDescription(e.target.value)}
+                className="w-full mt-1 px-3 py-2 rounded-md border border-input bg-background resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+                rows={3}
+              />
+            </div>
+          </div>
+          <div className="mt-6 flex justify-end gap-3">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-sm rounded-md hover:bg-accent">
+              취소
+            </button>
+            <button
+              type="submit"
+              disabled={isPending || !name.trim()}
+              className={cn(
+                'px-4 py-2 text-sm rounded-md bg-primary text-primary-foreground',
+                'hover:bg-primary/90 disabled:opacity-50',
+              )}
+            >
+              {isPending ? '저장 중...' : '저장'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+function AccessPanel({ notebookId }: { notebookId: number }) {
+  const [email, setEmail] = useState('')
+  const [permission, setPermission] = useState('read')
+  const {
+    accesses,
+    isLoading,
+    grantAccess,
+    isGranting,
+    revokeAccess,
+    isRevoking,
+  } = useNotebookAccess(notebookId)
+
+  const handleGrant = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!email.trim()) return
+    try {
+      await grantAccess({ email: email.trim(), permission })
+      setEmail('')
+    } catch {
+      return
+    }
+  }
+
+  return (
+    <div className="bg-card rounded-lg border border-border p-4" data-testid="access-panel">
+      <div className="flex items-center gap-2 mb-4">
+        <Users className="h-5 w-5 text-primary" />
+        <h3 className="font-medium">접근 권한</h3>
+      </div>
+
+      <form onSubmit={handleGrant} className="flex gap-2 mb-4">
+        <input
+          type="email"
+          value={email}
+          onChange={e => setEmail(e.target.value)}
+          placeholder="이메일 주소"
+          className="flex-1 px-3 py-2 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+        />
+        <select
+          value={permission}
+          onChange={e => setPermission(e.target.value)}
+          className="px-3 py-2 text-sm rounded-md border border-input bg-background"
+        >
+          {PERMISSION_OPTIONS.map(opt => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+        <button
+          type="submit"
+          disabled={isGranting || !email.trim()}
+          className={cn(
+            'px-4 py-2 text-sm rounded-md bg-primary text-primary-foreground',
+            'hover:bg-primary/90 disabled:opacity-50',
+          )}
+        >
+          {isGranting ? '...' : '추가'}
+        </button>
+      </form>
+
+      {isLoading ? (
+        <div className="flex justify-center py-4">
+          <LoadingSpinner size="sm" />
+        </div>
+      ) : accesses.length === 0 ? (
+        <p className="text-sm text-muted-foreground text-center py-4">
+          아직 공유된 사용자가 없습니다.
+        </p>
+      ) : (
+        <ul className="space-y-2">
+          {accesses.map(access => (
+            <li key={access.id} className="flex items-center justify-between py-2 border-b border-border last:border-0">
+              <div className="flex items-center gap-3">
+                <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-medium text-primary">
+                  {access.user_email?.charAt(0).toUpperCase() ?? '?'}
+                </div>
+                <div>
+                  <p className="text-sm font-medium">{access.user_email ?? '알 수 없음'}</p>
+                  <PermissionBadge permission={access.permission} />
+                </div>
+              </div>
+              <button
+                onClick={() => revokeAccess(access.id)}
+                disabled={isRevoking}
+                className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-destructive"
+                aria-label="권한 삭제"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+export default function NotebookDetail() {
+  const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
+  const notebookId = parseInt(id ?? '0', 10)
+
+  const [isEditOpen, setIsEditOpen] = useState(false)
+  const [isShareOpen, setIsShareOpen] = useState(false)
+  const { data: notebook, isLoading, error } = useNotebook(notebookId)
+  const { mutateAsync: deleteNotebook, isPending: isDeleting } = useDeleteNotebook()
+
+  const {
+    data: notesData,
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+  } = useNotes({ notebook: notebook?.name })
+
+  const notes = notesData?.pages.flatMap(page => page.items) ?? []
+
+  const handleDelete = async () => {
+    if (!confirm('이 노트북을 삭제하시겠습니까?')) return
+    try {
+      await deleteNotebook(notebookId)
+      navigate('/notebooks')
+    } catch {
+      return
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <LoadingSpinner size="lg" />
+      </div>
+    )
+  }
+
+  if (error) {
+    const is404 = error instanceof Error && 'status' in error && (error as { status: number }).status === 404
+    return (
+      <EmptyState
+        icon={AlertCircle}
+        title={is404 ? '노트북을 찾을 수 없습니다' : '에러가 발생했습니다'}
+        description={is404 ? '요청하신 노트북이 존재하지 않거나 접근 권한이 없습니다.' : '알 수 없는 오류'}
+        action={{
+          label: '노트북 목록으로',
+          onClick: () => navigate('/notebooks'),
+        }}
+      />
+    )
+  }
+
+  if (!notebook) return null
+
+  return (
+    <div>
+      <div className="flex items-center gap-4 mb-6">
+        <button
+          onClick={() => navigate('/notebooks')}
+          className="p-2 rounded-lg hover:bg-accent"
+          aria-label="뒤로"
+        >
+          <ArrowLeft className="h-5 w-5" />
+        </button>
+        <div className="flex-1">
+          <div className="flex items-center gap-2">
+            <BookOpen className="h-6 w-6 text-primary" />
+            <h1 className="text-2xl font-bold">{notebook.name}</h1>
+          </div>
+          {notebook.description && (
+            <p className="mt-1 text-muted-foreground">{notebook.description}</p>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <Link
+            to={`/notebooks/${notebookId}/discover`}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-accent bg-primary/10 text-primary"
+          >
+            <Network className="h-4 w-4" />
+            <span>발견하기</span>
+          </Link>
+          <button
+            onClick={() => setIsShareOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-accent"
+          >
+            <Share2 className="h-4 w-4" />
+            <span>공유</span>
+          </button>
+          <button
+            onClick={() => setIsEditOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-accent"
+          >
+            <Pencil className="h-4 w-4" />
+            <span>편집</span>
+          </button>
+          <button
+            onClick={handleDelete}
+            disabled={isDeleting || notebook.note_count > 0}
+            className={cn(
+              'flex items-center gap-2 px-4 py-2 rounded-lg',
+              'text-destructive hover:bg-destructive/10',
+              'disabled:opacity-50 disabled:cursor-not-allowed',
+            )}
+            title={notebook.note_count > 0 ? '노트가 있는 노트북은 삭제할 수 없습니다' : undefined}
+          >
+            <Trash2 className="h-4 w-4" />
+            <span>삭제</span>
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-medium flex items-center gap-2">
+              <FileText className="h-4 w-4" />
+              노트 ({notebook.note_count}개)
+            </h2>
+          </div>
+
+          {notes.length === 0 ? (
+            <EmptyState
+              icon={FileText}
+              title="노트가 없습니다"
+              description="이 노트북에 노트를 추가해보세요."
+            />
+          ) : (
+            <NoteList
+              notes={notes}
+              hasNextPage={hasNextPage}
+              isFetchingNextPage={isFetchingNextPage}
+              fetchNextPage={fetchNextPage}
+            />
+          )}
+        </div>
+
+        <div className="space-y-6">
+          <AccessPanel notebookId={notebookId} />
+        </div>
+      </div>
+
+      <EditModal
+        isOpen={isEditOpen}
+        onClose={() => setIsEditOpen(false)}
+        notebookId={notebookId}
+        initialName={notebook.name}
+        initialDescription={notebook.description}
+      />
+
+      <ShareDialog
+        notebookId={notebookId}
+        isOpen={isShareOpen}
+        onClose={() => setIsShareOpen(false)}
+      />
+    </div>
+  )
+}
