@@ -48,9 +48,14 @@ class TestSynologyClientConfig:
         )
         assert client._url == "http://192.168.1.100:5000"
 
-    def test_url_stored_correctly(self, synology_client: SynologyClient):
+    def test_url_stored_correctly(self):
         """The base URL is stored as provided (minus trailing slash)."""
-        assert synology_client._url == "http://localhost:5000"
+        client = SynologyClient(
+            url="http://localhost:5000",
+            user="testuser",
+            password="testpassword",
+        )
+        assert client._url == "http://localhost:5000"
 
     def test_initial_sid_is_none(self, synology_client: SynologyClient):
         """Before login, the session ID must be None."""
@@ -68,29 +73,26 @@ class TestLoginSuccess:
     @pytest.mark.asyncio
     async def test_login_returns_sid(self, synology_client: SynologyClient):
         """A successful login stores and returns the session ID."""
-        mock_response = _make_response(
-            {"success": True, "data": {"sid": "abc123_session"}}
-        )
+        mock_response = _make_response({"success": True, "data": {"sid": "abc123_session"}})
 
-        with patch.object(
-            synology_client._client, "get", new_callable=AsyncMock, return_value=mock_response
-        ):
+        with patch.object(synology_client._client, "get", new_callable=AsyncMock, return_value=mock_response):
             sid = await synology_client.login()
 
         assert sid == "abc123_session"
         assert synology_client._sid == "abc123_session"
 
     @pytest.mark.asyncio
-    async def test_login_calls_correct_endpoint(self, synology_client: SynologyClient):
+    async def test_login_calls_correct_endpoint(self):
         """Login hits /webapi/auth.cgi with the expected query parameters."""
-        mock_response = _make_response(
-            {"success": True, "data": {"sid": "sess_ok"}}
+        client = SynologyClient(
+            url="http://localhost:5000",
+            user="testuser",
+            password="testpassword",
         )
+        mock_response = _make_response({"success": True, "data": {"sid": "sess_ok"}})
 
-        with patch.object(
-            synology_client._client, "get", new_callable=AsyncMock, return_value=mock_response
-        ) as mock_get:
-            await synology_client.login()
+        with patch.object(client._client, "get", new_callable=AsyncMock, return_value=mock_response) as mock_get:
+            await client.login()
 
         mock_get.assert_called_once()
         call_args = mock_get.call_args
@@ -116,13 +118,12 @@ class TestLoginFailure:
     @pytest.mark.asyncio
     async def test_wrong_credentials_raises_auth_error(self, synology_client: SynologyClient):
         """Error code 400 (no such account / wrong password) raises SynologyAuthError."""
-        mock_response = _make_response(
-            {"success": False, "error": {"code": 400}}
-        )
+        mock_response = _make_response({"success": False, "error": {"code": 400}})
 
-        with patch.object(
-            synology_client._client, "get", new_callable=AsyncMock, return_value=mock_response
-        ), pytest.raises(SynologyAuthError) as exc_info:
+        with (
+            patch.object(synology_client._client, "get", new_callable=AsyncMock, return_value=mock_response),
+            pytest.raises(SynologyAuthError) as exc_info,
+        ):
             await synology_client.login()
 
         assert "400" in str(exc_info.value)
@@ -130,25 +131,23 @@ class TestLoginFailure:
     @pytest.mark.asyncio
     async def test_account_disabled_raises_auth_error(self, synology_client: SynologyClient):
         """Error code 401 (account disabled) raises SynologyAuthError."""
-        mock_response = _make_response(
-            {"success": False, "error": {"code": 401}}
-        )
+        mock_response = _make_response({"success": False, "error": {"code": 401}})
 
-        with patch.object(
-            synology_client._client, "get", new_callable=AsyncMock, return_value=mock_response
-        ), pytest.raises(SynologyAuthError):
+        with (
+            patch.object(synology_client._client, "get", new_callable=AsyncMock, return_value=mock_response),
+            pytest.raises(SynologyAuthError),
+        ):
             await synology_client.login()
 
     @pytest.mark.asyncio
     async def test_sid_not_set_on_failure(self, synology_client: SynologyClient):
         """On failed login, _sid stays None."""
-        mock_response = _make_response(
-            {"success": False, "error": {"code": 400}}
-        )
+        mock_response = _make_response({"success": False, "error": {"code": 400}})
 
-        with patch.object(
-            synology_client._client, "get", new_callable=AsyncMock, return_value=mock_response
-        ), pytest.raises(SynologyAuthError):
+        with (
+            patch.object(synology_client._client, "get", new_callable=AsyncMock, return_value=mock_response),
+            pytest.raises(SynologyAuthError),
+        ):
             await synology_client.login()
 
         assert synology_client._sid is None
@@ -167,9 +166,7 @@ class TestApiRequest:
         """The _sid parameter is sent with every API request."""
         synology_client._sid = "existing_session"
 
-        mock_response = _make_response(
-            {"success": True, "data": {"shares": []}}
-        )
+        mock_response = _make_response({"success": True, "data": {"shares": []}})
 
         with patch.object(
             synology_client._client, "get", new_callable=AsyncMock, return_value=mock_response
@@ -193,9 +190,7 @@ class TestApiRequest:
         """Extra keyword params are forwarded to the API call."""
         synology_client._sid = "sess"
 
-        mock_response = _make_response(
-            {"success": True, "data": {"files": []}}
-        )
+        mock_response = _make_response({"success": True, "data": {"files": []}})
 
         with patch.object(
             synology_client._client, "get", new_callable=AsyncMock, return_value=mock_response
@@ -215,12 +210,8 @@ class TestApiRequest:
     @pytest.mark.asyncio
     async def test_request_auto_login_when_no_sid(self, synology_client: SynologyClient):
         """If _sid is None, request() calls login() first."""
-        login_response = _make_response(
-            {"success": True, "data": {"sid": "auto_login_sid"}}
-        )
-        api_response = _make_response(
-            {"success": True, "data": {"info": "ok"}}
-        )
+        login_response = _make_response({"success": True, "data": {"sid": "auto_login_sid"}})
+        api_response = _make_response({"success": True, "data": {"info": "ok"}})
 
         with patch.object(
             synology_client._client,
@@ -242,13 +233,12 @@ class TestApiRequest:
         """Non-session API errors are raised as SynologyAuthError (or generic)."""
         synology_client._sid = "sess"
 
-        mock_response = _make_response(
-            {"success": False, "error": {"code": 408}}
-        )
+        mock_response = _make_response({"success": False, "error": {"code": 408}})
 
-        with patch.object(
-            synology_client._client, "get", new_callable=AsyncMock, return_value=mock_response
-        ), pytest.raises(SynologyApiError):
+        with (
+            patch.object(synology_client._client, "get", new_callable=AsyncMock, return_value=mock_response),
+            pytest.raises(SynologyApiError),
+        ):
             await synology_client.request(
                 api="SYNO.FileStation.List",
                 method="list",
@@ -269,15 +259,9 @@ class TestSessionExpiry:
         """Error 105 (no permission / session expired) triggers re-login + retry."""
         synology_client._sid = "expired_sid"
 
-        expired_response = _make_response(
-            {"success": False, "error": {"code": 105}}
-        )
-        login_response = _make_response(
-            {"success": True, "data": {"sid": "fresh_sid"}}
-        )
-        success_response = _make_response(
-            {"success": True, "data": {"result": "ok"}}
-        )
+        expired_response = _make_response({"success": False, "error": {"code": 105}})
+        login_response = _make_response({"success": True, "data": {"sid": "fresh_sid"}})
+        success_response = _make_response({"success": True, "data": {"result": "ok"}})
 
         with patch.object(
             synology_client._client,
@@ -299,15 +283,9 @@ class TestSessionExpiry:
         """Error 119 (SID not found) triggers re-login + retry."""
         synology_client._sid = "gone_sid"
 
-        expired_response = _make_response(
-            {"success": False, "error": {"code": 119}}
-        )
-        login_response = _make_response(
-            {"success": True, "data": {"sid": "new_sid_119"}}
-        )
-        success_response = _make_response(
-            {"success": True, "data": {"result": "fixed"}}
-        )
+        expired_response = _make_response({"success": False, "error": {"code": 119}})
+        login_response = _make_response({"success": True, "data": {"sid": "new_sid_119"}})
+        success_response = _make_response({"success": True, "data": {"result": "fixed"}})
 
         with patch.object(
             synology_client._client,
@@ -329,15 +307,9 @@ class TestSessionExpiry:
         """Error 106 (session timeout) triggers re-login + retry."""
         synology_client._sid = "timed_out"
 
-        expired_response = _make_response(
-            {"success": False, "error": {"code": 106}}
-        )
-        login_response = _make_response(
-            {"success": True, "data": {"sid": "new_sid_106"}}
-        )
-        success_response = _make_response(
-            {"success": True, "data": {"result": "recovered"}}
-        )
+        expired_response = _make_response({"success": False, "error": {"code": 106}})
+        login_response = _make_response({"success": True, "data": {"sid": "new_sid_106"}})
+        success_response = _make_response({"success": True, "data": {"result": "recovered"}})
 
         with patch.object(
             synology_client._client,
@@ -359,19 +331,18 @@ class TestSessionExpiry:
         """If re-login also fails, SynologyAuthError is raised."""
         synology_client._sid = "expired"
 
-        expired_response = _make_response(
-            {"success": False, "error": {"code": 105}}
-        )
-        login_fail_response = _make_response(
-            {"success": False, "error": {"code": 400}}
-        )
+        expired_response = _make_response({"success": False, "error": {"code": 105}})
+        login_fail_response = _make_response({"success": False, "error": {"code": 400}})
 
-        with patch.object(
-            synology_client._client,
-            "get",
-            new_callable=AsyncMock,
-            side_effect=[expired_response, login_fail_response],
-        ), pytest.raises(SynologyAuthError):
+        with (
+            patch.object(
+                synology_client._client,
+                "get",
+                new_callable=AsyncMock,
+                side_effect=[expired_response, login_fail_response],
+            ),
+            pytest.raises(SynologyAuthError),
+        ):
             await synology_client.request(
                 api="SYNO.FileStation.Info",
                 method="get",
@@ -394,9 +365,7 @@ class TestLogout:
 
         mock_response = _make_response({"success": True})
 
-        with patch.object(
-            synology_client._client, "get", new_callable=AsyncMock, return_value=mock_response
-        ):
+        with patch.object(synology_client._client, "get", new_callable=AsyncMock, return_value=mock_response):
             await synology_client.logout()
 
         assert synology_client._sid is None
@@ -427,9 +396,7 @@ class TestLogout:
         assert synology_client._sid is None
 
         # Should not raise and should not call HTTP
-        with patch.object(
-            synology_client._client, "get", new_callable=AsyncMock
-        ) as mock_get:
+        with patch.object(synology_client._client, "get", new_callable=AsyncMock) as mock_get:
             await synology_client.logout()
 
         mock_get.assert_not_called()
@@ -453,17 +420,18 @@ class TestContextManager:
             password="pass",
         )
 
-        login_response = _make_response(
-            {"success": True, "data": {"sid": "ctx_sid"}}
-        )
+        login_response = _make_response({"success": True, "data": {"sid": "ctx_sid"}})
         logout_response = _make_response({"success": True})
 
-        with patch.object(
-            client._client,
-            "get",
-            new_callable=AsyncMock,
-            side_effect=[login_response, logout_response],
-        ), patch.object(client._client, "aclose", new_callable=AsyncMock) as mock_close:
+        with (
+            patch.object(
+                client._client,
+                "get",
+                new_callable=AsyncMock,
+                side_effect=[login_response, logout_response],
+            ),
+            patch.object(client._client, "aclose", new_callable=AsyncMock) as mock_close,
+        ):
             async with client as c:
                 assert c is client
                 assert c._sid == "ctx_sid"
@@ -484,9 +452,7 @@ class TestClose:
     @pytest.mark.asyncio
     async def test_close_calls_aclose(self, synology_client: SynologyClient):
         """close() properly disposes the underlying httpx client."""
-        with patch.object(
-            synology_client._client, "aclose", new_callable=AsyncMock
-        ) as mock_aclose:
+        with patch.object(synology_client._client, "aclose", new_callable=AsyncMock) as mock_aclose:
             await synology_client.close()
 
         mock_aclose.assert_awaited_once()

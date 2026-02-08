@@ -286,9 +286,7 @@ class TestSyncServiceErrorHandling:
         state = SyncState()
 
         mock_service = AsyncMock()
-        mock_service.sync_all = AsyncMock(
-            return_value=SyncResult(added=5, updated=2, deleted=1, total=42)
-        )
+        mock_service.sync_all = AsyncMock(return_value=SyncResult(added=5, updated=2, deleted=1, total=42))
 
         mock_session = AsyncMock()
         mock_session.commit = AsyncMock()
@@ -296,6 +294,8 @@ class TestSyncServiceErrorHandling:
 
         with (
             patch("app.api.sync._create_sync_service", return_value=(mock_service, mock_session)),
+            patch("app.api.sync._count_notes_missing_images", return_value=0),
+            patch("app.api.sync._count_notes_pending_index", return_value=0),
         ):
             await _run_sync_background(state)
 

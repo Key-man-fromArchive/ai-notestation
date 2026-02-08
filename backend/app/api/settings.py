@@ -125,7 +125,7 @@ async def _load_from_db(db: AsyncSession) -> dict[str, Any]:
     db_settings = result.scalars().all()
 
     for setting in db_settings:
-        if setting.key in defaults and setting.value.get("v"):
+        if setting.key in defaults and "v" in setting.value:
             defaults[setting.key] = setting.value["v"]
 
     _settings_cache.clear()

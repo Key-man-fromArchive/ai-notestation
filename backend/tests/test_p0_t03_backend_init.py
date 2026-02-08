@@ -53,12 +53,16 @@ class TestConfig:
         assert hasattr(settings, "JWT_SECRET")
 
     def test_settings_optional_ai_keys_default_empty(self):
-        """AI API keys should default to empty strings."""
+        """AI API keys should default to empty strings when not in env."""
         from app.config import Settings
 
         settings = Settings(
             DATABASE_URL="postgresql+asyncpg://test:test@localhost/test",
             JWT_SECRET="test-secret",
+            OPENAI_API_KEY="",
+            ANTHROPIC_API_KEY="",
+            GOOGLE_API_KEY="",
+            ZHIPUAI_API_KEY="",
         )
         assert settings.OPENAI_API_KEY == ""
         assert settings.ANTHROPIC_API_KEY == ""

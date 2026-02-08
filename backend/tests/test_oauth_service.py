@@ -94,31 +94,15 @@ class TestBuildAuthorizeUrl:
             await service.build_authorize_url("invalid", "user1", db)
 
     @pytest.mark.asyncio
-    async def test_google_authorize_url(self):
+    async def test_google_is_api_key_mode(self):
         settings = MagicMock()
         settings.OAUTH_ENCRYPTION_KEY = ""
-        settings.APP_BASE_URL = "http://localhost:3000"
-        settings.GOOGLE_OAUTH_CLIENT_ID = "test-google-client-id"
         service = OAuthService(settings=settings)
 
-        # Mock DB
         db = AsyncMock()
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = None
-        db.execute.return_value = mock_result
-        db.add = MagicMock()
-        db.flush = AsyncMock()
 
-        result = await service.build_authorize_url("google", "user1", db)
-
-        assert "authorization_url" in result
-        assert "state" in result
-        url = result["authorization_url"]
-        assert "accounts.google.com" in url
-        assert "test-google-client-id" in url
-        assert "code_challenge=" in url
-        assert "code_challenge_method=S256" in url
-        assert "access_type=offline" in url
+        with pytest.raises(OAuthError, match="API key authentication"):
+            await service.build_authorize_url("google", "user1", db)
 
     @pytest.mark.asyncio
     async def test_openai_authorize_url(self):
@@ -167,18 +151,16 @@ class TestExchangeCode:
             await service.exchange_code("google", "code123", "bad-state", db)
 
     @pytest.mark.asyncio
-    async def test_successful_exchange(self):
+    async def test_successful_exchange_anthropic(self):
         settings = MagicMock()
         settings.OAUTH_ENCRYPTION_KEY = ""
         settings.APP_BASE_URL = "http://localhost:3000"
-        settings.GOOGLE_OAUTH_CLIENT_ID = "client-id"
-        settings.GOOGLE_OAUTH_CLIENT_SECRET = "client-secret"
+        settings.ANTHROPIC_OAUTH_CLIENT_ID = "client-id"
         service = OAuthService(settings=settings)
 
-        # Mock token row with PKCE data
         token_row = MagicMock()
         token_row.pkce_code_verifier = "test-verifier"
-        token_row.provider = "google"
+        token_row.provider = "anthropic"
 
         db = AsyncMock()
         mock_result = MagicMock()
@@ -186,15 +168,13 @@ class TestExchangeCode:
         db.execute.return_value = mock_result
         db.flush = AsyncMock()
 
-        # Mock httpx response
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {
-            "access_token": "ya29.test-token",
-            "refresh_token": "1//test-refresh",
+            "access_token": "ant-test-token",
+            "refresh_token": "ant-refresh",
             "expires_in": 3600,
             "token_type": "Bearer",
-            "scope": "https://www.googleapis.com/auth/generative-language",
         }
 
         with patch("app.services.oauth_service.httpx.AsyncClient") as mock_client_cls:
@@ -204,13 +184,10 @@ class TestExchangeCode:
             mock_client.__aexit__ = AsyncMock(return_value=False)
             mock_client_cls.return_value = mock_client
 
-            # Also mock _fetch_google_email
-            with patch.object(service, "_fetch_google_email", return_value="user@gmail.com"):
-                result = await service.exchange_code("google", "auth-code", "valid-state", db)
+            result = await service.exchange_code("anthropic", "auth-code", "valid-state", db)
 
         assert result["connected"] is True
-        assert result["provider"] == "google"
-        assert result["email"] == "user@gmail.com"
+        assert result["provider"] == "anthropic"
 
 
 class TestGetValidToken:
