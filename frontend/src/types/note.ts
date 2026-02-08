@@ -42,11 +42,24 @@ export interface NotesResponse {
 }
 
 /**
- * 노트북 정보
+ * 노트북 정보 (legacy - for backward compatibility with notes sidebar)
  */
-export interface Notebook {
+export interface LegacyNotebook {
   name: string
   note_count: number
+}
+
+/**
+ * 노트북 정보 (new entity-based)
+ */
+export interface Notebook {
+  id: number
+  name: string
+  description: string | null
+  note_count: number
+  is_public: boolean
+  created_at: string
+  updated_at: string
 }
 
 /**
@@ -54,4 +67,25 @@ export interface Notebook {
  */
 export interface NotebooksResponse {
   items: Notebook[]
+  total: number
+}
+
+/**
+ * 노트북 접근 권한 정보
+ */
+export interface NotebookAccess {
+  id: number
+  user_id: number | null
+  org_id: number | null
+  user_email: string | null
+  permission: 'read' | 'write' | 'admin'
+  granted_by: number
+  created_at: string
+}
+
+/**
+ * 노트북 접근 권한 목록 응답
+ */
+export interface NotebookAccessListResponse {
+  items: NotebookAccess[]
 }

@@ -6,7 +6,7 @@ import {
   useCallback,
   type ReactNode,
 } from 'react'
-import { apiClient, ApiError } from '@/lib/api'
+import { apiClient } from '@/lib/api'
 
 interface User {
   username: string
@@ -63,7 +63,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // 앱 시작 시 인증 상태 복원
   useEffect(() => {
     const restoreAuth = async () => {
-      // 저장된 access token이 있으면 사용자 정보 조회
+      // 먼저 member auth 체크 (로컬 DB 인증)
+      const memberUser = localStorage.getItem('member_user')
+      const hasToken = apiClient.getToken()
+      
+      if (memberUser && hasToken) {
+        // member auth가 있고 토큰도 있으면 member auth 사용
+        try {
+          const parsed = JSON.parse(memberUser)
+          setUser({ username: parsed.email || parsed.name })
+          setIsLoading(false)
+          return
+        } catch {
+          // JSON 파싱 실패시 토큰 정리하고 계속
+          localStorage.removeItem('member_user')
+        }
+      }
+      
+      // 저장된 access token이 있으면 NAS 사용자 정보 조회
       if (apiClient.getToken()) {
         const ok = await fetchUser()
         if (!ok) {
@@ -72,7 +89,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (refreshed) {
             await fetchUser()
           } else {
-            // refresh도 실패 → 토큰 제거
             apiClient.clearToken()
             apiClient.clearRefreshToken()
           }
@@ -105,6 +121,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(() => {
     apiClient.clearToken()
     apiClient.clearRefreshToken()
+    localStorage.removeItem('member_user')
     setUser(null)
   }, [])
 

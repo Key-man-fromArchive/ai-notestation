@@ -35,7 +35,7 @@ export default function Search() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h2 className="text-2xl font-bold mb-4">노트 검색</h2>
+        <h1 className="text-2xl font-bold mb-4">노트 검색</h1>
 
         {/* 검색 바 */}
         <SearchBar value={query} onChange={setQuery} />

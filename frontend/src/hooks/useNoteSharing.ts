@@ -23,15 +23,15 @@ interface GrantAccessRequest {
   permission: string
 }
 
-const SHARING_QUERY_KEY = (noteId: number) => ['note-sharing', noteId]
+const SHARING_QUERY_KEY = (noteId: number | string) => ['note-sharing', noteId]
 
-export function useNoteSharing(noteId: number) {
+export function useNoteSharing(noteId: number | string) {
   const queryClient = useQueryClient()
 
   const { data, isLoading, error, refetch } = useQuery<AccessListResponse>({
     queryKey: SHARING_QUERY_KEY(noteId),
     queryFn: () => apiClient.get<AccessListResponse>(`/notes/${noteId}/share`),
-    enabled: noteId > 0,
+    enabled: !!noteId,
   })
 
   const grantAccessMutation = useMutation<

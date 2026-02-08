@@ -34,7 +34,7 @@ export default function MemberLogin() {
             </div>
             <h1 className="text-2xl font-bold text-foreground">LabNote AI</h1>
             <p className="text-sm text-muted-foreground mt-1.5">
-              Sign in to your account
+              계정으로 로그인
             </p>
           </div>
 
@@ -57,15 +57,15 @@ export default function MemberLogin() {
                 htmlFor="email"
                 className="text-sm font-medium text-foreground"
               >
-                Email
+                아이디
               </label>
               <input
                 id="email"
-                type="email"
+                type="text"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 required
-                autoComplete="email"
+                autoComplete="username"
                 autoFocus
                 disabled={isLoading}
                 className={cn(
@@ -75,7 +75,7 @@ export default function MemberLogin() {
                   'disabled:cursor-not-allowed disabled:opacity-50',
                   'transition-colors',
                 )}
-                placeholder="you@example.com"
+                placeholder="아이디"
               />
             </div>
 
@@ -84,7 +84,7 @@ export default function MemberLogin() {
                 htmlFor="password"
                 className="text-sm font-medium text-foreground"
               >
-                Password
+                비밀번호
               </label>
               <input
                 id="password"
@@ -101,7 +101,7 @@ export default function MemberLogin() {
                   'disabled:cursor-not-allowed disabled:opacity-50',
                   'transition-colors',
                 )}
-                placeholder="Password"
+                placeholder="비밀번호"
               />
             </div>
 
@@ -123,21 +123,21 @@ export default function MemberLogin() {
                     className="mr-2 h-4 w-4 animate-spin"
                     aria-hidden="true"
                   />
-                  Signing in...
+                  로그인 중...
                 </>
               ) : (
-                'Sign in'
+                '로그인'
               )}
             </button>
           </form>
 
           <div className="mt-6 text-center text-sm text-muted-foreground">
-            Don&apos;t have an account?{' '}
+            계정이 없으신가요?{' '}
             <Link
               to="/signup"
               className="font-medium text-primary hover:underline"
             >
-              Sign up
+              회원가입
             </Link>
           </div>
         </div>

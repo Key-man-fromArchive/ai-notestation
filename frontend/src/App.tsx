@@ -15,6 +15,8 @@ import { AuthProvider, useAuth } from './contexts/AuthContext'
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const Notes = lazy(() => import('./pages/Notes'))
 const NoteDetail = lazy(() => import('./pages/NoteDetail'))
+const Notebooks = lazy(() => import('./pages/Notebooks'))
+const NotebookDetail = lazy(() => import('./pages/NotebookDetail'))
 const Search = lazy(() => import('./pages/Search'))
 const AIWorkbench = lazy(() => import('./pages/AIWorkbench'))
 const Settings = lazy(() => import('./pages/Settings'))
@@ -23,6 +25,9 @@ const OAuthCallback = lazy(() => import('./pages/OAuthCallback'))
 const Login = lazy(() => import('./pages/Login'))
 const MemberLogin = lazy(() => import('./pages/MemberLogin'))
 const Signup = lazy(() => import('./pages/Signup'))
+const SharedView = lazy(() => import('./pages/SharedView'))
+const Discovery = lazy(() => import('./pages/Discovery'))
+const Graph = lazy(() => import('./pages/Graph'))
 
 // Demo pages
 const DemoHub = lazy(() => import('./demo/index'))
@@ -62,10 +67,14 @@ function ProtectedRoutes() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/notes" element={<Notes />} />
           <Route path="/notes/:id" element={<NoteDetail />} />
+          <Route path="/notebooks" element={<Notebooks />} />
+          <Route path="/notebooks/:id" element={<NotebookDetail />} />
+          <Route path="/notebooks/:id/discover" element={<Discovery />} />
           <Route path="/search" element={<Search />} />
           <Route path="/ai" element={<AIWorkbench />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/members" element={<Members />} />
+          <Route path="/graph" element={<Graph />} />
           <Route path="/oauth/callback" element={<OAuthCallback />} />
 
           {/* Demo pages */}
@@ -96,9 +105,10 @@ function App() {
             }
           >
             <Routes>
-              <Route path="/login" element={<Login />} />
-              <Route path="/member-login" element={<MemberLogin />} />
+              <Route path="/login" element={<MemberLogin />} />
+              <Route path="/nas-login" element={<Login />} />
               <Route path="/signup" element={<Signup />} />
+              <Route path="/shared/:token" element={<SharedView />} />
               <Route path="/*" element={<ProtectedRoutes />} />
             </Routes>
           </Suspense>

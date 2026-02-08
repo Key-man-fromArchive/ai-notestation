@@ -14,7 +14,7 @@ import type { NotesResponse, NotebooksResponse, Note } from '@/types/note'
 const mockNotesResponse: NotesResponse = {
   items: [
     {
-      id: '1',
+      note_id: '1',
       title: 'React 19 새로운 기능',
       snippet: 'React 19에서는 서버 컴포넌트와 액션이 안정화되었습니다...',
       notebook: 'Dev',
@@ -22,7 +22,7 @@ const mockNotesResponse: NotesResponse = {
       tags: ['react', 'frontend'],
     },
     {
-      id: '2',
+      note_id: '2',
       title: 'TypeScript 5.7 릴리스',
       snippet: 'TypeScript 5.7이 릴리스되면서 새로운 타입 기능이 추가되었습니다...',
       notebook: 'Dev',
@@ -30,7 +30,7 @@ const mockNotesResponse: NotesResponse = {
       tags: ['typescript', 'release'],
     },
     {
-      id: '3',
+      note_id: '3',
       title: '주간 회의 노트',
       snippet: '2026년 1월 30일 주간 회의 내용입니다...',
       notebook: 'Work',
@@ -45,14 +45,39 @@ const mockNotesResponse: NotesResponse = {
 
 const mockNotebooksResponse: NotebooksResponse = {
   items: [
-    { name: 'Dev', note_count: 10 },
-    { name: 'Work', note_count: 5 },
-    { name: 'Personal', note_count: 3 },
+    {
+      id: 1,
+      name: 'Dev',
+      description: null,
+      note_count: 10,
+      is_public: false,
+      created_at: '2024-01-01T00:00:00Z',
+      updated_at: '2024-01-01T00:00:00Z',
+    },
+    {
+      id: 2,
+      name: 'Work',
+      description: null,
+      note_count: 5,
+      is_public: false,
+      created_at: '2024-01-01T00:00:00Z',
+      updated_at: '2024-01-01T00:00:00Z',
+    },
+    {
+      id: 3,
+      name: 'Personal',
+      description: null,
+      note_count: 3,
+      is_public: false,
+      created_at: '2024-01-01T00:00:00Z',
+      updated_at: '2024-01-01T00:00:00Z',
+    },
   ],
+  total: 3,
 }
 
 const mockNote: Note = {
-  id: '1',
+  note_id: '1',
   title: 'React 19 새로운 기능',
   content: `# React 19 새로운 기능
 
@@ -216,7 +241,7 @@ export default function DemoPage() {
                 notesCount: mockNotesResponse.items.length,
                 notebooksCount: mockNotebooksResponse.items.length,
                 sampleNote: {
-                  id: mockNote.id,
+                  note_id: mockNote.note_id,
                   title: mockNote.title,
                   contentLength: mockNote.content.length,
                 },

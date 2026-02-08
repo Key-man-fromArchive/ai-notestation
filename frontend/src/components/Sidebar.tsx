@@ -5,12 +5,15 @@ import { NavLink } from 'react-router-dom'
 import {
   Home,
   FileText,
+  BookOpen,
   Search,
   Sparkles,
   Settings,
   Users,
   LogOut,
   FlaskConical,
+  Network,
+  LayoutGrid,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/AuthContext'
@@ -18,10 +21,13 @@ import { useAuth } from '@/contexts/AuthContext'
 const navItems = [
   { to: '/', icon: Home, label: '대시보드' },
   { to: '/notes', icon: FileText, label: '노트' },
+  { to: '/notebooks', icon: BookOpen, label: '노트북' },
   { to: '/search', icon: Search, label: '검색' },
   { to: '/ai', icon: Sparkles, label: 'AI 분석' },
+  { to: '/graph', icon: Network, label: '그래프' },
   { to: '/members', icon: Users, label: '멤버' },
   { to: '/settings', icon: Settings, label: '설정' },
+  { to: '/demo', icon: LayoutGrid, label: '데모' },
 ]
 
 /**
