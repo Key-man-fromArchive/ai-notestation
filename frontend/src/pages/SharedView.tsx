@@ -74,7 +74,7 @@ function EmailInputModal({
             value={email}
             onChange={e => setEmail(e.target.value)}
             placeholder="your@email.com"
-            className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 mb-4"
+            className="w-full px-3 py-2 border border-input rounded-lg text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring mb-4"
             autoFocus
           />
           <div className="flex gap-2">

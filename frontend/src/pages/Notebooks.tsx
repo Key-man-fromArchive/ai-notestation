@@ -97,7 +97,7 @@ function CreateNotebookModal({
                 value={name}
                 onChange={e => setName(e.target.value)}
                 placeholder="노트북 이름"
-                className="w-full mt-1 px-3 py-2 rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                className="w-full mt-1 px-3 py-2 rounded-md border border-input bg-background focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 required
                 autoFocus
               />
@@ -111,7 +111,7 @@ function CreateNotebookModal({
                 value={description}
                 onChange={e => setDescription(e.target.value)}
                 placeholder="노트북 설명"
-                className="w-full mt-1 px-3 py-2 rounded-md border border-input bg-background resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+                className="w-full mt-1 px-3 py-2 rounded-md border border-input bg-background resize-none focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 rows={3}
               />
             </div>

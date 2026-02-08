@@ -95,7 +95,7 @@ function EditModal({
                 type="text"
                 value={name}
                 onChange={e => setName(e.target.value)}
-                className="w-full mt-1 px-3 py-2 rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                className="w-full mt-1 px-3 py-2 rounded-md border border-input bg-background focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 required
               />
             </div>
@@ -105,7 +105,7 @@ function EditModal({
                 id="edit-description"
                 value={description}
                 onChange={e => setDescription(e.target.value)}
-                className="w-full mt-1 px-3 py-2 rounded-md border border-input bg-background resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+                className="w-full mt-1 px-3 py-2 rounded-md border border-input bg-background resize-none focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 rows={3}
               />
             </div>
@@ -167,7 +167,7 @@ function AccessPanel({ notebookId }: { notebookId: number }) {
           value={email}
           onChange={e => setEmail(e.target.value)}
           placeholder="이메일 주소"
-          className="flex-1 px-3 py-2 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+          className="flex-1 px-3 py-2 text-sm rounded-md border border-input bg-background focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         />
         <select
           value={permission}

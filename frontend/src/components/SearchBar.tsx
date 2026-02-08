@@ -41,7 +41,7 @@ export function SearchBar({
           'border border-input rounded-md',
           'bg-background text-foreground',
           'placeholder:text-muted-foreground',
-          'focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent',
+          'focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus:border-transparent',
           'transition-all duration-200',
           'motion-reduce:transition-none'
         )}
