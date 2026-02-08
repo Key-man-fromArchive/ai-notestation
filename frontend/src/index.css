@@ -48,6 +48,17 @@ body {
   font-feature-settings: "rlig" 1, "calt" 1;
 }
 
+/* 기본 인터랙티브 요소 트랜지션 */
+button,
+a,
+input,
+select,
+textarea {
+  transition-property: color, background-color, border-color, box-shadow, opacity;
+  transition-duration: 150ms;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
 /* 애니메이션 줄이기 선호 사용자 지원 */
 @media (prefers-reduced-motion: reduce) {
   *,

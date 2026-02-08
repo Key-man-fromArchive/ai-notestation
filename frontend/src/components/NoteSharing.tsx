@@ -5,7 +5,7 @@ import { LoadingSpinner } from '@/components/LoadingSpinner'
 import { cn } from '@/lib/utils'
 
 interface NoteSharingProps {
-  noteId: number
+  noteId: number | string
   isOpen: boolean
   onClose: () => void
 }
@@ -191,12 +191,12 @@ export function NoteSharing({ noteId, isOpen, onClose }: NoteSharingProps) {
                       value={email}
                       onChange={e => setEmail(e.target.value)}
                       placeholder="이메일 주소"
-                      className="flex-1 px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                      className="flex-1 px-3 py-2 border border-input rounded-lg text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     />
                     <select
                       value={permission}
                       onChange={e => setPermission(e.target.value)}
-                      className="px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                      className="px-3 py-2 border border-input rounded-lg text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
                       {PERMISSION_OPTIONS.map(opt => (
                         <option key={opt.value} value={opt.value}>

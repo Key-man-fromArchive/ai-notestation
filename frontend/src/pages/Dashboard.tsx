@@ -63,8 +63,8 @@ export default function Dashboard() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h2 className="text-3xl font-bold mb-2">대시보드</h2>
-        <p className="text-muted-foreground">
+        <h1 className="text-2xl font-bold mb-1">대시보드</h1>
+        <p className="text-sm text-muted-foreground">
           LabNote AI에 오신 것을 환영합니다
         </p>
       </div>
@@ -72,7 +72,7 @@ export default function Dashboard() {
       {/* NAS 연결 에러 배너 */}
       {syncStatus === 'error' && (
         <div
-          className="flex items-start gap-3 p-4 bg-destructive/10 border border-destructive/20 rounded-md"
+          className="flex items-start gap-3 p-4 bg-destructive/10 border border-destructive/20 rounded-lg"
           role="alert"
         >
           <AlertCircle

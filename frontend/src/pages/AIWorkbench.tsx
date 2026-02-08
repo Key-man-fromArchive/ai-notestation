@@ -71,8 +71,8 @@ export default function AIWorkbench() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h2 className="text-2xl font-bold mb-2">AI Workbench</h2>
-        <p className="text-muted-foreground">
+        <h1 className="text-2xl font-bold mb-1">AI Workbench</h1>
+        <p className="text-sm text-muted-foreground">
           AI를 활용하여 노트를 분석하고 작성하세요
         </p>
       </div>
@@ -80,7 +80,7 @@ export default function AIWorkbench() {
       {/* AI 키 미설정 배너 */}
       {isKeyMissing && (
         <div
-          className="flex items-start gap-3 p-4 bg-destructive/10 border border-destructive/20 rounded-md"
+          className="flex items-start gap-3 p-4 bg-destructive/10 border border-destructive/20 rounded-lg"
           role="alert"
         >
           <AlertCircle

@@ -82,7 +82,7 @@ export default function NoteDetail() {
 
         {/* 노트 제목 */}
         <div className="flex items-start justify-between gap-4 mb-2">
-          <h1 className="text-3xl font-bold text-foreground">{note.title}</h1>
+          <h1 className="text-2xl font-bold text-foreground">{note.title}</h1>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setIsSharingOpen(true)}
@@ -210,7 +210,7 @@ export default function NoteDetail() {
       </div>
 
       <NoteSharing
-        noteId={note.id}
+        noteId={note.note_id}
         isOpen={isSharingOpen}
         onClose={() => setIsSharingOpen(false)}
       />

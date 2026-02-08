@@ -30,7 +30,7 @@ export function NoteCard({ note, className }: NoteCardProps) {
       className={cn(
         'block px-4 py-3 border border-border rounded-lg',
         'hover:border-primary/30 hover:bg-muted/30',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
         'transition-all duration-200',
         className
       )}

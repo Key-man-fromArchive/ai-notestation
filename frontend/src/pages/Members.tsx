@@ -304,11 +304,17 @@ export default function Members() {
   }
 
   if (error) {
+    // Check if this is a 401 error (NAS auth users don't have member auth)
+    const is401 = error instanceof Error && error.message.includes('401')
     return (
       <EmptyState
-        icon={AlertCircle}
-        title="Failed to load members"
-        description="There was an error loading the member list."
+        icon={is401 ? Users : AlertCircle}
+        title={is401 ? '멤버 인증이 필요합니다' : 'Failed to load members'}
+        description={
+          is401
+            ? '이 기능은 조직 멤버 계정으로 로그인해야 사용할 수 있습니다. 현재 NAS 계정으로 로그인되어 있습니다.'
+            : 'There was an error loading the member list.'
+        }
       />
     )
   }
@@ -317,9 +323,9 @@ export default function Members() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Members</h1>
+          <h1 className="text-2xl font-bold text-foreground">멤버</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Manage your organization members ({total} total)
+            조직 멤버를 관리합니다 ({total}명)
           </p>
         </div>
         <button

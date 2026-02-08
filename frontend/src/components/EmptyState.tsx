@@ -33,15 +33,17 @@ export function EmptyState({
         className
       )}
     >
-      <Icon className="h-16 w-16 text-muted-foreground mb-4" aria-hidden="true" />
-      <h3 className="text-lg font-semibold text-foreground mb-2">{title}</h3>
+      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted/50 mb-4">
+        <Icon className="h-7 w-7 text-muted-foreground" aria-hidden="true" />
+      </div>
+      <h3 className="text-base font-semibold text-foreground mb-1">{title}</h3>
       {description && (
-        <p className="text-sm text-muted-foreground mb-6 max-w-md">{description}</p>
+        <p className="text-sm text-muted-foreground mb-5 max-w-sm">{description}</p>
       )}
       {action && (
         <button
           onClick={action.onClick}
-          className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+          className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90"
         >
           {action.label}
         </button>
