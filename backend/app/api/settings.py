@@ -11,9 +11,7 @@ Provides:
 All endpoints require JWT authentication via Bearer token.
 
 Storage:
-    Currently uses an in-memory dictionary (``_settings_store``).
-    This will be migrated to the ``settings`` PostgreSQL table (JSONB)
-    in a future phase.
+    Uses PostgreSQL ``settings`` table with in-memory cache.
 """
 
 from __future__ import annotations
@@ -23,8 +21,12 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
+from app.database import get_db
+from app.models import Setting
 from app.services.auth_service import get_current_user
 
 logger = logging.getLogger(__name__)
@@ -87,22 +89,17 @@ _SETTING_DESCRIPTIONS: dict[str, str] = {
 }
 
 
-def _init_settings_store() -> dict[str, Any]:
-    """Initialise the in-memory settings store.
-
-    NAS settings are seeded from environment variables so that existing
-    ``.env`` configurations continue to work. Users can then override
-    them at runtime via the Settings UI.
-    """
+def _get_default_settings() -> dict[str, Any]:
+    """Return default settings from environment variables."""
     env = get_settings()
     return {
         "nas_url": env.SYNOLOGY_URL,
         "nas_user": env.SYNOLOGY_USER,
         "nas_password": env.SYNOLOGY_PASSWORD,
-        "openai_api_key": "",
-        "anthropic_api_key": "",
-        "google_api_key": "",
-        "zhipuai_api_key": "",
+        "openai_api_key": env.OPENAI_API_KEY or "",
+        "anthropic_api_key": env.ANTHROPIC_API_KEY or "",
+        "google_api_key": env.GOOGLE_API_KEY or "",
+        "zhipuai_api_key": env.ZHIPUAI_API_KEY or "",
         "default_ai_model": "gpt-4",
         "sync_interval_minutes": 30,
         "embedding_model": "text-embedding-3-small",
@@ -110,16 +107,54 @@ def _init_settings_store() -> dict[str, Any]:
     }
 
 
-# In-memory settings store (will be replaced by DB in future phase)
-# Keys must match _SETTING_DESCRIPTIONS to be recognized.
-_settings_store: dict[str, Any] = {}
+_settings_cache: dict[str, Any] = {}
 
 
 def _get_store() -> dict[str, Any]:
-    """Return the settings store, initialising lazily on first access."""
-    if not _settings_store:
-        _settings_store.update(_init_settings_store())
-    return _settings_store
+    """Return cached settings (for sync access). Use _load_from_db for fresh data."""
+    if not _settings_cache:
+        _settings_cache.update(_get_default_settings())
+    return _settings_cache
+
+
+async def _load_from_db(db: AsyncSession) -> dict[str, Any]:
+    """Load settings from database, merging with defaults."""
+    defaults = _get_default_settings()
+
+    result = await db.execute(select(Setting))
+    db_settings = result.scalars().all()
+
+    for setting in db_settings:
+        if setting.key in defaults and setting.value.get("v"):
+            defaults[setting.key] = setting.value["v"]
+
+    _settings_cache.clear()
+    _settings_cache.update(defaults)
+    return defaults
+
+
+async def _save_to_db(db: AsyncSession, key: str, value: Any) -> None:
+    """Save a setting to the database."""
+    from sqlalchemy.orm.attributes import flag_modified
+
+    result = await db.execute(select(Setting).where(Setting.key == key))
+    setting = result.scalar_one_or_none()
+
+    logger.info("_save_to_db: key=%s, existing=%s", key, setting is not None)
+
+    if setting:
+        setting.value = {"v": value}
+        flag_modified(setting, "value")
+        logger.info("_save_to_db: updated existing setting, new value=%s", setting.value)
+    else:
+        setting = Setting(key=key, value={"v": value})
+        db.add(setting)
+        logger.info("_save_to_db: created new setting")
+
+    await db.flush()
+    await db.commit()
+    logger.info("_save_to_db: committed successfully")
+    _settings_cache[key] = value
 
 
 # ---------------------------------------------------------------------------
@@ -157,18 +192,20 @@ def _mask_value(key: str, value: Any) -> Any:
 @router.get("", response_model=SettingsListResponse)
 async def list_settings(
     _current_user: dict = Depends(get_current_user),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> SettingsListResponse:
     """Return all application settings.
 
     API key values are masked for security. Requires JWT authentication.
     """
+    settings_dict = await _load_from_db(db)
     items = [
         SettingItem(
             key=key,
-            value=_mask_value(key, _get_store()[key]),
+            value=_mask_value(key, settings_dict[key]),
             description=_SETTING_DESCRIPTIONS.get(key, ""),
         )
-        for key in _get_store()
+        for key in settings_dict
     ]
     return SettingsListResponse(settings=items)
 
@@ -177,6 +214,7 @@ async def list_settings(
 async def get_setting(
     key: str,
     _current_user: dict = Depends(get_current_user),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> SettingItem:
     """Return a single setting by key.
 
@@ -185,7 +223,8 @@ async def get_setting(
     Args:
         key: The setting key to retrieve.
     """
-    if key not in _get_store():
+    settings_dict = await _load_from_db(db)
+    if key not in settings_dict:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Setting '{key}' not found",
@@ -193,7 +232,7 @@ async def get_setting(
 
     return SettingItem(
         key=key,
-        value=_mask_value(key, _get_store()[key]),
+        value=_mask_value(key, settings_dict[key]),
         description=_SETTING_DESCRIPTIONS.get(key, ""),
     )
 
@@ -203,6 +242,7 @@ async def update_setting(
     key: str,
     body: SettingUpdateRequest,
     _current_user: dict = Depends(get_current_user),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> SettingUpdateResponse:
     """Update a single setting by key.
 
@@ -213,16 +253,16 @@ async def update_setting(
         key: The setting key to update.
         body: Request body containing the new value.
     """
-    if key not in _get_store():
+    settings_dict = await _load_from_db(db)
+    if key not in settings_dict:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Setting '{key}' not found",
         )
 
-    _get_store()[key] = body.value
+    await _save_to_db(db, key, body.value)
     logger.info("Setting '%s' updated by user", key)
 
-    # Reset the AI router singleton when API keys change
     if key.endswith("_api_key") and key != "nas_password":
         try:
             from app.api.ai import reset_ai_router
@@ -234,7 +274,7 @@ async def update_setting(
 
     return SettingUpdateResponse(
         key=key,
-        value=_mask_value(key, _get_store()[key]),
+        value=_mask_value(key, body.value),
         updated=True,
     )
 

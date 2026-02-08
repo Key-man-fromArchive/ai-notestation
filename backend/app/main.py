@@ -47,6 +47,7 @@ app.add_middleware(
 # --- Router includes ---
 from app.api.auth import router as auth_router
 from app.api.notes import router as notes_router
+from app.api.notebooks import router as notebooks_router
 from app.api.search import router as search_router
 from app.api.settings import router as settings_router
 from app.api.sync import router as sync_router
@@ -55,6 +56,7 @@ from app.api.files import router as files_router
 
 app.include_router(auth_router, prefix="/api")
 app.include_router(notes_router, prefix="/api")
+app.include_router(notebooks_router, prefix="/api")
 app.include_router(search_router, prefix="/api")
 app.include_router(settings_router, prefix="/api")
 app.include_router(sync_router, prefix="/api")
@@ -73,11 +75,21 @@ from app.api.nsx import router as nsx_router
 from app.api.backup import router as backup_router
 from app.api.members import router as members_router
 from app.api.sharing import router as sharing_router
+from app.api.share_links import router as share_links_router
+from app.api.share_links import note_router as share_links_note_router
+from app.api.shared import router as shared_router
+from app.api.discovery import router as discovery_router
+from app.api.graph import router as graph_router
 
 app.include_router(nsx_router, prefix="/api")
 app.include_router(backup_router, prefix="/api")
 app.include_router(members_router, prefix="/api")
 app.include_router(sharing_router, prefix="/api")
+app.include_router(share_links_router, prefix="/api")
+app.include_router(share_links_note_router, prefix="/api")
+app.include_router(shared_router, prefix="/api")
+app.include_router(discovery_router, prefix="/api")
+app.include_router(graph_router, prefix="/api")
 
 
 @app.get("/api/health", tags=["health"])

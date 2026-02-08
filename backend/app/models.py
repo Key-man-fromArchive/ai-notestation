@@ -4,7 +4,7 @@
 from datetime import datetime
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Boolean, DateTime, Index, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, CheckConstraint, DateTime, Index, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -23,6 +23,7 @@ class Note(Base):
     content_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     content_text: Mapped[str] = mapped_column(Text, default="")  # Plaintext extracted from HTML
     notebook_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    notebook_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     tags: Mapped[list | None] = mapped_column(JSONB, nullable=True)  # ["tag1", "tag2"]
     is_todo: Mapped[bool] = mapped_column(Boolean, default=False)
     is_shortcut: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -41,6 +42,30 @@ class Note(Base):
         Index("idx_notes_search_vector", "search_vector", postgresql_using="gin"),
         Index("idx_notes_notebook", "notebook_name"),
         Index("idx_notes_synced_at", "synced_at"),
+    )
+
+
+class Notebook(Base):
+    """Notebook model for organizing notes."""
+
+    __tablename__ = "notebooks"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    owner_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    org_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    is_public: Mapped[bool] = mapped_column(Boolean, default=False)
+    public_links_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint("org_id", "name", name="uq_notebooks_org_name"),
+        Index("idx_notebooks_owner_id", "owner_id"),
+        Index("idx_notebooks_org_id", "org_id"),
     )
 
 
@@ -207,4 +232,91 @@ class NoteAccess(Base):
         Index("idx_note_access_note_id", "note_id"),
         Index("idx_note_access_user_id", "user_id"),
         Index("idx_note_access_org_id", "org_id"),
+    )
+
+
+class NotebookAccess(Base):
+    __tablename__ = "notebook_access"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    notebook_id: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
+    user_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    org_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    permission: Mapped[str] = mapped_column(String(20), default="read", nullable=False)
+    granted_by: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint(
+            "(user_id IS NOT NULL AND org_id IS NULL) OR (user_id IS NULL AND org_id IS NOT NULL)",
+            name="ck_notebook_access_one_of_user_or_org",
+        ),
+        UniqueConstraint("notebook_id", "user_id", name="uq_notebook_access_notebook_user"),
+        UniqueConstraint("notebook_id", "org_id", name="uq_notebook_access_notebook_org"),
+        Index("idx_notebook_access_notebook_id", "notebook_id"),
+        Index("idx_notebook_access_user_id", "user_id"),
+        Index("idx_notebook_access_org_id", "org_id"),
+    )
+
+
+class ShareLink(Base):
+    """Shareable links for notes or notebooks with access control."""
+
+    __tablename__ = "share_links"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    token: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    notebook_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    note_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    link_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    created_by: Mapped[int] = mapped_column(Integer, nullable=False)
+    email_restriction: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    access_count: Mapped[int] = mapped_column(Integer, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint("(note_id IS NOT NULL) OR (notebook_id IS NOT NULL)", name="ck_sharelink_has_target"),
+        Index("idx_share_links_token", "token"),
+    )
+
+
+class ClusteringTask(Base):
+    __tablename__ = "clustering_tasks"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    task_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    notebook_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    num_clusters: Mapped[int] = mapped_column(Integer, default=5)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index("idx_clustering_tasks_task_id", "task_id"),
+        Index("idx_clustering_tasks_notebook_id", "notebook_id"),
+    )
+
+
+class NoteCluster(Base):
+    __tablename__ = "note_clusters"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    task_id: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
+    notebook_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    cluster_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    note_ids: Mapped[list] = mapped_column(JSONB, nullable=False)
+    summary: Mapped[str] = mapped_column(Text, default="")
+    keywords: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    centroid: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        Index("idx_note_clusters_task_id", "task_id"),
+        Index("idx_note_clusters_notebook_id", "notebook_id"),
     )

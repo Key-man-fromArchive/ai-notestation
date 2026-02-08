@@ -47,11 +47,13 @@ class SyncTriggerResponse(BaseModel):
 class SyncStatusResponse(BaseModel):
     """Response for the sync status endpoint."""
 
-    status: str  # "idle" | "syncing" | "completed" | "error"
+    status: str  # "idle" | "syncing" | "indexing" | "completed" | "error"
     last_sync_at: str | None = None
     notes_synced: int | None = None
     error_message: str | None = None
-    notes_missing_images: int | None = None  # Notes with image refs but no extracted images
+    notes_missing_images: int | None = None
+    notes_indexed: int | None = None
+    notes_pending_index: int | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -63,12 +65,14 @@ class SyncState:
     """Mutable in-memory tracker for synchronisation progress.
 
     Attributes:
-        status: Current sync status (idle / syncing / completed / error).
+        status: Current sync status (idle / syncing / indexing / completed / error).
         is_syncing: Convenience flag indicating whether a sync is running.
         last_sync_at: ISO-8601 timestamp of the last completed sync.
         notes_synced: Total note count from the last successful sync.
         error_message: Error message if the last sync failed.
         notes_missing_images: Count of notes with image refs but no extracted images.
+        notes_indexed: Number of notes indexed in the last sync.
+        notes_pending_index: Number of notes still needing indexing.
     """
 
     def __init__(self) -> None:
@@ -78,6 +82,8 @@ class SyncState:
         self.notes_synced: int | None = None
         self.error_message: str | None = None
         self.notes_missing_images: int | None = None
+        self.notes_indexed: int | None = None
+        self.notes_pending_index: int | None = None
 
 
 # Module-level singleton -- shared across requests.
@@ -122,9 +128,8 @@ async def _create_sync_service() -> tuple:
 
 
 async def _count_notes_missing_images() -> int:
-    from sqlalchemy import func, text
+    from sqlalchemy import text
     from app.database import async_session_factory
-    from app.models import Note, NoteImage
 
     async with async_session_factory() as session:
         result = await session.execute(
@@ -141,6 +146,61 @@ async def _count_notes_missing_images() -> int:
         return result.scalar() or 0
 
 
+async def _count_notes_pending_index() -> int:
+    from sqlalchemy import text
+    from app.database import async_session_factory
+
+    async with async_session_factory() as session:
+        result = await session.execute(
+            text("""
+                SELECT COUNT(*)
+                FROM notes n
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM note_embeddings ne
+                    WHERE ne.note_id = n.id
+                )
+            """)
+        )
+        return result.scalar() or 0
+
+
+async def _index_notes_batch(note_ids: list[int], batch_size: int = 10) -> int:
+    from app.config import get_settings
+    from app.database import async_session_factory
+    from app.search.embeddings import EmbeddingService
+    from app.search.indexer import NoteIndexer
+
+    settings = get_settings()
+    if not settings.OPENAI_API_KEY:
+        logger.info("OPENAI_API_KEY not set - use /api/search/index with OAuth for manual indexing")
+        return 0
+
+    indexed_count = 0
+    embedding_service = EmbeddingService(
+        api_key=settings.OPENAI_API_KEY,
+        model=settings.EMBEDDING_MODEL,
+        dimensions=settings.EMBEDDING_DIMENSION,
+    )
+
+    for i in range(0, len(note_ids), batch_size):
+        batch = note_ids[i : i + batch_size]
+        async with async_session_factory() as session:
+            indexer = NoteIndexer(session=session, embedding_service=embedding_service)
+            result = await indexer.index_notes(batch)
+            await session.commit()
+            indexed_count += result.indexed
+            logger.info(
+                "Indexed batch %d-%d: %d indexed, %d skipped, %d failed",
+                i,
+                i + len(batch),
+                result.indexed,
+                result.skipped,
+                result.failed,
+            )
+
+    return indexed_count
+
+
 async def _run_sync_background(state: SyncState) -> None:
     """Execute the full synchronisation and update *state* accordingly.
 
@@ -151,9 +211,14 @@ async def _run_sync_background(state: SyncState) -> None:
     Args:
         state: The :class:`SyncState` instance to update.
     """
+    from sqlalchemy import select
+    from app.database import async_session_factory
+    from app.models import Note
+
     state.status = "syncing"
     state.is_syncing = True
     state.error_message = None
+    state.notes_indexed = None
 
     try:
         service, session = await _create_sync_service()
@@ -161,20 +226,52 @@ async def _run_sync_background(state: SyncState) -> None:
             result = await service.sync_all()
             await session.commit()
 
-            state.status = "completed"
             state.last_sync_at = result.synced_at.isoformat()
             state.notes_synced = result.total
-            state.error_message = None
             state.notes_missing_images = await _count_notes_missing_images()
 
             logger.info(
-                "Sync completed: total=%d, added=%d, updated=%d, deleted=%d, missing_images=%d",
+                "Sync completed: total=%d, added=%d, updated=%d, deleted=%d",
                 result.total,
                 result.added,
                 result.updated,
                 result.deleted,
-                state.notes_missing_images,
             )
+
+            # Phase 2: Index notes that need embeddings
+            state.status = "indexing"
+            state.notes_pending_index = await _count_notes_pending_index()
+
+            if state.notes_pending_index > 0:
+                logger.info("Starting embedding indexing for %d notes", state.notes_pending_index)
+
+                async with async_session_factory() as index_session:
+                    stmt = select(Note.id).where(
+                        ~Note.id.in_(select(Note.id).join_from(Note, Note).where(Note.id.isnot(None)))
+                    )
+                    # Get notes without embeddings
+                    from sqlalchemy import text
+
+                    result_ids = await index_session.execute(
+                        text("""
+                            SELECT n.id FROM notes n
+                            WHERE NOT EXISTS (
+                                SELECT 1 FROM note_embeddings ne WHERE ne.note_id = n.id
+                            )
+                        """)
+                    )
+                    note_ids = [row[0] for row in result_ids.fetchall()]
+
+                if note_ids:
+                    state.notes_indexed = await _index_notes_batch(note_ids)
+                    logger.info("Indexed %d notes", state.notes_indexed)
+                else:
+                    state.notes_indexed = 0
+
+            state.notes_pending_index = await _count_notes_pending_index()
+            state.status = "completed"
+            state.error_message = None
+
         finally:
             await session.close()
 
@@ -232,4 +329,6 @@ async def get_sync_status(
         notes_synced=_sync_state.notes_synced,
         error_message=_sync_state.error_message,
         notes_missing_images=_sync_state.notes_missing_images,
+        notes_indexed=_sync_state.notes_indexed,
+        notes_pending_index=_sync_state.notes_pending_index,
     )

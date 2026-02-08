@@ -141,6 +141,134 @@ class FullTextSearchEngine:
         return query.strip()
 
 
+class TrigramSearchEngine:
+    """PostgreSQL pg_trgm-based fuzzy search engine.
+
+    Uses trigram similarity for Korean/CJK text search where
+    traditional full-text search with stemming doesn't work well.
+    Falls back to ILIKE for short queries.
+
+    Args:
+        session: An async SQLAlchemy session for database queries.
+        similarity_threshold: Minimum similarity score (0-1, default 0.1).
+    """
+
+    _SNIPPET_MAX_LENGTH: int = 200
+
+    def __init__(
+        self,
+        session: AsyncSession,
+        similarity_threshold: float = 0.1,
+    ) -> None:
+        self._session = session
+        self._similarity_threshold = similarity_threshold
+
+    async def search(
+        self,
+        query: str,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> list[SearchResult]:
+        """Execute a trigram similarity search against notes.
+
+        For short queries (< 3 chars), uses ILIKE for prefix matching.
+        For longer queries, uses pg_trgm similarity scoring.
+
+        Args:
+            query: The search query string.
+            limit: Maximum number of results to return (default 20).
+            offset: Number of results to skip for pagination (default 0).
+
+        Returns:
+            A list of SearchResult ordered by similarity score descending.
+        """
+        stripped = query.strip()
+        if not stripped:
+            return []
+
+        if len(stripped) < 3:
+            return await self._ilike_search(stripped, limit, offset)
+
+        return await self._similarity_search(stripped, limit, offset)
+
+    async def _similarity_search(
+        self,
+        query: str,
+        limit: int,
+        offset: int,
+    ) -> list[SearchResult]:
+        """Trigram similarity search using pg_trgm."""
+        title_sim = func.similarity(Note.title, query).label("title_sim")
+        content_sim = func.similarity(Note.content_text, query).label("content_sim")
+        combined_score = (title_sim * 2 + content_sim).label("score")
+
+        stmt = (
+            select(
+                Note.synology_note_id.label("note_id"),
+                Note.title,
+                func.left(Note.content_text, self._SNIPPET_MAX_LENGTH).label("snippet"),
+                combined_score,
+            )
+            .where(
+                (func.similarity(Note.title, query) >= self._similarity_threshold)
+                | (func.similarity(Note.content_text, query) >= self._similarity_threshold)
+            )
+            .order_by(combined_score.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+
+        result = await self._session.execute(stmt)
+        rows = result.fetchall()
+
+        return [
+            SearchResult(
+                note_id=row.note_id,
+                title=row.title,
+                snippet=row.snippet or "",
+                score=float(row.score),
+                search_type="trigram",
+            )
+            for row in rows
+        ]
+
+    async def _ilike_search(
+        self,
+        query: str,
+        limit: int,
+        offset: int,
+    ) -> list[SearchResult]:
+        """ILIKE prefix search for short queries."""
+        pattern = f"%{query}%"
+
+        stmt = (
+            select(
+                Note.synology_note_id.label("note_id"),
+                Note.title,
+                func.left(Note.content_text, self._SNIPPET_MAX_LENGTH).label("snippet"),
+                literal_column("1.0").label("score"),
+            )
+            .where((Note.title.ilike(pattern)) | (Note.content_text.ilike(pattern)))
+            .order_by(Note.source_updated_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+
+        result = await self._session.execute(stmt)
+        rows = result.fetchall()
+
+        return [
+            SearchResult(
+                note_id=row.note_id,
+                title=row.title,
+                snippet=row.snippet or "",
+                score=float(row.score),
+                search_type="trigram",
+            )
+            for row in rows
+        ]
+
+
 class SemanticSearchEngine:
     """pgvector-based semantic search engine using cosine similarity.
 
@@ -299,9 +427,7 @@ class HybridSearchEngine:
         if not query or not query.strip():
             return []
 
-        fts_results, semantic_results = await self._gather_results(
-            query, limit=limit, offset=offset
-        )
+        fts_results, semantic_results = await self._gather_results(query, limit=limit, offset=offset)
 
         return self.rrf_merge(fts_results, semantic_results)
 
@@ -341,9 +467,7 @@ class HybridSearchEngine:
 
         # Phase 2: Semantic search, then RRF merge
         try:
-            semantic_results = await self._semantic_engine.search(
-                query, limit=limit, offset=0
-            )
+            semantic_results = await self._semantic_engine.search(query, limit=limit, offset=0)
         except Exception:
             logger.warning("Semantic engine failed during progressive search")
             semantic_results = []
@@ -394,9 +518,7 @@ class HybridSearchEngine:
 
         # Build merged SearchResult list sorted by RRF score descending
         merged: list[SearchResult] = []
-        for note_id, rrf_score in sorted(
-            scores.items(), key=lambda item: item[1], reverse=True
-        ):
+        for note_id, rrf_score in sorted(scores.items(), key=lambda item: item[1], reverse=True):
             title, snippet = metadata[note_id]
             merged.append(
                 SearchResult(
@@ -428,12 +550,8 @@ class HybridSearchEngine:
         Returns:
             A tuple of (fts_results, semantic_results).
         """
-        fts_task = self._safe_search(
-            self._fts_engine, query, limit=limit, offset=offset, label="FTS"
-        )
-        sem_task = self._safe_search(
-            self._semantic_engine, query, limit=limit, offset=offset, label="Semantic"
-        )
+        fts_task = self._safe_search(self._fts_engine, query, limit=limit, offset=offset, label="FTS")
+        sem_task = self._safe_search(self._semantic_engine, query, limit=limit, offset=offset, label="Semantic")
 
         fts_results, semantic_results = await asyncio.gather(fts_task, sem_task)
         return fts_results, semantic_results

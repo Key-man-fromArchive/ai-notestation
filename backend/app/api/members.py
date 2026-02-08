@@ -82,7 +82,7 @@ class SignupRequest(BaseModel):
 class LoginRequest(BaseModel):
     """Login request body."""
 
-    email: EmailStr
+    email: str  # Can be email or username
     password: str
 
 
