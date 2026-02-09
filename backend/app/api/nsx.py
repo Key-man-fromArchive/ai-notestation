@@ -99,6 +99,28 @@ class ImportState:
 _import_state = ImportState()
 
 
+# ---------------------------------------------------------------------------
+# Image sync state (for auto-sync from NAS)
+# ---------------------------------------------------------------------------
+
+
+class ImageSyncState:
+    """Mutable in-memory tracker for image sync progress."""
+
+    def __init__(self) -> None:
+        self.status: str = "idle"  # idle | syncing | completed | error
+        self.is_syncing: bool = False
+        self.last_sync_at: str | None = None
+        self.total_notes: int = 0
+        self.processed_notes: int = 0
+        self.images_extracted: int = 0
+        self.failed_notes: int = 0
+        self.error_message: str | None = None
+
+
+_image_sync_state = ImageSyncState()
+
+
 def _unix_to_utc(timestamp: int | float | None) -> datetime | None:
     """Convert Unix timestamp to UTC datetime."""
     if timestamp is None:
@@ -565,6 +587,322 @@ async def get_image(
         path=file_path,
         media_type=image.mime_type,
         filename=image.name,
+    )
+
+
+class ImageSyncStatusResponse(BaseModel):
+    status: str
+    total_notes: int = 0
+    processed_notes: int = 0
+    images_extracted: int = 0
+    failed_notes: int = 0
+    last_sync_at: str | None = None
+    error_message: str | None = None
+
+
+class ImageSyncTriggerResponse(BaseModel):
+    status: str
+    message: str
+    total_notes: int = 0
+
+
+SYSTEM_FILES = frozenset({"checked", "unchecked", "shadow_title"})
+
+
+async def _export_note_images(
+    client_url: str,
+    sid: str,
+    note_id: str,
+    output_dir: Path,
+) -> tuple[int, str | None]:
+    import httpx
+    import io
+
+    images_extracted = 0
+
+    try:
+        async with httpx.AsyncClient(verify=False, timeout=60.0) as http:
+            url = f"{client_url}/webapi/entry.cgi"
+
+            start_resp = await http.post(
+                url,
+                data={
+                    "api": "SYNO.NoteStation.Export.Note",
+                    "version": 1,
+                    "method": "start",
+                    "object_id": note_id,
+                    "_sid": sid,
+                },
+            )
+            start_result = start_resp.json()
+
+            if not start_result.get("success"):
+                return 0, f"Failed to start export: {start_result}"
+
+            task_id = start_result["data"]["task_id"]
+
+            for _ in range(30):
+                await asyncio.sleep(1)
+                status_resp = await http.post(
+                    url,
+                    data={
+                        "api": "SYNO.NoteStation.Export.Note",
+                        "version": 1,
+                        "method": "status",
+                        "task_id": task_id,
+                        "_sid": sid,
+                    },
+                )
+                if status_resp.json().get("data", {}).get("finish"):
+                    break
+            else:
+                return 0, "Export timeout"
+
+            download_resp = await http.post(
+                url,
+                data={
+                    "api": "SYNO.NoteStation.Export.Note",
+                    "version": 1,
+                    "method": "download",
+                    "task_id": task_id,
+                    "_sid": sid,
+                },
+            )
+
+            if "zip" not in download_resp.headers.get("content-type", ""):
+                return 0, f"Invalid response: {download_resp.headers.get('content-type')}"
+
+            with zipfile.ZipFile(io.BytesIO(download_resp.content), "r") as zf:
+                for name in zf.namelist():
+                    if not name.startswith("files/") or name.endswith("/"):
+                        continue
+
+                    filename = name.split("/")[-1]
+                    if "." not in filename:
+                        continue
+
+                    md5, ext = filename.rsplit(".", 1)
+                    if md5 in SYSTEM_FILES:
+                        continue
+
+                    output_path = output_dir / f"{md5}.{ext}"
+                    if not output_path.exists():
+                        output_path.write_bytes(zf.read(name))
+
+                    images_extracted += 1
+
+    except Exception as e:
+        logger.warning("Failed to export note %s: %s", note_id, e)
+        return 0, str(e)
+
+    return images_extracted, None
+
+
+async def _sync_note_with_images(
+    nas_url: str,
+    sid: str,
+    note_id: str,
+    output_dir: Path,
+    notestation,
+) -> tuple[int, str | None]:
+    images_count, error = await _export_note_images(nas_url, sid, note_id, output_dir)
+    if error:
+        return 0, error
+
+    if images_count == 0:
+        return 0, None
+
+    try:
+        note_data = await notestation.get_note(note_id)
+        attachments = note_data.get("attachment", {})
+
+        async with async_session_factory() as db:
+            for ref, att_info in attachments.items():
+                if att_info.get("type") != "image":
+                    continue
+
+                md5 = att_info.get("md5")
+                if not md5:
+                    continue
+
+                ext = att_info.get("ext", "png")
+                file_path = output_dir / f"{md5}.{ext}"
+                if not file_path.exists():
+                    continue
+
+                existing = await db.execute(
+                    select(NoteImage).where(
+                        NoteImage.synology_note_id == note_id,
+                        NoteImage.ref == ref,
+                    )
+                )
+                if existing.scalar_one_or_none():
+                    continue
+
+                note_image = NoteImage(
+                    synology_note_id=note_id,
+                    ref=ref,
+                    md5=md5,
+                    name=att_info.get("name", f"{md5}.{ext}"),
+                    file_path=str(file_path),
+                    mime_type=f"image/{ext}",
+                    width=att_info.get("width"),
+                    height=att_info.get("height"),
+                )
+                db.add(note_image)
+
+            await db.commit()
+
+    except Exception as e:
+        logger.warning("Failed to save image metadata for %s: %s", note_id, e)
+        return images_count, str(e)
+
+    return images_count, None
+
+
+async def _run_image_sync_background(state: ImageSyncState) -> None:
+    from sqlalchemy import text
+
+    from app.api.settings import get_nas_config
+    from app.synology_gateway.client import SynologyClient
+    from app.synology_gateway.notestation import NoteStationService
+
+    state.status = "syncing"
+    state.is_syncing = True
+    state.processed_notes = 0
+    state.images_extracted = 0
+    state.failed_notes = 0
+    state.error_message = None
+
+    try:
+        nas = get_nas_config()
+        client = SynologyClient(url=nas["url"], user=nas["user"], password=nas["password"])
+        sid = await client.login()
+        notestation = NoteStationService(client)
+
+        output_dir = Path(settings.NSX_IMAGES_PATH)
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        async with async_session_factory() as db:
+            result = await db.execute(
+                text("""
+                    SELECT DISTINCT n.synology_note_id
+                    FROM notes n
+                    WHERE n.content_html ~ '<img[^>]*ref="[^"]+"'
+                    AND NOT EXISTS (
+                        SELECT 1 FROM note_images ni
+                        WHERE ni.synology_note_id = n.synology_note_id
+                    )
+                    LIMIT 500
+                """)
+            )
+            note_ids = [row[0] for row in result.fetchall()]
+
+        state.total_notes = len(note_ids)
+        logger.info("Starting image sync for %d notes", state.total_notes)
+
+        if not note_ids:
+            state.status = "completed"
+            state.last_sync_at = datetime.now(UTC).isoformat()
+            await client.close()
+            return
+
+        semaphore = asyncio.Semaphore(5)
+
+        async def process_note(note_id: str) -> None:
+            async with semaphore:
+                images, error = await _sync_note_with_images(nas["url"], sid, note_id, output_dir, notestation)
+                state.processed_notes += 1
+                if error:
+                    state.failed_notes += 1
+                else:
+                    state.images_extracted += images
+
+        await asyncio.gather(*[process_note(nid) for nid in note_ids])
+
+        await client.close()
+
+        state.status = "completed"
+        state.last_sync_at = datetime.now(UTC).isoformat()
+        logger.info(
+            "Image sync completed: %d/%d notes, %d images",
+            state.processed_notes,
+            state.total_notes,
+            state.images_extracted,
+        )
+
+    except Exception as exc:
+        logger.exception("Image sync failed: %s", exc)
+        state.status = "error"
+        state.error_message = str(exc)
+    finally:
+        state.is_syncing = False
+
+
+@router.post("/nsx/sync-images", response_model=ImageSyncTriggerResponse)
+async def sync_images_from_nas(
+    background_tasks: BackgroundTasks,
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+) -> ImageSyncTriggerResponse:
+    """Trigger automatic image sync from NAS.
+
+    Exports notes with missing images from NAS and extracts embedded images.
+    Processing happens in the background.
+    """
+    if _image_sync_state.is_syncing:
+        return ImageSyncTriggerResponse(
+            status="already_syncing",
+            message="이미 이미지 동기화가 진행 중입니다.",
+            total_notes=_image_sync_state.total_notes,
+        )
+
+    # Get count of notes needing sync
+    async with async_session_factory() as db:
+        from sqlalchemy import text
+
+        result = await db.execute(
+            text("""
+                SELECT COUNT(DISTINCT n.synology_note_id)
+                FROM notes n
+                WHERE n.content_html ~ '<img[^>]*ref="[^"]+"'
+                AND NOT EXISTS (
+                    SELECT 1 FROM note_images ni
+                    WHERE ni.synology_note_id = n.synology_note_id
+                )
+            """)
+        )
+        total = result.scalar() or 0
+
+    if total == 0:
+        return ImageSyncTriggerResponse(
+            status="no_work",
+            message="동기화할 이미지가 없습니다.",
+            total_notes=0,
+        )
+
+    _image_sync_state.total_notes = total
+    background_tasks.add_task(_run_image_sync_background, _image_sync_state)
+
+    return ImageSyncTriggerResponse(
+        status="syncing",
+        message=f"{total}개 노트의 이미지 동기화를 시작합니다.",
+        total_notes=total,
+    )
+
+
+@router.get("/nsx/sync-images/status", response_model=ImageSyncStatusResponse)
+async def get_image_sync_status(
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+) -> ImageSyncStatusResponse:
+    """Get current image sync status."""
+    return ImageSyncStatusResponse(
+        status=_image_sync_state.status,
+        total_notes=_image_sync_state.total_notes,
+        processed_notes=_image_sync_state.processed_notes,
+        images_extracted=_image_sync_state.images_extracted,
+        failed_notes=_image_sync_state.failed_notes,
+        last_sync_at=_image_sync_state.last_sync_at,
+        error_message=_image_sync_state.error_message,
     )
 
 
