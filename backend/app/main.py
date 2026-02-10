@@ -80,6 +80,7 @@ from app.api.share_links import note_router as share_links_note_router
 from app.api.shared import router as shared_router
 from app.api.discovery import router as discovery_router
 from app.api.graph import router as graph_router
+from app.api.admin import router as admin_router
 
 app.include_router(nsx_router, prefix="/api")
 app.include_router(backup_router, prefix="/api")
@@ -90,6 +91,7 @@ app.include_router(share_links_note_router, prefix="/api")
 app.include_router(shared_router, prefix="/api")
 app.include_router(discovery_router, prefix="/api")
 app.include_router(graph_router, prefix="/api")
+app.include_router(admin_router, prefix="/api")
 
 
 @app.get("/api/health", tags=["health"])

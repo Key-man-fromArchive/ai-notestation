@@ -14,11 +14,12 @@ import {
   FlaskConical,
   Network,
   LayoutGrid,
+  ShieldCheck,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/AuthContext'
 
-const navItems = [
+const baseNavItems = [
   { to: '/', icon: Home, label: '대시보드' },
   { to: '/notes', icon: FileText, label: '노트' },
   { to: '/notebooks', icon: BookOpen, label: '노트북' },
@@ -27,8 +28,10 @@ const navItems = [
   { to: '/graph', icon: Network, label: '그래프' },
   { to: '/members', icon: Users, label: '멤버' },
   { to: '/settings', icon: Settings, label: '설정' },
-  { to: '/demo', icon: LayoutGrid, label: '데모' },
 ]
+
+const adminNavItem = { to: '/admin', icon: ShieldCheck, label: '관리자' }
+const demoNavItem = { to: '/demo', icon: LayoutGrid, label: '데모' }
 
 /**
  * 앱 네비게이션 사이드바
@@ -38,6 +41,8 @@ const navItems = [
  */
 export function Sidebar() {
   const { user, logout } = useAuth()
+  const isAdmin = user?.role === 'owner' || user?.role === 'admin'
+  const navItems = [...baseNavItems, ...(isAdmin ? [adminNavItem] : []), demoNavItem]
 
   return (
     <aside className="flex flex-col w-64 border-r border-border/60 bg-card h-screen sticky top-0">

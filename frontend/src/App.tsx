@@ -27,6 +27,7 @@ const Signup = lazy(() => import('./pages/Signup'))
 const SharedView = lazy(() => import('./pages/SharedView'))
 const Discovery = lazy(() => import('./pages/Discovery'))
 const Graph = lazy(() => import('./pages/Graph'))
+const Admin = lazy(() => import('./pages/Admin'))
 
 // Demo pages
 const DemoHub = lazy(() => import('./demo/index'))
@@ -74,6 +75,7 @@ function ProtectedRoutes() {
           <Route path="/settings" element={<Settings />} />
           <Route path="/members" element={<Members />} />
           <Route path="/graph" element={<Graph />} />
+          <Route path="/admin" element={<Admin />} />
           <Route path="/oauth/callback" element={<OAuthCallback />} />
 
           {/* Demo pages */}
