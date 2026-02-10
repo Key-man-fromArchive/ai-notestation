@@ -15,6 +15,7 @@ import {
   Network,
   LayoutGrid,
   ShieldCheck,
+  Activity,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/AuthContext'
@@ -28,6 +29,7 @@ const baseNavItems = [
   { to: '/graph', icon: Network, label: '그래프' },
   { to: '/members', icon: Users, label: '멤버' },
   { to: '/settings', icon: Settings, label: '설정' },
+  { to: '/operations', icon: Activity, label: '운영 현황' },
 ]
 
 const adminNavItem = { to: '/admin', icon: ShieldCheck, label: '관리자' }
