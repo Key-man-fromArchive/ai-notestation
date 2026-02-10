@@ -89,10 +89,10 @@ export function Sidebar() {
         <div className="border-t border-border/60 px-3 py-3">
           <div className="flex items-center gap-3 px-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-semibold shrink-0">
-              {user.username.charAt(0).toUpperCase()}
+              {(user.name || user.email).charAt(0).toUpperCase()}
             </div>
             <span className="text-sm text-foreground font-medium truncate flex-1">
-              {user.username}
+              {user.name || user.email}
             </span>
             <button
               onClick={logout}
