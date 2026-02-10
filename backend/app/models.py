@@ -4,7 +4,7 @@
 from datetime import datetime
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Boolean, CheckConstraint, DateTime, Index, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -23,7 +23,7 @@ class Note(Base):
     content_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     content_text: Mapped[str] = mapped_column(Text, default="")  # Plaintext extracted from HTML
     notebook_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    notebook_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    notebook_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("notebooks.id", ondelete="SET NULL"), nullable=True, index=True)
     tags: Mapped[list | None] = mapped_column(JSONB, nullable=True)  # ["tag1", "tag2"]
     is_todo: Mapped[bool] = mapped_column(Boolean, default=False)
     is_shortcut: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -75,7 +75,7 @@ class NoteEmbedding(Base):
     __tablename__ = "note_embeddings"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    note_id: Mapped[int] = mapped_column(Integer, index=True)  # FK to notes.id
+    note_id: Mapped[int] = mapped_column(Integer, ForeignKey("notes.id", ondelete="CASCADE"), index=True)
     chunk_index: Mapped[int] = mapped_column(Integer, default=0)
     chunk_text: Mapped[str] = mapped_column(Text)
     embedding: Mapped[list] = mapped_column(Vector(1536))  # OpenAI text-embedding-3-small
@@ -130,7 +130,7 @@ class NoteAttachment(Base):
     __tablename__ = "note_attachments"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    note_id: Mapped[int] = mapped_column(Integer, index=True)
+    note_id: Mapped[int] = mapped_column(Integer, ForeignKey("notes.id", ondelete="CASCADE"), index=True)
     file_id: Mapped[str] = mapped_column(String(255), index=True)
     name: Mapped[str] = mapped_column(String(512))
     mime_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
@@ -201,10 +201,10 @@ class Membership(Base):
     __tablename__ = "memberships"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(Integer, index=True)
-    org_id: Mapped[int] = mapped_column(Integer, index=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    org_id: Mapped[int] = mapped_column(Integer, ForeignKey("organizations.id", ondelete="CASCADE"), index=True)
     role: Mapped[str] = mapped_column(String(20), default="member")
-    invited_by: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    invited_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     invite_token: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     invite_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -221,11 +221,11 @@ class NoteAccess(Base):
     __tablename__ = "note_access"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    note_id: Mapped[int] = mapped_column(Integer, index=True)
-    user_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
-    org_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    note_id: Mapped[int] = mapped_column(Integer, ForeignKey("notes.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
+    org_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=True, index=True)
     permission: Mapped[str] = mapped_column(String(20), default="read")
-    granted_by: Mapped[int] = mapped_column(Integer, nullable=False)
+    granted_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
@@ -239,11 +239,11 @@ class NotebookAccess(Base):
     __tablename__ = "notebook_access"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    notebook_id: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
-    user_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
-    org_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    notebook_id: Mapped[int] = mapped_column(Integer, ForeignKey("notebooks.id", ondelete="CASCADE"), index=True, nullable=False)
+    user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
+    org_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=True, index=True)
     permission: Mapped[str] = mapped_column(String(20), default="read", nullable=False)
-    granted_by: Mapped[int] = mapped_column(Integer, nullable=False)
+    granted_by: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
@@ -266,10 +266,10 @@ class ShareLink(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     token: Mapped[str] = mapped_column(String(64), unique=True, index=True)
-    notebook_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    note_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    notebook_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("notebooks.id", ondelete="CASCADE"), nullable=True)
+    note_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("notes.id", ondelete="CASCADE"), nullable=True)
     link_type: Mapped[str] = mapped_column(String(20), nullable=False)
-    created_by: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_by: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     email_restriction: Mapped[str | None] = mapped_column(String(255), nullable=True)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     access_count: Mapped[int] = mapped_column(Integer, default=0)
@@ -287,11 +287,11 @@ class ClusteringTask(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     task_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
-    notebook_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    notebook_id: Mapped[int] = mapped_column(Integer, ForeignKey("notebooks.id", ondelete="CASCADE"), nullable=False, index=True)
     status: Mapped[str] = mapped_column(String(20), default="pending")
     num_clusters: Mapped[int] = mapped_column(Integer, default=5)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_by: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_by: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -307,7 +307,7 @@ class NoteCluster(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     task_id: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
-    notebook_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    notebook_id: Mapped[int] = mapped_column(Integer, ForeignKey("notebooks.id", ondelete="CASCADE"), nullable=False, index=True)
     cluster_index: Mapped[int] = mapped_column(Integer, nullable=False)
     note_ids: Mapped[list] = mapped_column(JSONB, nullable=False)
     summary: Mapped[str] = mapped_column(Text, default="")
