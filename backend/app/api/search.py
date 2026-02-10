@@ -331,6 +331,7 @@ class IndexState:
     failed: int = 0
     error_message: str | None = None
     api_key: str | None = None
+    triggered_by: str | None = None
 
 
 _index_state = IndexState()
@@ -365,6 +366,10 @@ async def _run_index_background(state: IndexState) -> None:
     state.error_message = None
     state.indexed = 0
     state.failed = 0
+
+    from app.services.activity_log import log_activity
+
+    await log_activity("embedding", "started", triggered_by=state.triggered_by)
 
     try:
         async with async_session_factory() as session:
@@ -413,11 +418,28 @@ async def _run_index_background(state: IndexState) -> None:
             await asyncio.sleep(0.5)
 
         state.status = "completed"
+        await log_activity(
+            "embedding",
+            "completed",
+            message=f"임베딩 완료: {state.indexed}개 인덱싱",
+            details={
+                "total_notes": state.total_notes,
+                "indexed": state.indexed,
+                "failed": state.failed,
+            },
+            triggered_by=state.triggered_by,
+        )
 
     except Exception as exc:
         state.status = "error"
         state.error_message = str(exc)
         logger.exception("Indexing failed: %s", exc)
+        await log_activity(
+            "embedding",
+            "error",
+            message=str(exc),
+            triggered_by=state.triggered_by,
+        )
 
     finally:
         state.is_indexing = False
@@ -450,6 +472,8 @@ async def trigger_index(
             status="error",
             message="OpenAI API 키가 필요합니다. Settings에서 API 키를 입력하거나 OAuth 연결하세요.",
         )
+
+    _index_state.triggered_by = current_user.get("username", "unknown")
 
     background_tasks.add_task(_run_index_background, _index_state)
 
