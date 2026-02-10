@@ -36,6 +36,7 @@ dependencies = [
     "cryptography>=44.0.0",
     "google-auth>=2.37.0",
     "scikit-learn>=1.6.0",
+    "kiwipiepy>=0.18.0",
 ]
 
 [project.optional-dependencies]

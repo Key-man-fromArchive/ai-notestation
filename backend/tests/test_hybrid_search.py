@@ -85,13 +85,13 @@ class TestRRFMergeBasic:
         assert merged_ids == {"1", "2", "3", "4"}
         assert all(r.search_type == "hybrid" for r in merged)
 
-    def test_rrf_merge_score_calculation(self):
-        """RRF score is computed as sum(1/(k+rank)) for each result set.
+    def test_rrf_merge_score_calculation_default_weights(self):
+        """RRF score with default weights (1.0) is sum(1/(k+rank)).
 
-        With k=60:
-          note_id=1: rank 0 in FTS -> score = 1/(60+0) = 1/60
-          note_id=2: rank 1 in FTS -> score = 1/(60+1) = 1/61
-          note_id=3: rank 0 in semantic -> score = 1/(60+0) = 1/60
+        With k=60, fts_weight=1.0, semantic_weight=1.0:
+          note_id=1: rank 0 in FTS -> score = 1.0 * 1/(60+0) = 1/60
+          note_id=2: rank 1 in FTS -> score = 1.0 * 1/(60+1) = 1/61
+          note_id=3: rank 0 in semantic -> score = 1.0 * 1/(60+0) = 1/60
         """
         fts_results = [
             _sr(1, score=0.9, search_type="fts"),
@@ -104,12 +104,28 @@ class TestRRFMergeBasic:
         merged = HybridSearchEngine.rrf_merge(fts_results, semantic_results, k=60)
 
         scores_by_id = {r.note_id: r.score for r in merged}
-        # note_id=1 only in FTS at rank 0: 1/(60+0) = 1/60
         assert scores_by_id["1"] == pytest.approx(1 / 60, abs=1e-10)
-        # note_id=2 only in FTS at rank 1: 1/(60+1) = 1/61
         assert scores_by_id["2"] == pytest.approx(1 / 61, abs=1e-10)
-        # note_id=3 only in semantic at rank 0: 1/(60+0) = 1/60
         assert scores_by_id["3"] == pytest.approx(1 / 60, abs=1e-10)
+
+    def test_rrf_merge_weighted_scores(self):
+        """Weighted RRF correctly applies fts_weight and semantic_weight.
+
+        With k=60, fts_weight=0.7, semantic_weight=0.3:
+          note_id=1: FTS rank 0 -> 0.7 * 1/60
+          note_id=2: semantic rank 0 -> 0.3 * 1/60
+        """
+        fts_results = [_sr(1, score=0.9, search_type="fts")]
+        semantic_results = [_sr(2, score=0.7, search_type="semantic")]
+
+        merged = HybridSearchEngine.rrf_merge(
+            fts_results, semantic_results, k=60,
+            fts_weight=0.7, semantic_weight=0.3,
+        )
+
+        scores_by_id = {r.note_id: r.score for r in merged}
+        assert scores_by_id["1"] == pytest.approx(0.7 / 60, abs=1e-10)
+        assert scores_by_id["2"] == pytest.approx(0.3 / 60, abs=1e-10)
 
 
 # ---------------------------------------------------------------------------
@@ -287,8 +303,12 @@ class TestHybridSearchSuccess:
         hybrid = HybridSearchEngine(fts_engine=fts_engine, semantic_engine=sem_engine)
         await hybrid.search("test", limit=10)
 
-        fts_engine.search.assert_awaited_once_with("test", limit=10, offset=0)
-        sem_engine.search.assert_awaited_once_with("test", limit=10, offset=0)
+        fts_engine.search.assert_awaited_once_with(
+            "test", limit=10, offset=0, notebook_name=None, date_from=None, date_to=None,
+        )
+        sem_engine.search.assert_awaited_once_with(
+            "test", limit=10, offset=0, notebook_name=None, date_from=None, date_to=None,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -470,3 +490,80 @@ class TestSemanticError:
         assert len(results) == 1
         assert results[0].search_type == "hybrid"
         assert results[0].note_id == "1"
+
+
+# ---------------------------------------------------------------------------
+# 12. Dynamic RRF parameters
+# ---------------------------------------------------------------------------
+
+
+class TestDynamicRRFParams:
+    """_compute_rrf_params returns correct (k, fts_w, sem_w) per query type."""
+
+    def test_korean_single_term(self):
+        from app.search.query_preprocessor import analyze_query
+
+        analysis = analyze_query("연구")
+        k, fts_w, sem_w = HybridSearchEngine._compute_rrf_params(analysis)
+        assert k == 40
+        assert fts_w == pytest.approx(0.70)
+        assert sem_w == pytest.approx(0.30)
+
+    def test_korean_multi_term(self):
+        from app.search.query_preprocessor import analyze_query
+
+        analysis = analyze_query("실험 프로토콜")
+        k, fts_w, sem_w = HybridSearchEngine._compute_rrf_params(analysis)
+        assert k == 60
+        assert fts_w == pytest.approx(0.55)
+        assert sem_w == pytest.approx(0.45)
+
+    def test_english_single_term(self):
+        from app.search.query_preprocessor import analyze_query
+
+        analysis = analyze_query("PCR")
+        k, fts_w, sem_w = HybridSearchEngine._compute_rrf_params(analysis)
+        assert k == 50
+        assert fts_w == pytest.approx(0.65)
+        assert sem_w == pytest.approx(0.35)
+
+    def test_mixed_language(self):
+        from app.search.query_preprocessor import analyze_query
+
+        analysis = analyze_query("PCR 실험 결과")
+        k, fts_w, sem_w = HybridSearchEngine._compute_rrf_params(analysis)
+        assert k == 60
+        assert fts_w == pytest.approx(0.50)
+        assert sem_w == pytest.approx(0.50)
+
+    def test_english_multi_default(self):
+        from app.search.query_preprocessor import analyze_query
+
+        analysis = analyze_query("protein analysis method")
+        k, fts_w, sem_w = HybridSearchEngine._compute_rrf_params(analysis)
+        assert k == 60
+        assert fts_w == pytest.approx(0.60)
+        assert sem_w == pytest.approx(0.40)
+
+
+# ---------------------------------------------------------------------------
+# 13. Weighted RRF duplicate scores
+# ---------------------------------------------------------------------------
+
+
+class TestWeightedRRFDuplicates:
+    """Weighted RRF correctly sums scores for duplicates across result sets."""
+
+    def test_weighted_duplicate_scores_summed(self):
+        """When a note appears in both sets, weighted RRF scores are summed."""
+        fts_results = [_sr(1, "Note A", "fts", 0.9, "fts")]  # rank 0
+        semantic_results = [_sr(1, "Note A", "sem", 0.7, "semantic")]  # rank 0
+
+        merged = HybridSearchEngine.rrf_merge(
+            fts_results, semantic_results, k=60,
+            fts_weight=0.7, semantic_weight=0.3,
+        )
+
+        assert len(merged) == 1
+        expected = 0.7 * (1 / 60) + 0.3 * (1 / 60)
+        assert merged[0].score == pytest.approx(expected, abs=1e-10)

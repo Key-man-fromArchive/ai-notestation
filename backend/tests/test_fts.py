@@ -343,41 +343,88 @@ class TestKoreanSearch:
 
 
 # ---------------------------------------------------------------------------
-# 9. Query preprocessing (_build_tsquery)
+# 9. Query preprocessing (_build_tsquery_expr) — now returns QueryAnalysis
 # ---------------------------------------------------------------------------
 
 
-class TestBuildTsquery:
-    """The _build_tsquery method preprocesses query strings."""
+class TestBuildTsqueryExpr:
+    """The _build_tsquery_expr method preprocesses query strings."""
 
-    def test_simple_query(self):
-        """A simple word is returned as-is."""
+    def test_simple_query_produces_tsquery_expr(self):
+        """A simple word produces a non-empty tsquery expression."""
         session = _make_mock_session()
         engine = FullTextSearchEngine(session)
 
-        result = engine._build_tsquery("python")
-        assert result == "python"
+        result = engine._build_tsquery_expr("python")
+        assert result.tsquery_expr != ""
+        assert "python" in result.tsquery_expr
 
     def test_strips_whitespace(self):
-        """Leading and trailing whitespace is stripped."""
+        """Leading and trailing whitespace is handled."""
         session = _make_mock_session()
         engine = FullTextSearchEngine(session)
 
-        result = engine._build_tsquery("  python  ")
-        assert result == "python"
+        result = engine._build_tsquery_expr("  python  ")
+        assert "python" in result.tsquery_expr
 
-    def test_multi_word_query(self):
-        """Multi-word queries are kept as a single string for plainto_tsquery."""
+    def test_multi_word_query_or_joined(self):
+        """Multi-word queries produce OR-joined tsquery expression."""
         session = _make_mock_session()
         engine = FullTextSearchEngine(session)
 
-        result = engine._build_tsquery("python async programming")
-        assert result == "python async programming"
+        result = engine._build_tsquery_expr("python async programming")
+        assert "python" in result.tsquery_expr
+        assert " | " in result.tsquery_expr
 
-    def test_empty_query(self):
-        """An empty string returns an empty string."""
+    def test_empty_query_returns_empty_expr(self):
+        """An empty string returns empty tsquery expression."""
         session = _make_mock_session()
         engine = FullTextSearchEngine(session)
 
-        result = engine._build_tsquery("")
-        assert result == ""
+        result = engine._build_tsquery_expr("")
+        assert result.tsquery_expr == ""
+
+    def test_korean_query_produces_morphemes(self):
+        """Korean query produces morpheme-based tsquery."""
+        session = _make_mock_session()
+        engine = FullTextSearchEngine(session)
+
+        result = engine._build_tsquery_expr("실험 프로토콜")
+        assert result.language == "ko"
+        assert "실험" in result.tsquery_expr
+        assert "프로토콜" in result.tsquery_expr
+
+
+# ---------------------------------------------------------------------------
+# 10. BM25 scoring SQL structure
+# ---------------------------------------------------------------------------
+
+
+class TestBM25Scoring:
+    """BM25-approximated scoring generates correct SQL."""
+
+    @pytest.mark.asyncio
+    async def test_sql_uses_setweight(self):
+        """The generated SQL uses setweight for field boosting."""
+        session = _make_mock_session([])
+        engine = FullTextSearchEngine(session)
+
+        await engine.search("test")
+
+        call_args = session.execute.call_args
+        stmt = call_args[0][0]
+        compiled = str(stmt.compile(compile_kwargs={"literal_binds": False}))
+        assert "setweight" in compiled.lower()
+
+    @pytest.mark.asyncio
+    async def test_sql_uses_to_tsquery(self):
+        """The generated SQL uses to_tsquery (not plainto_tsquery)."""
+        session = _make_mock_session([])
+        engine = FullTextSearchEngine(session)
+
+        await engine.search("test")
+
+        call_args = session.execute.call_args
+        stmt = call_args[0][0]
+        compiled = str(stmt.compile(compile_kwargs={"literal_binds": False}))
+        assert "to_tsquery" in compiled.lower()

@@ -6,12 +6,13 @@
 
 Provides:
 - ``GET /search`` -- Search notes using hybrid, full-text, or semantic search.
+- ``GET /search/suggestions`` -- Search suggestions (autocomplete).
 - ``POST /search/index`` -- Trigger batch embedding indexing for notes.
 - ``GET /search/index/status`` -- Get embedding indexing status.
 
 Supports three search modes:
-- **hybrid** (default): RRF-merged FTS + semantic results.
-- **fts**: PostgreSQL tsvector full-text search only.
+- **hybrid** (default): Weighted RRF-merged FTS + semantic results.
+- **fts**: PostgreSQL tsvector full-text search with BM25 scoring.
 - **semantic**: pgvector cosine similarity only.
 
 All endpoints require JWT Bearer authentication.
@@ -22,11 +23,12 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
+from datetime import datetime
 from enum import Enum
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from pydantic import BaseModel
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings, get_settings
@@ -164,11 +166,33 @@ async def _get_openai_api_key(db: AsyncSession, username: str) -> str | None:
     return None
 
 
+class SuggestionResponse(BaseModel):
+    """Search suggestion (autocomplete) response."""
+
+    suggestions: list[str]
+    prefix: str
+
+
+def _parse_date(date_str: str | None) -> datetime | None:
+    """Parse a date string (YYYY-MM-DD) to datetime, or None."""
+    if not date_str:
+        return None
+    try:
+        return datetime.fromisoformat(date_str)
+    except ValueError:
+        return None
+
+
 @router.get("", response_model=SearchResponse)
 async def search(
     q: str = Query(..., min_length=1, description="Search query"),  # noqa: B008
     type: SearchType = Query(SearchType.hybrid, description="Search type"),  # noqa: A002, B008
     limit: int = Query(20, ge=1, le=100, description="Maximum number of results"),  # noqa: B008
+    offset: int = Query(0, ge=0, description="Number of results to skip for pagination"),  # noqa: B008
+    notebook: str | None = Query(None, description="Filter by notebook name"),  # noqa: B008
+    date_from: str | None = Query(None, description="Filter from date (YYYY-MM-DD)"),  # noqa: B008
+    date_to: str | None = Query(None, description="Filter to date (YYYY-MM-DD)"),  # noqa: B008
+    rerank: bool = Query(False, description="Apply Cohere reranking"),  # noqa: B008
     current_user: dict = Depends(get_current_user),  # noqa: B008
     db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> SearchResponse:
@@ -180,6 +204,11 @@ async def search(
         q: The search query string (required, min 1 character).
         type: Search mode -- hybrid, fts, or semantic (default: hybrid).
         limit: Maximum number of results (1-100, default: 20).
+        offset: Number of results to skip for pagination (default: 0).
+        notebook: Optional notebook name to filter results.
+        date_from: Optional start date (YYYY-MM-DD) to filter results.
+        date_to: Optional end date (YYYY-MM-DD) to filter results.
+        rerank: Whether to apply Cohere reranking (default: false).
         current_user: Injected by JWT authentication dependency.
         db: Injected async database session.
 
@@ -188,31 +217,52 @@ async def search(
     """
     username = current_user.get("username", "")
     logger.info(
-        "Search request: user=%s, query=%r, type=%s, limit=%d",
+        "Search request: user=%s, query=%r, type=%s, limit=%d, offset=%d, notebook=%s",
         username,
         q,
         type.value,
         limit,
+        offset,
+        notebook,
     )
 
     api_key = await _get_openai_api_key(db, username)
     results: list[SearchResult] = []
 
+    # Parse date filters
+    parsed_date_from = _parse_date(date_from)
+    parsed_date_to = _parse_date(date_to)
+    filter_kwargs = {
+        "notebook_name": notebook,
+        "date_from": parsed_date_from,
+        "date_to": parsed_date_to,
+    }
+
     if type == SearchType.fts:
         engine = _build_fts_engine(db)
-        results = await engine.search(q, limit=limit)
+        results = await engine.search(q, limit=limit, offset=offset, **filter_kwargs)
 
     elif type == SearchType.semantic:
         engine = _build_semantic_engine(db, api_key=api_key)
-        results = await engine.search(q, limit=limit)
+        results = await engine.search(q, limit=limit, offset=offset, **filter_kwargs)
 
     elif type == SearchType.trigram:
         engine = _build_trigram_engine(db)
-        results = await engine.search(q, limit=limit)
+        results = await engine.search(q, limit=limit, offset=offset, **filter_kwargs)
 
     else:  # hybrid (default)
         engine = _build_hybrid_engine(db, api_key=api_key)
-        results = await engine.search(q, limit=limit)
+        results = await engine.search(q, limit=limit, offset=offset, **filter_kwargs)
+
+    # Apply reranking if requested
+    if rerank and results:
+        try:
+            from app.search.reranker import get_reranker
+
+            reranker = get_reranker()
+            results = await reranker.rerank(q, results)
+        except Exception:
+            logger.warning("Reranking failed, returning unranked results")
 
     return SearchResponse(
         results=[
@@ -229,6 +279,42 @@ async def search(
         search_type=type.value,
         total=len(results),
     )
+
+
+@router.get("/suggestions", response_model=SuggestionResponse)
+async def search_suggestions(
+    prefix: str = Query(..., min_length=1, max_length=100, description="Search prefix"),  # noqa: B008
+    limit: int = Query(5, ge=1, le=10, description="Maximum suggestions"),  # noqa: B008
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> SuggestionResponse:
+    """Get search suggestions based on note titles.
+
+    Uses ILIKE prefix matching with similarity scoring for ranking.
+
+    Args:
+        prefix: The search prefix to match against.
+        limit: Maximum number of suggestions (1-10, default: 5).
+        current_user: Injected by JWT authentication dependency.
+        db: Injected async database session.
+
+    Returns:
+        SuggestionResponse with matching note titles.
+    """
+    pattern = f"%{prefix}%"
+
+    stmt = (
+        select(Note.title)
+        .where(Note.title.ilike(pattern))
+        .order_by(func.similarity(Note.title, prefix).desc())
+        .limit(limit)
+        .distinct()
+    )
+
+    result = await db.execute(stmt)
+    titles = [row[0] for row in result.fetchall() if row[0]]
+
+    return SuggestionResponse(suggestions=titles, prefix=prefix)
 
 
 # ---------------------------------------------------------------------------
