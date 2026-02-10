@@ -304,17 +304,11 @@ export default function Members() {
   }
 
   if (error) {
-    // Check if this is a 401 error (NAS auth users don't have member auth)
-    const is401 = error instanceof Error && error.message.includes('401')
     return (
       <EmptyState
-        icon={is401 ? Users : AlertCircle}
-        title={is401 ? '멤버 인증이 필요합니다' : 'Failed to load members'}
-        description={
-          is401
-            ? '이 기능은 조직 멤버 계정으로 로그인해야 사용할 수 있습니다. 현재 NAS 계정으로 로그인되어 있습니다.'
-            : 'There was an error loading the member list.'
-        }
+        icon={AlertCircle}
+        title="Failed to load members"
+        description="There was an error loading the member list."
       />
     )
   }

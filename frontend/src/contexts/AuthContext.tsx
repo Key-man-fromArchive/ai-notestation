@@ -8,35 +8,38 @@ import {
 } from 'react'
 import { apiClient } from '@/lib/api'
 
-interface User {
-  username: string
+export interface User {
+  user_id: number
+  email: string
+  name: string
+  org_id: number
+  org_slug: string
+  role: string
 }
 
-interface LoginResult {
-  requires2FA?: boolean
+interface SignupRequest {
+  email: string
+  password: string
+  name: string
+  org_name: string
+  org_slug: string
 }
 
 interface AuthContextType {
   user: User | null
   isLoading: boolean
   isAuthenticated: boolean
-  login: (username: string, password: string, otpCode?: string) => Promise<LoginResult>
+  login: (email: string, password: string) => Promise<void>
+  signup: (data: SignupRequest) => Promise<void>
   logout: () => void
 }
 
 const AuthContext = createContext<AuthContextType | null>(null)
 
-/**
- * 인증 상태 관리 Provider
- * - 앱 시작 시 저장된 토큰으로 /auth/me 호출하여 인증 확인
- * - 실패 시 refresh token으로 재시도
- * - login/logout 메서드 제공
- */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
-  // 토큰으로 사용자 정보 조회
   const fetchUser = useCallback(async (): Promise<boolean> => {
     try {
       const data = await apiClient.get<User>('/auth/me')
@@ -47,7 +50,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  // refresh token으로 access token 갱신
   const refreshAccessToken = useCallback(async (): Promise<boolean> => {
     const refreshToken = apiClient.getRefreshToken()
     if (!refreshToken) return false
@@ -56,7 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const data = await apiClient.post<{
         access_token: string
         token_type: string
-      }>('/token/refresh', { refresh_token: refreshToken })
+      }>('/auth/token/refresh', { refresh_token: refreshToken })
       apiClient.setToken(data.access_token)
       return true
     } catch {
@@ -64,31 +66,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  // 앱 시작 시 인증 상태 복원
+  // Restore auth on app startup
   useEffect(() => {
     const restoreAuth = async () => {
-      // 먼저 member auth 체크 (로컬 DB 인증)
-      const memberUser = localStorage.getItem('member_user')
-      const hasToken = apiClient.getToken()
-      
-      if (memberUser && hasToken) {
-        // member auth가 있고 토큰도 있으면 member auth 사용
-        try {
-          const parsed = JSON.parse(memberUser)
-          setUser({ username: parsed.email || parsed.name })
-          setIsLoading(false)
-          return
-        } catch {
-          // JSON 파싱 실패시 토큰 정리하고 계속
-          localStorage.removeItem('member_user')
-        }
-      }
-      
-      // 저장된 access token이 있으면 NAS 사용자 정보 조회
       if (apiClient.getToken()) {
         const ok = await fetchUser()
         if (!ok) {
-          // access token 만료 → refresh 시도
           const refreshed = await refreshAccessToken()
           if (refreshed) {
             await fetchUser()
@@ -98,7 +81,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
       } else {
-        // access token 없지만 refresh token이 있으면 시도
         const refreshed = await refreshAccessToken()
         if (refreshed) {
           await fetchUser()
@@ -110,25 +92,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     restoreAuth()
   }, [fetchUser, refreshAccessToken])
 
-  const login = useCallback(async (username: string, password: string, otpCode?: string): Promise<LoginResult> => {
+  const login = useCallback(async (email: string, password: string) => {
     const data = await apiClient.post<{
-      access_token?: string
-      refresh_token?: string
-      token_type?: string
-      requires_2fa?: boolean
-    }>('/auth/login', { username, password, otp_code: otpCode })
+      access_token: string
+      refresh_token: string
+      user_id: number
+      email: string
+      name: string
+      org_id: number
+      org_slug: string
+      role: string
+    }>('/auth/login', { email, password })
 
-    if (data.requires_2fa) {
-      return { requires2FA: true }
-    }
+    apiClient.setToken(data.access_token)
+    apiClient.setRefreshToken(data.refresh_token)
 
-    if (data.access_token && data.refresh_token) {
-      apiClient.setToken(data.access_token)
-      apiClient.setRefreshToken(data.refresh_token)
-      setUser({ username })
-    }
+    setUser({
+      user_id: data.user_id,
+      email: data.email,
+      name: data.name,
+      org_id: data.org_id,
+      org_slug: data.org_slug,
+      role: data.role,
+    })
+  }, [])
 
-    return {}
+  const signup = useCallback(async (request: SignupRequest) => {
+    const data = await apiClient.post<{
+      access_token: string
+      refresh_token: string
+      user_id: number
+      email: string
+      name: string
+      org_id: number
+      org_slug: string
+      role: string
+    }>('/members/signup', request)
+
+    apiClient.setToken(data.access_token)
+    apiClient.setRefreshToken(data.refresh_token)
+
+    setUser({
+      user_id: data.user_id,
+      email: data.email,
+      name: data.name,
+      org_id: data.org_id,
+      org_slug: data.org_slug,
+      role: data.role,
+    })
   }, [])
 
   const logout = useCallback(() => {
@@ -145,6 +156,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoading,
         isAuthenticated: !!user,
         login,
+        signup,
         logout,
       }}
     >
@@ -153,10 +165,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 }
 
-/**
- * 인증 컨텍스트 사용 hook
- * AuthProvider 외부에서 호출하면 에러 발생
- */
 export function useAuth(): AuthContextType {
   const context = useContext(AuthContext)
   if (!context) {

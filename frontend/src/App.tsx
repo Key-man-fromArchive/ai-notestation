@@ -23,8 +23,6 @@ const Settings = lazy(() => import('./pages/Settings'))
 const Members = lazy(() => import('./pages/Members'))
 const OAuthCallback = lazy(() => import('./pages/OAuthCallback'))
 const Login = lazy(() => import('./pages/Login'))
-const MemberLogin = lazy(() => import('./pages/MemberLogin'))
-const LoginSelect = lazy(() => import('./pages/LoginSelect'))
 const Signup = lazy(() => import('./pages/Signup'))
 const SharedView = lazy(() => import('./pages/SharedView'))
 const Discovery = lazy(() => import('./pages/Discovery'))
@@ -90,7 +88,7 @@ function ProtectedRoutes() {
 /**
  * App Shell
  * - AuthProvider로 인증 상태 관리
- * - /login: 공개 라우트 (Layout 없음)
+ * - /login, /signup: 공개 라우트 (Layout 없음)
  * - /*: 보호 라우트 (인증 필요, Layout 포함)
  */
 function App() {
@@ -106,9 +104,7 @@ function App() {
             }
           >
             <Routes>
-              <Route path="/login" element={<LoginSelect />} />
-              <Route path="/member-login" element={<MemberLogin />} />
-              <Route path="/nas-login" element={<Login />} />
+              <Route path="/login" element={<Login />} />
               <Route path="/signup" element={<Signup />} />
               <Route path="/shared/:token" element={<SharedView />} />
               <Route path="/*" element={<ProtectedRoutes />} />

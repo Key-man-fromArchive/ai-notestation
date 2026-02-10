@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
-import { useMemberAuth } from '@/hooks/useMemberAuth'
+import { useAuth } from '@/contexts/AuthContext'
+import { ApiError } from '@/lib/api'
 import { Loader2, FlaskConical, AlertCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -14,13 +15,15 @@ function slugify(text: string): string {
 
 export default function Signup() {
   const navigate = useNavigate()
-  const { isAuthenticated, signup, isLoading, error } = useMemberAuth()
+  const { isAuthenticated, signup } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [name, setName] = useState('')
   const [orgName, setOrgName] = useState('')
   const [orgSlug, setOrgSlug] = useState('')
   const [autoSlug, setAutoSlug] = useState(true)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   if (isAuthenticated) {
     return <Navigate to="/" replace />
@@ -40,6 +43,8 @@ export default function Signup() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
+    setError(null)
+    setIsLoading(true)
     try {
       await signup({
         email,
@@ -49,8 +54,25 @@ export default function Signup() {
         org_slug: orgSlug,
       })
       navigate('/')
-    } catch {
-      void 0
+    } catch (err) {
+      if (err instanceof ApiError) {
+        if (err.status === 409) {
+          try {
+            const body = JSON.parse(err.body)
+            setError(body.detail || 'Email or organization already exists')
+          } catch {
+            setError('Email or organization already exists')
+          }
+        } else if (err.status === 422) {
+          setError('Invalid input. Please check your information.')
+        } else {
+          setError('Signup failed. Please try again.')
+        }
+      } else {
+        setError('Network error. Please check your connection.')
+      }
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -261,7 +283,7 @@ export default function Signup() {
           <div className="mt-6 text-center text-sm text-muted-foreground">
             Already have an account?{' '}
             <Link
-              to="/member-login"
+              to="/login"
               className="font-medium text-primary hover:underline"
             >
               Sign in
