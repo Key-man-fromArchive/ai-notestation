@@ -13,14 +13,9 @@ import { EmptyState } from '@/components/EmptyState'
 import { Search as SearchIcon, FileText, AlertCircle, Loader2, Filter, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-type SearchType = 'hybrid' | 'fts' | 'semantic'
-
 export default function Search() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [query, setQuery] = useState(searchParams.get('q') || '')
-  const [searchType, setSearchType] = useState<SearchType>(
-    (searchParams.get('type') as SearchType) || 'hybrid'
-  )
   const [showFilters, setShowFilters] = useState(false)
   const [notebook, setNotebook] = useState(searchParams.get('notebook') || '')
   const [dateFrom, setDateFrom] = useState(searchParams.get('date_from') || '')
@@ -42,7 +37,7 @@ export default function Search() {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
-  } = useSearch(query, searchType, filters)
+  } = useSearch(query, 'search', filters)
 
   // Notebooks for filter dropdown
   const { data: notebooksData } = useNotebooks()
@@ -77,13 +72,12 @@ export default function Search() {
     const params: Record<string, string> = {}
     if (query) {
       params.q = query
-      params.type = searchType
       if (notebook) params.notebook = notebook
       if (dateFrom) params.date_from = dateFrom
       if (dateTo) params.date_to = dateTo
     }
     setSearchParams(params)
-  }, [query, searchType, notebook, dateFrom, dateTo, setSearchParams])
+  }, [query, notebook, dateFrom, dateTo, setSearchParams])
 
   const clearFilters = () => {
     setNotebook('')
@@ -103,34 +97,12 @@ export default function Search() {
         {/* 검색 바 */}
         <SearchBar value={query} onChange={setQuery} />
 
-        {/* 검색 유형 선택 + 필터 토글 */}
+        {/* 필터 토글 */}
         <div className="flex items-center gap-2 mt-4">
-          <div className="flex gap-2" role="radiogroup" aria-label="검색 유형">
-            {(['hybrid', 'fts', 'semantic'] as const).map((type) => (
-              <button
-                key={type}
-                onClick={() => setSearchType(type)}
-                role="radio"
-                aria-checked={searchType === type}
-                className={cn(
-                  'px-4 py-2 rounded-md text-sm transition-colors duration-200',
-                  'motion-reduce:transition-none',
-                  searchType === type
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                )}
-              >
-                {type === 'hybrid' && '하이브리드'}
-                {type === 'fts' && '전문 검색'}
-                {type === 'semantic' && '의미 검색'}
-              </button>
-            ))}
-          </div>
-
           <button
             onClick={() => setShowFilters(!showFilters)}
             className={cn(
-              'ml-auto flex items-center gap-1.5 px-3 py-2 rounded-md text-sm',
+              'flex items-center gap-1.5 px-3 py-2 rounded-md text-sm',
               'border border-border transition-colors',
               showFilters || activeFilterCount > 0
                 ? 'bg-primary/10 border-primary/30 text-primary'
@@ -302,11 +274,6 @@ export default function Search() {
                               )}
                             />
                             {(result.score * 100).toFixed(0)}%
-                          </span>
-                          <span className="px-1.5 py-0.5 rounded bg-muted text-xs">
-                            {result.search_type === 'fts' ? 'FTS' :
-                             result.search_type === 'semantic' ? 'Semantic' :
-                             result.search_type === 'reranked' ? 'Reranked' : 'Hybrid'}
                           </span>
                         </div>
                       </div>

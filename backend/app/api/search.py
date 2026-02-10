@@ -41,6 +41,7 @@ from app.search.engine import (
     SearchResult,
     SemanticSearchEngine,
     TrigramSearchEngine,
+    UnifiedSearchEngine,
 )
 from app.search.indexer import NoteIndexer
 from app.services.auth_service import get_current_user
@@ -59,9 +60,11 @@ router = APIRouter(prefix="/search", tags=["search"])
 class SearchType(str, Enum):
     """Supported search types."""
 
+    search = "search"
+    semantic = "semantic"
+    # Legacy types kept for backward compatibility
     hybrid = "hybrid"
     fts = "fts"
-    semantic = "semantic"
     trigram = "trigram"
 
 
@@ -136,6 +139,13 @@ def _build_trigram_engine(session: AsyncSession) -> TrigramSearchEngine:
     return TrigramSearchEngine(session=session)
 
 
+def _build_unified_engine(session: AsyncSession) -> UnifiedSearchEngine:
+    """Create a UnifiedSearchEngine combining FTS + Trigram."""
+    fts = _build_fts_engine(session)
+    trigram = _build_trigram_engine(session)
+    return UnifiedSearchEngine(fts_engine=fts, trigram_engine=trigram)
+
+
 # ---------------------------------------------------------------------------
 # Endpoint
 # ---------------------------------------------------------------------------
@@ -186,7 +196,7 @@ def _parse_date(date_str: str | None) -> datetime | None:
 @router.get("", response_model=SearchResponse)
 async def search(
     q: str = Query(..., min_length=1, description="Search query"),  # noqa: B008
-    type: SearchType = Query(SearchType.hybrid, description="Search type"),  # noqa: A002, B008
+    type: SearchType = Query(SearchType.search, description="Search type"),  # noqa: A002, B008
     limit: int = Query(20, ge=1, le=100, description="Maximum number of results"),  # noqa: B008
     offset: int = Query(0, ge=0, description="Number of results to skip for pagination"),  # noqa: B008
     notebook: str | None = Query(None, description="Filter by notebook name"),  # noqa: B008
@@ -238,20 +248,24 @@ async def search(
         "date_to": parsed_date_to,
     }
 
-    if type == SearchType.fts:
-        engine = _build_fts_engine(db)
+    if type == SearchType.semantic:
+        engine = _build_semantic_engine(db, api_key=api_key)
         results = await engine.search(q, limit=limit, offset=offset, **filter_kwargs)
 
-    elif type == SearchType.semantic:
-        engine = _build_semantic_engine(db, api_key=api_key)
+    elif type == SearchType.fts:
+        engine = _build_fts_engine(db)
         results = await engine.search(q, limit=limit, offset=offset, **filter_kwargs)
 
     elif type == SearchType.trigram:
         engine = _build_trigram_engine(db)
         results = await engine.search(q, limit=limit, offset=offset, **filter_kwargs)
 
-    else:  # hybrid (default)
+    elif type == SearchType.hybrid:
         engine = _build_hybrid_engine(db, api_key=api_key)
+        results = await engine.search(q, limit=limit, offset=offset, **filter_kwargs)
+
+    else:  # search (default) — unified FTS + Trigram
+        engine = _build_unified_engine(db)
         results = await engine.search(q, limit=limit, offset=offset, **filter_kwargs)
 
     # Apply reranking if requested

@@ -39,17 +39,17 @@ describe('useSearch hook', () => {
           title: 'Test Note',
           snippet: 'snippet',
           score: 0.95,
-          search_type: 'fts',
+          search_type: 'search',
         },
       ],
       query: 'test',
-      search_type: 'hybrid',
+      search_type: 'search',
       total: 1,
     }
 
     vi.mocked(api.apiClient.get).mockResolvedValue(mockResults)
 
-    const { result } = renderHook(() => useSearch('test', 'hybrid'), {
+    const { result } = renderHook(() => useSearch('test', 'search'), {
       wrapper: createWrapper(),
     })
 
@@ -57,11 +57,13 @@ describe('useSearch hook', () => {
       expect(result.current.isSuccess).toBe(true)
     })
 
-    expect(result.current.data).toEqual(mockResults)
+    // useInfiniteQuery returns data.pages array
+    expect(result.current.data?.pages).toHaveLength(1)
+    expect(result.current.data?.pages[0]).toEqual(mockResults)
   })
 
   it('skips query when search term is empty', () => {
-    const { result } = renderHook(() => useSearch('', 'hybrid'), {
+    const { result } = renderHook(() => useSearch('', 'search'), {
       wrapper: createWrapper(),
     })
 
@@ -72,7 +74,7 @@ describe('useSearch hook', () => {
   it('handles search error', async () => {
     vi.mocked(api.apiClient.get).mockRejectedValue(new Error('Network error'))
 
-    const { result } = renderHook(() => useSearch('test', 'hybrid'), {
+    const { result } = renderHook(() => useSearch('test', 'search'), {
       wrapper: createWrapper(),
     })
 
@@ -87,12 +89,12 @@ describe('useSearch hook', () => {
     vi.mocked(api.apiClient.get).mockResolvedValue({
       results: [],
       query: 'test',
-      search_type: 'hybrid',
+      search_type: 'search',
       total: 0,
     })
 
     renderHook(
-      ({ query }) => useSearch(query, 'hybrid'),
+      ({ query }) => useSearch(query, 'search'),
       {
         wrapper: createWrapper(),
         initialProps: { query: 't' },
@@ -106,5 +108,24 @@ describe('useSearch hook', () => {
       },
       { timeout: 500 }
     )
+  })
+
+  it('has no next page when results < PAGE_SIZE', async () => {
+    vi.mocked(api.apiClient.get).mockResolvedValue({
+      results: [{ note_id: '1', title: 'Note', snippet: '', score: 0.9, search_type: 'search' }],
+      query: 'test',
+      search_type: 'search',
+      total: 1,
+    })
+
+    const { result } = renderHook(() => useSearch('test', 'search'), {
+      wrapper: createWrapper(),
+    })
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true)
+    })
+
+    expect(result.current.hasNextPage).toBe(false)
   })
 })

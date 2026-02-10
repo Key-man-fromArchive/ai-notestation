@@ -56,17 +56,17 @@ describe('Search Page', () => {
           title: 'Test Note',
           snippet: 'This is a test snippet',
           score: 0.95,
-          search_type: 'fts',
+          search_type: 'search',
         },
       ],
       query: 'test',
-      search_type: 'hybrid',
+      search_type: 'search',
       total: 1,
     }
 
     vi.mocked(api.apiClient.get).mockResolvedValue(mockResults)
 
-    render(<Search />, { wrapper: createWrapper('/search?q=test&type=hybrid') })
+    render(<Search />, { wrapper: createWrapper('/search?q=test') })
 
     await waitFor(() => {
       expect(screen.getByText('Test Note')).toBeInTheDocument()
@@ -77,7 +77,7 @@ describe('Search Page', () => {
     vi.mocked(api.apiClient.get).mockResolvedValue({
       results: [],
       query: 'nonexistent',
-      search_type: 'hybrid',
+      search_type: 'search',
       total: 0,
     })
 
@@ -103,11 +103,11 @@ describe('Search Page', () => {
     vi.mocked(api.apiClient.get).mockResolvedValue({
       results: [],
       query: 'test',
-      search_type: 'hybrid',
+      search_type: 'search',
       total: 0,
     })
 
-    render(<Search />, { wrapper: createWrapper('/search?q=test&type=hybrid') })
+    render(<Search />, { wrapper: createWrapper('/search?q=test') })
 
     // URL 파라미터가 초기 상태와 일치하는지 확인
     expect(screen.getByRole('searchbox')).toHaveValue('test')

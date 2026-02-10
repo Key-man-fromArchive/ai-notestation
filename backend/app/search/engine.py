@@ -103,11 +103,11 @@ class FullTextSearchEngine:
         # - Title (weight A): 3x boost
         # - Content (weight B): 1x, with document length normalization (flag=1)
         title_rank = func.ts_rank(
-            func.setweight(func.to_tsvector(literal_column("'simple'"), func.coalesce(Note.title, "")), "A"),
+            func.setweight(func.to_tsvector(literal_column("'simple'"), func.coalesce(Note.title, "")), literal_column("'A'")),
             tsquery,
         )
         content_rank = func.ts_rank(
-            func.setweight(func.to_tsvector(literal_column("'simple'"), func.coalesce(Note.content_text, "")), "B"),
+            func.setweight(func.to_tsvector(literal_column("'simple'"), func.coalesce(Note.content_text, "")), literal_column("'B'")),
             tsquery,
             1,  # normalization: divide by document length
         )
@@ -714,6 +714,115 @@ class HybridSearchEngine:
         On failure, logs a warning and returns an empty list so that
         the other engine's results can still be used.
         """
+        try:
+            return await engine.search(
+                query, limit=limit, offset=offset,
+                notebook_name=notebook_name, date_from=date_from, date_to=date_to,
+            )
+        except Exception:
+            logger.warning("%s engine failed for query: %r", label, query)
+            return []
+
+
+class UnifiedSearchEngine:
+    """Unified text search engine combining FTS + Trigram via RRF merge.
+
+    Runs FTS (tsvector) and Trigram (pg_trgm) in parallel, then merges
+    results using Reciprocal Rank Fusion. FTS is weighted higher for
+    exact matches; trigram provides fuzzy fallback.
+    """
+
+    def __init__(
+        self,
+        fts_engine: FullTextSearchEngine,
+        trigram_engine: TrigramSearchEngine,
+    ) -> None:
+        self._fts_engine = fts_engine
+        self._trigram_engine = trigram_engine
+
+    async def search(
+        self,
+        query: str,
+        limit: int = 20,
+        offset: int = 0,
+        notebook_name: str | None = None,
+        date_from: datetime | None = None,
+        date_to: datetime | None = None,
+    ) -> list[SearchResult]:
+        """Execute unified search: FTS + Trigram in parallel, merged via RRF.
+
+        FTS provides exact token matching; Trigram provides fuzzy/partial matching.
+        Results are merged and deduplicated via weighted RRF scoring.
+        """
+        if not query or not query.strip():
+            return []
+
+        fts_task = self._safe_search(
+            self._fts_engine, query, limit=limit, offset=offset, label="FTS",
+            notebook_name=notebook_name, date_from=date_from, date_to=date_to,
+        )
+        trigram_task = self._safe_search(
+            self._trigram_engine, query, limit=limit, offset=offset, label="Trigram",
+            notebook_name=notebook_name, date_from=date_from, date_to=date_to,
+        )
+
+        fts_results, trigram_results = await asyncio.gather(fts_task, trigram_task)
+
+        # FTS weighted higher (0.65) for precision, trigram (0.35) for recall
+        return self._rrf_merge(fts_results, trigram_results, k=60, fts_weight=0.65, trigram_weight=0.35, limit=limit)
+
+    @staticmethod
+    def _rrf_merge(
+        fts_results: list[SearchResult],
+        trigram_results: list[SearchResult],
+        k: int = 60,
+        fts_weight: float = 0.65,
+        trigram_weight: float = 0.35,
+        limit: int = 20,
+    ) -> list[SearchResult]:
+        """Merge FTS and Trigram results using Weighted RRF."""
+        scores: dict[str, float] = {}
+        metadata: dict[str, tuple[str, str]] = {}
+
+        for rank, result in enumerate(fts_results):
+            rrf_score = fts_weight * (1.0 / (k + rank))
+            scores[result.note_id] = scores.get(result.note_id, 0.0) + rrf_score
+            if result.note_id not in metadata:
+                metadata[result.note_id] = (result.title, result.snippet)
+
+        for rank, result in enumerate(trigram_results):
+            rrf_score = trigram_weight * (1.0 / (k + rank))
+            scores[result.note_id] = scores.get(result.note_id, 0.0) + rrf_score
+            if result.note_id not in metadata:
+                metadata[result.note_id] = (result.title, result.snippet)
+
+        merged: list[SearchResult] = []
+        for note_id, rrf_score in sorted(scores.items(), key=lambda item: item[1], reverse=True):
+            title, snippet = metadata[note_id]
+            merged.append(
+                SearchResult(
+                    note_id=note_id,
+                    title=title,
+                    snippet=snippet,
+                    score=rrf_score,
+                    search_type="search",
+                )
+            )
+
+        return merged[:limit]
+
+    @staticmethod
+    async def _safe_search(
+        engine: FullTextSearchEngine | TrigramSearchEngine,
+        query: str,
+        limit: int,
+        offset: int,
+        label: str,
+        notebook_name: str | None = None,
+        date_from: datetime | None = None,
+        date_to: datetime | None = None,
+    ) -> list[SearchResult]:
+        """Call engine.search() with error handling."""
         try:
             return await engine.search(
                 query, limit=limit, offset=offset,

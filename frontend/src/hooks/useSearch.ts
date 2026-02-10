@@ -21,7 +21,7 @@ interface SearchResponse {
   total: number
 }
 
-type SearchType = 'hybrid' | 'fts' | 'semantic'
+type SearchType = 'search' | 'semantic'
 
 interface SearchFilters {
   notebook?: string
@@ -40,7 +40,7 @@ const PAGE_SIZE = 20
  */
 export function useSearch(
   query: string,
-  searchType: SearchType = 'hybrid',
+  searchType: SearchType = 'search',
   filters: SearchFilters = {},
 ) {
   const [debouncedQuery, setDebouncedQuery] = useState(query)

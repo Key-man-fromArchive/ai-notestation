@@ -29,6 +29,7 @@ const Discovery = lazy(() => import('./pages/Discovery'))
 const Graph = lazy(() => import('./pages/Graph'))
 const Admin = lazy(() => import('./pages/Admin'))
 const Operations = lazy(() => import('./pages/Operations'))
+const Librarian = lazy(() => import('./pages/Librarian'))
 
 // Demo pages
 const DemoHub = lazy(() => import('./demo/index'))
@@ -72,6 +73,7 @@ function ProtectedRoutes() {
           <Route path="/notebooks/:id" element={<NotebookDetail />} />
           <Route path="/notebooks/:id/discover" element={<Discovery />} />
           <Route path="/search" element={<Search />} />
+          <Route path="/librarian" element={<Librarian />} />
           <Route path="/ai" element={<AIWorkbench />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/members" element={<Members />} />
