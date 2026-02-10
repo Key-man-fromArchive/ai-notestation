@@ -142,7 +142,22 @@ AI 라이브러리언이 시맨틱 검색으로 관련 노트를 찾고, 관련�
 - Synology NAS (NoteStation 설치됨) — 선택사항
 - AI API 키 1개 이상 (OpenAI / Anthropic / Google / ZhipuAI) — 선택사항
 
-### 설치 및 실행
+### 설치 및 실행 (권장)
+
+인터랙티브 설치 스크립트가 환경 설정부터 컨테이너 실행, DB 마이그레이션까지 자동으로 처리합니다.
+
+```bash
+git clone https://github.com/your-org/labnote-ai.git
+cd labnote-ai
+bash install.sh
+```
+
+스크립트가 안내하는 대로 NAS 주소와 AI API 키를 입력하세요 (Enter로 건너뛸 수 있습니다). 완료 후 http://localhost:3000 에서 회원가입하면 바로 사용할 수 있습니다.
+
+> **비대화형 모드**: `bash install.sh -y` — 프롬프트 없이 기본값으로 설치합니다. NAS와 AI 키는 나중에 `.env` 파일을 편집하거나 웹 UI 설정에서 추가할 수 있습니다.
+
+<details>
+<summary><strong>수동 설치 (직접 설정)</strong></summary>
 
 ```bash
 # 1. 레포지토리 클론
@@ -151,16 +166,21 @@ cd labnote-ai
 
 # 2. 환경 변수 설정
 cp .env.example .env
-# .env 파일을 열어 NAS 정보와 API 키를 입력하세요
+# .env 파일을 열어 JWT_SECRET, NAS 정보, API 키를 입력하세요
 
-# 3. 한 줄로 실행
-docker compose up -d
+# 3. 실행
+docker compose up -d --build
 
-# 4. 접속
-# 🌐 Frontend: http://localhost:3000
-# 📡 Backend API: http://localhost:8001
-# 📖 API 문서: http://localhost:8001/docs
+# 4. DB 마이그레이션
+docker compose exec backend alembic upgrade head
+
+# 5. 접속
+# Frontend: http://localhost:3000
+# Backend API: http://localhost:8001
+# API 문서: http://localhost:8001/docs
 ```
+
+</details>
 
 ### 로컬 개발
 
