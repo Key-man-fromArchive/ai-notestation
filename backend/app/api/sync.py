@@ -84,6 +84,7 @@ class SyncState:
         self.notes_missing_images: int | None = None
         self.notes_indexed: int | None = None
         self.notes_pending_index: int | None = None
+        self.triggered_by: str | None = None
 
 
 # Module-level singleton -- shared across requests.
@@ -216,11 +217,13 @@ async def _run_sync_background(state: SyncState) -> None:
     from sqlalchemy import select
     from app.database import async_session_factory
     from app.models import Note
+    from app.services.activity_log import log_activity
 
     state.status = "syncing"
     state.is_syncing = True
     state.error_message = None
     state.notes_indexed = None
+    await log_activity("sync", "started", triggered_by=state.triggered_by)
 
     try:
         service, session = await _create_sync_service()
@@ -273,6 +276,19 @@ async def _run_sync_background(state: SyncState) -> None:
             state.notes_pending_index = await _count_notes_pending_index()
             state.status = "completed"
             state.error_message = None
+            await log_activity(
+                "sync",
+                "completed",
+                message=f"동기화 완료: {state.notes_synced}개 노트",
+                details={
+                    "added": result.added,
+                    "updated": result.updated,
+                    "deleted": result.deleted,
+                    "total": result.total,
+                    "notes_indexed": state.notes_indexed,
+                },
+                triggered_by=state.triggered_by,
+            )
 
         finally:
             await session.close()
@@ -281,6 +297,12 @@ async def _run_sync_background(state: SyncState) -> None:
         state.status = "error"
         state.error_message = str(exc)
         logger.exception("Sync failed: %s", exc)
+        await log_activity(
+            "sync",
+            "error",
+            message=str(exc),
+            triggered_by=state.triggered_by,
+        )
 
     finally:
         state.is_syncing = False
@@ -309,6 +331,7 @@ async def trigger_sync(
             message="이미 동기화가 진행 중입니다.",
         )
 
+    _sync_state.triggered_by = current_user.get("username", "unknown")
     background_tasks.add_task(_run_sync_background, _sync_state)
 
     return SyncTriggerResponse(
