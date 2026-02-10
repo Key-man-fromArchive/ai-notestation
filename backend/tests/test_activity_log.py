@@ -1,7 +1,7 @@
 """Tests for the activity log API.
 
 @TASK T9 - Activity log API tests
-@SPEC docs/plans/2026-02-10-ops-dashboard.md#activity-log-api
+@SPEC docs/plans/2026-02-10-operations-activity-log.md
 """
 
 from datetime import datetime

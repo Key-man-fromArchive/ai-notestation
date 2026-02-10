@@ -387,6 +387,12 @@ async def _run_index_background(state: IndexState) -> None:
         if not note_ids:
             state.status = "completed"
             state.is_indexing = False
+            await log_activity(
+                "embedding", "completed",
+                message="인덱싱할 노트 없음",
+                details={"indexed": 0, "failed": 0},
+                triggered_by=state.triggered_by,
+            )
             return
 
         embedding_service = EmbeddingService(
