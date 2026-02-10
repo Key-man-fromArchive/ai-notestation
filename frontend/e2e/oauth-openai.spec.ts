@@ -65,9 +65,7 @@ test.describe('OAuth Flow', () => {
     await page.goto('/settings')
 
     await expect(
-      page.getByRole('heading', { name: /설정|Settings/i }).or(
-        page.getByText(/NAS 설정|API Key|OAuth/i),
-      ),
+      page.getByRole('heading', { name: '설정', exact: true }),
     ).toBeVisible({ timeout: 10000 })
   })
 

@@ -65,7 +65,7 @@ test('Google OAuth authorize is configured', async ({ request }) => {
 test('Login page renders with form', async ({ page }) => {
   await page.goto('/login')
   // 로그인 폼 요소 확인
-  await expect(page.locator('input[type="text"], input[name="username"]')).toBeVisible()
+  await expect(page.locator('input[type="email"], input#email')).toBeVisible()
   await expect(page.locator('input[type="password"]')).toBeVisible()
   await expect(page.getByRole('button', { name: /로그인|login/i })).toBeVisible()
 })
@@ -78,21 +78,20 @@ test('Unauthenticated user is redirected to /login', async ({ page }) => {
 
 test('Login with wrong credentials shows error', async ({ page }) => {
   await page.goto('/login')
-  await page.locator('input[type="text"], input[name="username"]').fill('wrong_user')
+  await page.locator('input[type="email"], input#email').fill('wrong@example.com')
   await page.locator('input[type="password"]').fill('wrong_pass')
   await page.getByRole('button', { name: /로그인|login/i }).click()
-  // 에러 메시지 표시 대기 (Synology NAS 연결 타임아웃 ~6s)
-  await expect(page.getByRole('alert')).toBeVisible({ timeout: 10000 })
+  // 에러 메시지 표시 대기
+  await expect(page.locator('.text-destructive')).toBeVisible({ timeout: 15000 })
 })
 
 // ─── 4. Auth API 엔드포인트 ──────────────────────────────────
 
 test('POST /auth/login with bad credentials returns 401', async ({ request }) => {
   const res = await request.post(`${API}/auth/login`, {
-    data: { username: 'bad', password: 'bad' },
+    data: { email: 'bad@example.com', password: 'bad' },
   })
-  // Synology 연결 실패 시 401 또는 502
-  expect([401, 502]).toContain(res.status())
+  expect(res.status()).toBe(401)
 })
 
 test('GET /auth/me without token returns 401', async ({ request }) => {

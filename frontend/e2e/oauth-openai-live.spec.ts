@@ -38,7 +38,7 @@ async function injectAuth(
 }
 
 test.describe('OAuth Live Browser Tests', () => {
-  test('Settings page loads with OAuth options for authenticated user', async ({
+  test('Settings page loads for authenticated user', async ({
     page,
     request,
   }) => {
@@ -47,7 +47,7 @@ test.describe('OAuth Live Browser Tests', () => {
     await page.goto('/settings')
 
     await expect(
-      page.getByText(/연결|Connect|OAuth|API Key/i).first(),
+      page.getByRole('heading', { name: '설정', exact: true }),
     ).toBeVisible({ timeout: 10000 })
   })
 

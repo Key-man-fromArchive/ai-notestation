@@ -85,9 +85,10 @@ test.describe('Notes Flow', () => {
 
     await page.goto('/notes')
 
-    await expect(
-      page.getByRole('heading', { name: '모든 노트' }),
-    ).toBeVisible({ timeout: 10000 })
+    // New user has no notes — either shows notes list or empty state
+    const notesList = page.getByRole('heading', { name: '모든 노트' })
+    const emptyState = page.getByText(/노트가 없습니다/i)
+    await expect(notesList.or(emptyState)).toBeVisible({ timeout: 10000 })
   })
 
   test('6. Search page renders with search input', async ({ page, request }) => {

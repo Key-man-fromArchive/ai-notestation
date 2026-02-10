@@ -83,7 +83,7 @@ test.describe('Member Auth Flow', () => {
       },
     })
 
-    const res = await request.post(`${API}/members/login`, {
+    const res = await request.post(`${API}/auth/login`, {
       data: {
         email: uniqueEmail,
         password: password,
@@ -110,7 +110,7 @@ test.describe('Member Auth Flow', () => {
       },
     })
 
-    const res = await request.post(`${API}/members/login`, {
+    const res = await request.post(`${API}/auth/login`, {
       data: {
         email: uniqueEmail,
         password: 'WrongPassword123!',
@@ -136,7 +136,7 @@ test.describe('Member Auth Flow', () => {
 
     const { refresh_token } = await signupRes.json()
 
-    const res = await request.post(`${API}/members/refresh`, {
+    const res = await request.post(`${API}/auth/token/refresh`, {
       data: { refresh_token },
     })
 
