@@ -7,10 +7,10 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.ai_router.router import AIRouter
+from app.api.ai import _OAUTH_PROVIDER_MODELS, get_ai_router
 from app.api.settings import _load_from_db as load_settings_from_db
 from app.config import get_settings
 from app.constants import MemberRole
@@ -359,7 +359,7 @@ async def get_providers(
     db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> dict:
     """LLM provider status and available models."""
-    ai_router = AIRouter()
+    ai_router = get_ai_router()
     provider_names = ai_router.available_providers()
 
     providers = []
@@ -388,6 +388,35 @@ async def get_providers(
                 "error": str(e),
                 "model_count": 0,
                 "models": [],
+            })
+
+    # Include OAuth-connected providers not already registered via API key
+    from app.models import OAuthToken
+
+    registered_names = {p["name"] for p in providers}
+    for oauth_provider, oauth_models in _OAUTH_PROVIDER_MODELS.items():
+        if oauth_provider in registered_names:
+            continue
+        stmt = select(OAuthToken).where(
+            OAuthToken.provider == oauth_provider,
+            OAuthToken.access_token_encrypted.isnot(None),
+        )
+        result = await db.execute(stmt)
+        if result.scalar_one_or_none():
+            providers.append({
+                "name": oauth_provider,
+                "status": "active",
+                "source": "oauth",
+                "model_count": len(oauth_models),
+                "models": [
+                    {
+                        "id": m.id,
+                        "name": m.name,
+                        "max_tokens": m.max_tokens,
+                        "supports_streaming": m.supports_streaming,
+                    }
+                    for m in oauth_models
+                ],
             })
 
     key_result = await db.execute(

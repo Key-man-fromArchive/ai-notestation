@@ -98,6 +98,10 @@ def _get_oauth_service() -> OAuthService:
 
 
 _OAUTH_PROVIDER_MODELS: dict[str, list[ModelInfo]] = {
+    "anthropic": [
+        ModelInfo(id="claude-sonnet-4-5", name="Claude Sonnet 4.5 (OAuth)", provider="anthropic", max_tokens=200_000, supports_streaming=True),
+        ModelInfo(id="claude-haiku-4-5", name="Claude Haiku 4.5 (OAuth)", provider="anthropic", max_tokens=200_000, supports_streaming=True),
+    ],
     "google": [
         ModelInfo(id="gemini-2.0-flash", name="Gemini 2.0 Flash", provider="google", max_tokens=1_048_576, supports_streaming=True),
         ModelInfo(id="gemini-1.5-pro", name="Gemini 1.5 Pro", provider="google", max_tokens=2_097_152, supports_streaming=True),
@@ -142,6 +146,8 @@ def _resolve_provider_name(model: str | None) -> str | None:
     """Map model name to OAuth provider name."""
     if not model:
         return None
+    if model.startswith("claude"):
+        return "anthropic"
     if model.startswith("gpt-"):
         return "openai"
     if model.startswith("gemini"):

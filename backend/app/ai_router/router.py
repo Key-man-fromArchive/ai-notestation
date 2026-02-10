@@ -127,6 +127,10 @@ class AIRouter:
                     logger.warning("Cannot extract chatgpt_account_id from token")
                     return
                 provider: AIProvider = ChatGPTCodexProvider(access_token=access_token, account_id=account_id)
+            elif name == "anthropic":
+                from app.ai_router.providers.anthropic import AnthropicProvider
+
+                provider = AnthropicProvider(api_key=access_token)
             elif name == "google":
                 from app.ai_router.providers.google import GoogleProvider
 

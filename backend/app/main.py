@@ -20,6 +20,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
+    # Load DB-stored API keys into os.environ so AIRouter can detect them
+    from app.api.settings import sync_api_keys_to_env
+    from app.database import async_session_factory
+
+    async with async_session_factory() as db:
+        await sync_api_keys_to_env(db)
+
     yield
     # Shutdown: dispose the async engine connection pool
     await engine.dispose()

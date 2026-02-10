@@ -17,6 +17,7 @@ Storage:
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -73,6 +74,14 @@ class SettingUpdateResponse(BaseModel):
 # ---------------------------------------------------------------------------
 # Setting definitions and in-memory store
 # ---------------------------------------------------------------------------
+
+# Mapping of DB setting keys to environment variable names used by AIRouter
+_SETTING_KEY_TO_ENV: dict[str, str] = {
+    "openai_api_key": "OPENAI_API_KEY",
+    "anthropic_api_key": "ANTHROPIC_API_KEY",
+    "google_api_key": "GOOGLE_API_KEY",
+    "zhipuai_api_key": "ZHIPUAI_API_KEY",
+}
 
 # Description metadata for each known setting key
 _SETTING_DESCRIPTIONS: dict[str, str] = {
@@ -132,6 +141,20 @@ async def _load_from_db(db: AsyncSession) -> dict[str, Any]:
     _settings_cache.clear()
     _settings_cache.update(defaults)
     return defaults
+
+
+async def sync_api_keys_to_env(db: AsyncSession) -> None:
+    """Load API keys from DB and set them in os.environ for AIRouter.
+
+    Should be called during app startup so that DB-stored keys
+    override empty .env defaults.
+    """
+    settings = await _load_from_db(db)
+    for setting_key, env_var in _SETTING_KEY_TO_ENV.items():
+        value = settings.get(setting_key, "")
+        if value:
+            os.environ[env_var] = value
+            logger.info("Loaded %s from DB into environment", env_var)
 
 
 async def _save_to_db(db: AsyncSession, key: str, value: Any) -> None:
@@ -273,7 +296,12 @@ async def update_setting(
         triggered_by=get_trigger_name(_current_user),
     )
 
-    if key.endswith("_api_key") and key != "nas_password":
+    if key in _SETTING_KEY_TO_ENV:
+        env_var = _SETTING_KEY_TO_ENV[key]
+        if body.value:
+            os.environ[env_var] = body.value
+        else:
+            os.environ.pop(env_var, None)
         try:
             from app.api.ai import reset_ai_router
 
