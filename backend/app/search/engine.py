@@ -52,6 +52,13 @@ class SearchResult(BaseModel):
     search_type: str = Field(default="fts")
 
 
+class SearchPage(BaseModel):
+    """Paginated search results with total count."""
+
+    results: list[SearchResult]
+    total: int
+
+
 class FullTextSearchEngine:
     """PostgreSQL tsvector-based full-text search engine with BM25-approximated scoring.
 
@@ -74,27 +81,15 @@ class FullTextSearchEngine:
         notebook_name: str | None = None,
         date_from: datetime | None = None,
         date_to: datetime | None = None,
-    ) -> list[SearchResult]:
+    ) -> SearchPage:
         """Execute a full-text search against the notes table.
 
         Uses Korean morpheme analysis to build an OR-joined tsquery,
         then ranks with BM25-approximated scoring (title 3x, content 1x).
-
-        Args:
-            query: The search query string.
-            limit: Maximum number of results to return (default 20).
-            offset: Number of results to skip for pagination (default 0).
-            notebook_name: Optional notebook name filter.
-            date_from: Optional start date filter.
-            date_to: Optional end date filter.
-
-        Returns:
-            A list of SearchResult ordered by relevance score descending.
-            Returns an empty list for empty/whitespace queries or no matches.
         """
         analysis = self._build_tsquery_expr(query)
         if not analysis.tsquery_expr:
-            return []
+            return SearchPage(results=[], total=0)
 
         # Build tsquery using to_tsquery with OR-joined morphemes
         tsquery = func.to_tsquery(literal_column("'simple'"), analysis.tsquery_expr)
@@ -121,12 +116,16 @@ class FullTextSearchEngine:
             literal_column("'StartSel=<b>, StopSel=</b>, MaxWords=35, MinWords=15'"),
         ).label("snippet")
 
+        # COUNT(*) OVER() gives total matching rows without a separate query
+        total_count = func.count().over().label("total_count")
+
         stmt = (
             select(
                 Note.synology_note_id.label("note_id"),
                 Note.title,
                 headline,
                 score,
+                total_count,
             )
             .where(Note.search_vector.op("@@")(tsquery))
             .order_by(score.desc())
@@ -145,7 +144,8 @@ class FullTextSearchEngine:
         result = await self._session.execute(stmt)
         rows = result.fetchall()
 
-        return [
+        total = rows[0].total_count if rows else 0
+        results = [
             SearchResult(
                 note_id=row.note_id,
                 title=row.title,
@@ -155,6 +155,7 @@ class FullTextSearchEngine:
             )
             for row in rows
         ]
+        return SearchPage(results=results, total=total)
 
     def _build_tsquery_expr(self, query: str) -> QueryAnalysis:
         """Analyze a raw query string using Korean morpheme analysis.
@@ -216,26 +217,15 @@ class TrigramSearchEngine:
         notebook_name: str | None = None,
         date_from: datetime | None = None,
         date_to: datetime | None = None,
-    ) -> list[SearchResult]:
+    ) -> SearchPage:
         """Execute a trigram similarity search against notes.
 
         For short queries (< 3 chars), uses ILIKE for prefix matching.
         For longer queries, uses pg_trgm similarity scoring.
-
-        Args:
-            query: The search query string.
-            limit: Maximum number of results to return (default 20).
-            offset: Number of results to skip for pagination (default 0).
-            notebook_name: Optional notebook name filter.
-            date_from: Optional start date filter.
-            date_to: Optional end date filter.
-
-        Returns:
-            A list of SearchResult ordered by similarity score descending.
         """
         stripped = query.strip()
         if not stripped:
-            return []
+            return SearchPage(results=[], total=0)
 
         if len(stripped) < 3:
             return await self._ilike_search(stripped, limit, offset, notebook_name, date_from, date_to)
@@ -250,13 +240,14 @@ class TrigramSearchEngine:
         notebook_name: str | None = None,
         date_from: datetime | None = None,
         date_to: datetime | None = None,
-    ) -> list[SearchResult]:
+    ) -> SearchPage:
         """Trigram similarity search using pg_trgm with 3x title boost."""
         threshold = self._get_threshold(query)
 
         title_sim = func.similarity(Note.title, query).label("title_sim")
         content_sim = func.similarity(Note.content_text, query).label("content_sim")
         combined_score = (title_sim * 3.0 + content_sim).label("score")
+        total_count = func.count().over().label("total_count")
 
         stmt = (
             select(
@@ -264,6 +255,7 @@ class TrigramSearchEngine:
                 Note.title,
                 func.left(Note.content_text, self._SNIPPET_MAX_LENGTH).label("snippet"),
                 combined_score,
+                total_count,
             )
             .where(
                 (func.similarity(Note.title, query) >= threshold)
@@ -284,7 +276,8 @@ class TrigramSearchEngine:
         result = await self._session.execute(stmt)
         rows = result.fetchall()
 
-        return [
+        total = rows[0].total_count if rows else 0
+        results = [
             SearchResult(
                 note_id=row.note_id,
                 title=row.title,
@@ -294,6 +287,7 @@ class TrigramSearchEngine:
             )
             for row in rows
         ]
+        return SearchPage(results=results, total=total)
 
     async def _ilike_search(
         self,
@@ -303,9 +297,10 @@ class TrigramSearchEngine:
         notebook_name: str | None = None,
         date_from: datetime | None = None,
         date_to: datetime | None = None,
-    ) -> list[SearchResult]:
+    ) -> SearchPage:
         """ILIKE prefix search for short queries."""
         pattern = f"%{query}%"
+        total_count = func.count().over().label("total_count")
 
         stmt = (
             select(
@@ -313,6 +308,7 @@ class TrigramSearchEngine:
                 Note.title,
                 func.left(Note.content_text, self._SNIPPET_MAX_LENGTH).label("snippet"),
                 literal_column("1.0").label("score"),
+                total_count,
             )
             .where((Note.title.ilike(pattern)) | (Note.content_text.ilike(pattern)))
             .order_by(Note.source_updated_at.desc())
@@ -330,7 +326,8 @@ class TrigramSearchEngine:
         result = await self._session.execute(stmt)
         rows = result.fetchall()
 
-        return [
+        total = rows[0].total_count if rows else 0
+        results = [
             SearchResult(
                 note_id=row.note_id,
                 title=row.title,
@@ -340,6 +337,7 @@ class TrigramSearchEngine:
             )
             for row in rows
         ]
+        return SearchPage(results=results, total=total)
 
 
 class SemanticSearchEngine:
@@ -374,30 +372,16 @@ class SemanticSearchEngine:
         notebook_name: str | None = None,
         date_from: datetime | None = None,
         date_to: datetime | None = None,
-    ) -> list[SearchResult]:
+    ) -> SearchPage:
         """Execute a semantic search against the note_embeddings table.
 
         The query is first converted to a vector embedding, then compared
         against stored note chunk embeddings using pgvector cosine distance.
-        Results are JOINed with the notes table for title information.
-
-        Args:
-            query: The search query string.
-            limit: Maximum number of results to return (default 20).
-            offset: Number of results to skip for pagination (default 0).
-            notebook_name: Optional notebook name filter.
-            date_from: Optional start date filter.
-            date_to: Optional end date filter.
-
-        Returns:
-            A list of SearchResult ordered by cosine similarity descending.
-            Returns an empty list for empty queries, embedding failures,
-            or no matches.
         """
         # Guard: empty/whitespace queries
         stripped = query.strip()
         if not stripped:
-            return []
+            return SearchPage(results=[], total=0)
 
         # Use normalized text from query analysis for embedding
         analysis = analyze_query(stripped)
@@ -408,14 +392,15 @@ class SemanticSearchEngine:
             query_embedding = await self._embedding_service.embed_text(embed_text)
         except EmbeddingError:
             logger.warning("Embedding service failed for query: %r", stripped)
-            return []
+            return SearchPage(results=[], total=0)
 
         # Guard: empty embedding vector (e.g. empty input to service)
         if not query_embedding:
-            return []
+            return SearchPage(results=[], total=0)
 
         # Build cosine distance expression: embedding <=> :query_vector
         cosine_distance = NoteEmbedding.embedding.cosine_distance(query_embedding)
+        total_count = func.count().over().label("total_count")
 
         stmt = (
             select(
@@ -423,6 +408,7 @@ class SemanticSearchEngine:
                 Note.title,
                 NoteEmbedding.chunk_text,
                 cosine_distance.label("cosine_distance"),
+                total_count,
             )
             .join(Note, NoteEmbedding.note_id == Note.id)
             .order_by(cosine_distance.asc())
@@ -441,7 +427,8 @@ class SemanticSearchEngine:
         result = await self._session.execute(stmt)
         rows = result.fetchall()
 
-        return [
+        total = rows[0].total_count if rows else 0
+        results = [
             SearchResult(
                 note_id=row.note_id,
                 title=row.title,
@@ -451,6 +438,7 @@ class SemanticSearchEngine:
             )
             for row in rows
         ]
+        return SearchPage(results=results, total=total)
 
     def _truncate_snippet(self, text: str) -> str:
         """Truncate chunk_text to at most _SNIPPET_MAX_LENGTH characters.
@@ -506,37 +494,23 @@ class HybridSearchEngine:
         notebook_name: str | None = None,
         date_from: datetime | None = None,
         date_to: datetime | None = None,
-    ) -> list[SearchResult]:
-        """Execute hybrid search: FTS + semantic in parallel, merged via weighted RRF.
-
-        Both engines are called concurrently with ``asyncio.gather()``.
-        If one engine fails, the other's results are still used.
-        RRF parameters (k, weights) are dynamically computed from query analysis.
-
-        Args:
-            query: The search query string.
-            limit: Maximum number of results to return (default 20).
-            offset: Number of results to skip for pagination (default 0).
-            notebook_name: Optional notebook name filter.
-            date_from: Optional start date filter.
-            date_to: Optional end date filter.
-
-        Returns:
-            A list of SearchResult with search_type="hybrid", sorted by
-            weighted RRF score descending. Returns an empty list for empty queries.
-        """
+    ) -> SearchPage:
+        """Execute hybrid search: FTS + semantic in parallel, merged via weighted RRF."""
         if not query or not query.strip():
-            return []
+            return SearchPage(results=[], total=0)
 
         analysis = analyze_query(query)
         k, fts_weight, sem_weight = self._compute_rrf_params(analysis)
 
-        fts_results, semantic_results = await self._gather_results(
+        fts_page, sem_page = await self._gather_results(
             query, limit=limit, offset=offset,
             notebook_name=notebook_name, date_from=date_from, date_to=date_to,
         )
 
-        return self.rrf_merge(fts_results, semantic_results, k=k, fts_weight=fts_weight, semantic_weight=sem_weight)
+        merged = self.rrf_merge(fts_page.results, sem_page.results, k=k, fts_weight=fts_weight, semantic_weight=sem_weight)
+        # Total is the count of unique notes across both engines
+        total = max(fts_page.total, sem_page.total)
+        return SearchPage(results=merged, total=total)
 
     async def search_progressive(
         self,
@@ -677,14 +651,11 @@ class HybridSearchEngine:
         notebook_name: str | None = None,
         date_from: datetime | None = None,
         date_to: datetime | None = None,
-    ) -> tuple[list[SearchResult], list[SearchResult]]:
+    ) -> tuple[SearchPage, SearchPage]:
         """Run FTS and semantic searches concurrently.
 
         If one engine raises an exception, the other's results are
         still returned (graceful degradation).
-
-        Returns:
-            A tuple of (fts_results, semantic_results).
         """
         fts_task = self._safe_search(
             self._fts_engine, query, limit=limit, offset=offset, label="FTS",
@@ -695,8 +666,8 @@ class HybridSearchEngine:
             notebook_name=notebook_name, date_from=date_from, date_to=date_to,
         )
 
-        fts_results, semantic_results = await asyncio.gather(fts_task, sem_task)
-        return fts_results, semantic_results
+        fts_page, sem_page = await asyncio.gather(fts_task, sem_task)
+        return fts_page, sem_page
 
     @staticmethod
     async def _safe_search(
@@ -708,12 +679,8 @@ class HybridSearchEngine:
         notebook_name: str | None = None,
         date_from: datetime | None = None,
         date_to: datetime | None = None,
-    ) -> list[SearchResult]:
-        """Call engine.search() with error handling.
-
-        On failure, logs a warning and returns an empty list so that
-        the other engine's results can still be used.
-        """
+    ) -> SearchPage:
+        """Call engine.search() with error handling."""
         try:
             return await engine.search(
                 query, limit=limit, offset=offset,
@@ -721,7 +688,7 @@ class HybridSearchEngine:
             )
         except Exception:
             logger.warning("%s engine failed for query: %r", label, query)
-            return []
+            return SearchPage(results=[], total=0)
 
 
 class UnifiedSearchEngine:
@@ -748,14 +715,10 @@ class UnifiedSearchEngine:
         notebook_name: str | None = None,
         date_from: datetime | None = None,
         date_to: datetime | None = None,
-    ) -> list[SearchResult]:
-        """Execute unified search: FTS + Trigram in parallel, merged via RRF.
-
-        FTS provides exact token matching; Trigram provides fuzzy/partial matching.
-        Results are merged and deduplicated via weighted RRF scoring.
-        """
+    ) -> SearchPage:
+        """Execute unified search: FTS + Trigram in parallel, merged via RRF."""
         if not query or not query.strip():
-            return []
+            return SearchPage(results=[], total=0)
 
         fts_task = self._safe_search(
             self._fts_engine, query, limit=limit, offset=offset, label="FTS",
@@ -766,10 +729,12 @@ class UnifiedSearchEngine:
             notebook_name=notebook_name, date_from=date_from, date_to=date_to,
         )
 
-        fts_results, trigram_results = await asyncio.gather(fts_task, trigram_task)
+        fts_page, trigram_page = await asyncio.gather(fts_task, trigram_task)
 
-        # FTS weighted higher (0.65) for precision, trigram (0.35) for recall
-        return self._rrf_merge(fts_results, trigram_results, k=60, fts_weight=0.65, trigram_weight=0.35, limit=limit)
+        merged = self._rrf_merge(fts_page.results, trigram_page.results, k=60, fts_weight=0.65, trigram_weight=0.35, limit=limit)
+        # Use max of both totals as conservative estimate (there's overlap)
+        total = max(fts_page.total, trigram_page.total)
+        return SearchPage(results=merged, total=total)
 
     @staticmethod
     def _rrf_merge(
@@ -821,7 +786,7 @@ class UnifiedSearchEngine:
         notebook_name: str | None = None,
         date_from: datetime | None = None,
         date_to: datetime | None = None,
-    ) -> list[SearchResult]:
+    ) -> SearchPage:
         """Call engine.search() with error handling."""
         try:
             return await engine.search(
@@ -830,4 +795,4 @@ class UnifiedSearchEngine:
             )
         except Exception:
             logger.warning("%s engine failed for query: %r", label, query)
-            return []
+            return SearchPage(results=[], total=0)

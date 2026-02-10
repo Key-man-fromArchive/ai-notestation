@@ -38,6 +38,7 @@ from app.search.embeddings import EmbeddingService
 from app.search.engine import (
     FullTextSearchEngine,
     HybridSearchEngine,
+    SearchPage,
     SearchResult,
     SemanticSearchEngine,
     TrigramSearchEngine,
@@ -237,7 +238,7 @@ async def search(
     )
 
     api_key = await _get_openai_api_key(db, username)
-    results: list[SearchResult] = []
+    page: SearchPage = SearchPage(results=[], total=0)
 
     # Parse date filters
     parsed_date_from = _parse_date(date_from)
@@ -250,23 +251,25 @@ async def search(
 
     if type == SearchType.semantic:
         engine = _build_semantic_engine(db, api_key=api_key)
-        results = await engine.search(q, limit=limit, offset=offset, **filter_kwargs)
+        page = await engine.search(q, limit=limit, offset=offset, **filter_kwargs)
 
     elif type == SearchType.fts:
         engine = _build_fts_engine(db)
-        results = await engine.search(q, limit=limit, offset=offset, **filter_kwargs)
+        page = await engine.search(q, limit=limit, offset=offset, **filter_kwargs)
 
     elif type == SearchType.trigram:
         engine = _build_trigram_engine(db)
-        results = await engine.search(q, limit=limit, offset=offset, **filter_kwargs)
+        page = await engine.search(q, limit=limit, offset=offset, **filter_kwargs)
 
     elif type == SearchType.hybrid:
         engine = _build_hybrid_engine(db, api_key=api_key)
-        results = await engine.search(q, limit=limit, offset=offset, **filter_kwargs)
+        page = await engine.search(q, limit=limit, offset=offset, **filter_kwargs)
 
     else:  # search (default) — unified FTS + Trigram
         engine = _build_unified_engine(db)
-        results = await engine.search(q, limit=limit, offset=offset, **filter_kwargs)
+        page = await engine.search(q, limit=limit, offset=offset, **filter_kwargs)
+
+    results = page.results
 
     # Apply reranking if requested
     if rerank and results:
@@ -291,7 +294,7 @@ async def search(
         ],
         query=q,
         search_type=type.value,
-        total=len(results),
+        total=page.total,
     )
 
 

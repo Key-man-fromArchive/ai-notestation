@@ -87,7 +87,7 @@ export default function Search() {
 
   // Flatten all pages into a single results array
   const allResults = data?.pages.flatMap((page) => page.results) ?? []
-  const totalLoaded = allResults.length
+  const totalCount = data?.pages[0]?.total ?? 0
 
   return (
     <div className="flex flex-col gap-6">
@@ -235,8 +235,7 @@ export default function Search() {
         {allResults.length > 0 && (
           <div>
             <div className="text-sm text-muted-foreground mb-4">
-              <span className="font-medium text-foreground">{totalLoaded}</span>개의 결과
-              {hasNextPage && '+'}
+              <span className="font-medium text-foreground">{totalCount}</span>개의 결과
             </div>
 
             <ul className="space-y-3" role="list">
@@ -288,7 +287,7 @@ export default function Search() {
               {isFetchingNextPage && (
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
               )}
-              {!hasNextPage && totalLoaded > 0 && (
+              {!hasNextPage && allResults.length > 0 && (
                 <p className="text-sm text-muted-foreground">모든 결과를 불러왔습니다</p>
               )}
             </div>

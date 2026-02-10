@@ -84,7 +84,7 @@ export default function Librarian() {
   }
 
   const allResults = data?.pages.flatMap((page) => page.results) ?? []
-  const totalLoaded = allResults.length
+  const totalCount = data?.pages[0]?.total ?? 0
   const indexPercent = totalNotes > 0 ? Math.round((indexedNotes / totalNotes) * 100) : 0
   const hasEmbeddings = indexedNotes > 0
 
@@ -243,8 +243,7 @@ export default function Librarian() {
           <div>
             <div className="text-sm text-muted-foreground mb-4">
               <Sparkles className="inline h-3.5 w-3.5 mr-1 text-primary" />
-              <span className="font-medium text-foreground">{totalLoaded}</span>개의 관련 노트
-              {hasNextPage && '+'}
+              <span className="font-medium text-foreground">{totalCount}</span>개의 관련 노트
             </div>
 
             <ul className="space-y-3" role="list">
@@ -298,7 +297,7 @@ export default function Librarian() {
               {isFetchingNextPage && (
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
               )}
-              {!hasNextPage && totalLoaded > 0 && (
+              {!hasNextPage && allResults.length > 0 && (
                 <p className="text-sm text-muted-foreground">모든 결과를 불러왔습니다</p>
               )}
             </div>
