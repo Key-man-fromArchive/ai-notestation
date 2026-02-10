@@ -320,3 +320,21 @@ class NoteCluster(Base):
         Index("idx_note_clusters_task_id", "task_id"),
         Index("idx_note_clusters_notebook_id", "notebook_id"),
     )
+
+
+class ActivityLog(Base):
+    """Persistent log of system operations (sync, embedding, image-sync)."""
+
+    __tablename__ = "activity_logs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    operation: Mapped[str] = mapped_column(String(50), index=True)
+    status: Mapped[str] = mapped_column(String(20))
+    message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    details: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    triggered_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+    __table_args__ = (
+        Index("idx_activity_log_op_created", "operation", "created_at"),
+    )
