@@ -5,12 +5,13 @@
 
 Provides:
 - ``POST /members/signup``    -- Register user and create organization
-- ``POST /members/login``     -- Authenticate user, return JWT with org/role
 - ``POST /members/invite``    -- Invite user to organization (OWNER/ADMIN)
 - ``POST /members/accept``    -- Accept invite with token
-- ``POST /members/refresh``   -- Refresh JWT token
 - ``GET  /members``           -- List organization members
 - ``PUT  /members/{id}/role`` -- Change member role (OWNER/ADMIN)
+
+Login and token refresh are handled by ``/api/auth/login`` and
+``/api/auth/token/refresh`` respectively (see ``app.api.auth``).
 """
 
 from __future__ import annotations
@@ -28,7 +29,7 @@ from app.database import get_db
 from app.services.auth_service import (
     create_access_token,
     create_refresh_token,
-    verify_token,
+    get_current_user,
 )
 from app.services.user_service import (
     accept_invite,
@@ -41,8 +42,6 @@ from app.services.user_service import (
     get_organization_by_slug,
     get_user_by_email,
     get_user_by_id,
-    get_user_memberships,
-    verify_password,
 )
 
 logger = logging.getLogger(__name__)
@@ -79,13 +78,6 @@ class SignupRequest(BaseModel):
         return v.lower()
 
 
-class LoginRequest(BaseModel):
-    """Login request body."""
-
-    email: str  # Can be email or username
-    password: str
-
-
 class TokenResponse(BaseModel):
     """JWT token pair response with user/org context."""
 
@@ -98,19 +90,6 @@ class TokenResponse(BaseModel):
     org_id: int
     org_slug: str
     role: str
-
-
-class RefreshRequest(BaseModel):
-    """Refresh token request body."""
-
-    refresh_token: str
-
-
-class RefreshResponse(BaseModel):
-    """Refreshed access token response."""
-
-    access_token: str
-    token_type: str = "bearer"
 
 
 class InviteRequest(BaseModel):
@@ -196,49 +175,6 @@ class MessageResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-async def get_current_member(
-    token: str,
-    db: AsyncSession,
-) -> dict:
-    """Extract and validate current user from JWT token.
-
-    Returns dict with user_id, org_id, role, email.
-    """
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-
-    try:
-        payload = verify_token(token)
-    except Exception:
-        raise credentials_exception from None
-
-    if payload.get("type") != "access":
-        raise credentials_exception
-
-    user_id = payload.get("user_id")
-    org_id = payload.get("org_id")
-    if user_id is None or org_id is None:
-        raise credentials_exception
-
-    user = await get_user_by_id(db, user_id)
-    if not user or not user.is_active:
-        raise credentials_exception
-
-    membership = await get_membership(db, user_id, org_id)
-    if not membership or not membership.accepted_at:
-        raise credentials_exception
-
-    return {
-        "user_id": user_id,
-        "org_id": org_id,
-        "role": membership.role,
-        "email": user.email,
-    }
-
-
 def require_role(*allowed_roles: str):
     """Create a dependency that requires specific roles."""
 
@@ -309,137 +245,17 @@ async def signup(
     )
 
 
-@router.post("/login", response_model=TokenResponse)
-async def login(
-    request: LoginRequest,
-    db: AsyncSession = Depends(get_db),  # noqa: B008
-) -> TokenResponse:
-    """Authenticate user with email and password.
-
-    Returns JWT tokens with organization context.
-    If user belongs to multiple orgs, returns the first one.
-    """
-    user = await get_user_by_email(db, request.email)
-    if not user or not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    if not verify_password(request.password, user.password_hash):
-        logger.warning("Login failed for email=%s", request.email)
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    memberships = await get_user_memberships(db, user.id)
-    accepted_memberships = [m for m in memberships if m.accepted_at]
-
-    if not accepted_memberships:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="No active organization membership",
-        )
-
-    membership = accepted_memberships[0]
-    from sqlalchemy import select
-
-    from app.models import Organization
-
-    org_result = await db.execute(select(Organization).where(Organization.id == membership.org_id))
-    org = org_result.scalar_one()
-
-    token_data = {
-        "sub": user.email,
-        "user_id": user.id,
-        "org_id": org.id,
-        "role": membership.role,
-    }
-    access_token = create_access_token(data=token_data)
-    refresh_token = create_refresh_token(data=token_data)
-
-    logger.info("User logged in: email=%s, org=%s", user.email, org.slug)
-
-    return TokenResponse(
-        access_token=access_token,
-        refresh_token=refresh_token,
-        user_id=user.id,
-        email=user.email,
-        name=user.name,
-        org_id=org.id,
-        org_slug=org.slug,
-        role=membership.role,
-    )
-
-
-@router.post("/refresh", response_model=RefreshResponse)
-async def refresh(
-    request: RefreshRequest,
-    db: AsyncSession = Depends(get_db),  # noqa: B008
-) -> RefreshResponse:
-    """Exchange a valid refresh token for a new access token."""
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Invalid or expired refresh token",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-
-    try:
-        payload = verify_token(request.refresh_token)
-    except Exception:
-        raise credentials_exception from None
-
-    if payload.get("type") != "refresh":
-        raise credentials_exception
-
-    user_id = payload.get("user_id")
-    org_id = payload.get("org_id")
-    if user_id is None or org_id is None:
-        raise credentials_exception
-
-    user = await get_user_by_id(db, user_id)
-    if not user or not user.is_active:
-        raise credentials_exception
-
-    membership = await get_membership(db, user_id, org_id)
-    if not membership or not membership.accepted_at:
-        raise credentials_exception
-
-    token_data = {
-        "sub": user.email,
-        "user_id": user.id,
-        "org_id": org_id,
-        "role": membership.role,
-    }
-    new_access = create_access_token(data=token_data)
-
-    return RefreshResponse(access_token=new_access)
-
-
 @router.post("/invite", response_model=InviteResponse)
 async def invite_member(
     request: InviteRequest,
-    authorization: str | None = None,
+    current_user: dict = Depends(get_current_user),  # noqa: B008
     db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> InviteResponse:
     """Invite a user to the organization.
 
     Requires OWNER or ADMIN role.
     """
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing authorization",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    token = authorization.split(" ", 1)[1]
-    current_member = await get_current_member(token, db)
-
-    if current_member["role"] not in {MemberRole.OWNER, MemberRole.ADMIN}:
+    if current_user["role"] not in {MemberRole.OWNER, MemberRole.ADMIN}:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only OWNER or ADMIN can invite members",
@@ -447,7 +263,7 @@ async def invite_member(
 
     existing_user = await get_user_by_email(db, request.email)
     if existing_user:
-        existing_membership = await get_membership(db, existing_user.id, current_member["org_id"])
+        existing_membership = await get_membership(db, existing_user.id, current_user["org_id"])
         if existing_membership and existing_membership.accepted_at:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -456,8 +272,8 @@ async def invite_member(
 
     membership, invite_token = await create_invite(
         db,
-        org_id=current_member["org_id"],
-        invited_by=current_member["user_id"],
+        org_id=current_user["org_id"],
+        invited_by=current_user["user_id"],
         email=request.email,
         role=request.role,
     )
@@ -467,8 +283,8 @@ async def invite_member(
     logger.info(
         "Invite created: email=%s, org_id=%d, by=%s",
         request.email,
-        current_member["org_id"],
-        current_member["email"],
+        current_user["org_id"],
+        current_user["email"],
     )
 
     if not membership.invite_expires_at:
@@ -545,21 +361,11 @@ async def accept_invitation(
 
 @router.get("", response_model=MemberListResponse)
 async def list_members(
-    authorization: str | None = None,
+    current_user: dict = Depends(get_current_user),  # noqa: B008
     db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> MemberListResponse:
     """List all members of the current organization."""
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing authorization",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    token = authorization.split(" ", 1)[1]
-    current_member = await get_current_member(token, db)
-
-    memberships = await get_org_members(db, current_member["org_id"])
+    memberships = await get_org_members(db, current_user["org_id"])
 
     members = []
     for m in memberships:
@@ -583,7 +389,7 @@ async def list_members(
 async def update_member_role(
     member_id: int,
     request: UpdateRoleRequest,
-    authorization: str | None = None,
+    current_user: dict = Depends(get_current_user),  # noqa: B008
     db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> MemberResponse:
     """Update a member's role.
@@ -591,23 +397,13 @@ async def update_member_role(
     Requires OWNER or ADMIN role.
     OWNER role can only be transferred by current OWNER.
     """
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing authorization",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    token = authorization.split(" ", 1)[1]
-    current_member = await get_current_member(token, db)
-
-    if current_member["role"] not in {MemberRole.OWNER, MemberRole.ADMIN}:
+    if current_user["role"] not in {MemberRole.OWNER, MemberRole.ADMIN}:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only OWNER or ADMIN can change roles",
         )
 
-    if request.role == MemberRole.OWNER and current_member["role"] != MemberRole.OWNER:
+    if request.role == MemberRole.OWNER and current_user["role"] != MemberRole.OWNER:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only OWNER can transfer ownership",
@@ -620,7 +416,7 @@ async def update_member_role(
     result = await db.execute(
         select(Membership).where(
             Membership.id == member_id,
-            Membership.org_id == current_member["org_id"],
+            Membership.org_id == current_user["org_id"],
         )
     )
     membership = result.scalar_one_or_none()
@@ -631,8 +427,8 @@ async def update_member_role(
             detail="Member not found",
         )
 
-    if membership.user_id == current_member["user_id"] and membership.role == MemberRole.OWNER:
-        all_memberships = await get_org_members(db, current_member["org_id"])
+    if membership.user_id == current_user["user_id"] and membership.role == MemberRole.OWNER:
+        all_memberships = await get_org_members(db, current_user["org_id"])
         owner_count = sum(1 for m in all_memberships if m.role == MemberRole.OWNER)
         if owner_count <= 1 and request.role != MemberRole.OWNER:
             raise HTTPException(
@@ -651,7 +447,7 @@ async def update_member_role(
         member_id,
         old_role,
         request.role,
-        current_member["email"],
+        current_user["email"],
     )
 
     return MemberResponse(

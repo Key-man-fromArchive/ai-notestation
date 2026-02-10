@@ -9,15 +9,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import MemberRole, NotePermission
 from app.database import get_db
-from app.models import NoteAccess, User
+from app.models import NoteAccess
 from app.services.access_control import (
     can_manage_note_access,
     get_note_access_list,
     grant_note_access,
     revoke_note_access,
 )
-from app.services.auth_service import verify_token
-from app.services.user_service import get_membership, get_user_by_email, get_user_by_id
+from app.services.auth_service import get_current_user
+from app.services.user_service import get_user_by_email, get_user_by_id
 
 logger = logging.getLogger(__name__)
 
@@ -57,60 +57,14 @@ class MessageResponse(BaseModel):
     message: str
 
 
-async def get_current_member(token: str, db: AsyncSession) -> dict:
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-
-    try:
-        payload = verify_token(token)
-    except Exception:
-        raise credentials_exception from None
-
-    if payload.get("type") != "access":
-        raise credentials_exception
-
-    user_id = payload.get("user_id")
-    org_id = payload.get("org_id")
-    if user_id is None or org_id is None:
-        raise credentials_exception
-
-    user = await get_user_by_id(db, user_id)
-    if not user or not user.is_active:
-        raise credentials_exception
-
-    membership = await get_membership(db, user_id, org_id)
-    if not membership or not membership.accepted_at:
-        raise credentials_exception
-
-    return {
-        "user_id": user_id,
-        "org_id": org_id,
-        "role": membership.role,
-        "email": user.email,
-    }
-
-
 @router.get("/{note_id}/share", response_model=AccessListResponse)
 async def get_note_sharing(
     note_id: int,
-    authorization: str | None = None,
-    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> AccessListResponse:
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing authorization",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    token = authorization.split(" ", 1)[1]
-    current_member = await get_current_member(token, db)
-
     accesses = await get_note_access_list(db, note_id)
-    can_manage = await can_manage_note_access(db, current_member["user_id"], note_id)
+    can_manage = await can_manage_note_access(db, current_user["user_id"], note_id)
 
     access_responses = []
     for access in accesses:
@@ -143,22 +97,12 @@ async def get_note_sharing(
 async def grant_note_sharing(
     note_id: int,
     request: GrantAccessRequest,
-    authorization: str | None = None,
-    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> AccessResponse:
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing authorization",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    token = authorization.split(" ", 1)[1]
-    current_member = await get_current_member(token, db)
-
-    can_manage = await can_manage_note_access(db, current_member["user_id"], note_id)
+    can_manage = await can_manage_note_access(db, current_user["user_id"], note_id)
     if not can_manage:
-        if current_member["role"] not in {MemberRole.OWNER, MemberRole.ADMIN}:
+        if current_user["role"] not in {MemberRole.OWNER, MemberRole.ADMIN}:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You don't have permission to manage sharing for this note",
@@ -174,7 +118,7 @@ async def grant_note_sharing(
     access = await grant_note_access(
         db,
         note_id=note_id,
-        granted_by=current_member["user_id"],
+        granted_by=current_user["user_id"],
         permission=request.permission,
         user_id=target_user.id,
     )
@@ -185,7 +129,7 @@ async def grant_note_sharing(
         note_id,
         request.email,
         request.permission,
-        current_member["email"],
+        current_user["email"],
     )
 
     return AccessResponse(
@@ -205,22 +149,12 @@ async def grant_note_sharing(
 async def revoke_note_sharing(
     note_id: int,
     access_id: int,
-    authorization: str | None = None,
-    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> MessageResponse:
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing authorization",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    token = authorization.split(" ", 1)[1]
-    current_member = await get_current_member(token, db)
-
-    can_manage = await can_manage_note_access(db, current_member["user_id"], note_id)
+    can_manage = await can_manage_note_access(db, current_user["user_id"], note_id)
     if not can_manage:
-        if current_member["role"] not in {MemberRole.OWNER, MemberRole.ADMIN}:
+        if current_user["role"] not in {MemberRole.OWNER, MemberRole.ADMIN}:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You don't have permission to manage sharing for this note",
@@ -246,7 +180,7 @@ async def revoke_note_sharing(
         "Note access revoked: note_id=%d, access_id=%d, by=%s",
         note_id,
         access_id,
-        current_member["email"],
+        current_user["email"],
     )
 
     return MessageResponse(message="Access revoked successfully")
@@ -256,22 +190,12 @@ async def revoke_note_sharing(
 async def grant_org_wide_access(
     note_id: int,
     permission: str = NotePermission.READ,
-    authorization: str | None = None,
-    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> AccessResponse:
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing authorization",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    token = authorization.split(" ", 1)[1]
-    current_member = await get_current_member(token, db)
-
-    can_manage = await can_manage_note_access(db, current_member["user_id"], note_id)
+    can_manage = await can_manage_note_access(db, current_user["user_id"], note_id)
     if not can_manage:
-        if current_member["role"] not in {MemberRole.OWNER, MemberRole.ADMIN}:
+        if current_user["role"] not in {MemberRole.OWNER, MemberRole.ADMIN}:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You don't have permission to manage sharing for this note",
@@ -280,18 +204,18 @@ async def grant_org_wide_access(
     access = await grant_note_access(
         db,
         note_id=note_id,
-        granted_by=current_member["user_id"],
+        granted_by=current_user["user_id"],
         permission=permission,
-        org_id=current_member["org_id"],
+        org_id=current_user["org_id"],
     )
     await db.commit()
 
     logger.info(
         "Org-wide access granted: note_id=%d, org_id=%d, permission=%s, by=%s",
         note_id,
-        current_member["org_id"],
+        current_user["org_id"],
         permission,
-        current_member["email"],
+        current_user["email"],
     )
 
     return AccessResponse(

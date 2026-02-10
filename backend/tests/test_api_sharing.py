@@ -1,10 +1,10 @@
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from fastapi.testclient import TestClient
 
-from app.main import app
 from app.constants import MemberRole, NotePermission
+from app.main import app
 
 client = TestClient(app)
 
@@ -35,26 +35,26 @@ class TestGetNoteSharing:
         assert response.status_code == 401
 
     def test_requires_bearer_token(self):
-        response = client.get("/api/notes/1/share", params={"authorization": "invalid"})
+        response = client.get("/api/notes/1/share", headers={"Authorization": "invalid"})
         assert response.status_code == 401
 
-    @patch("app.api.sharing.get_current_member")
+    @patch("app.api.sharing.get_current_user")
     @patch("app.api.sharing.get_note_access_list")
     @patch("app.api.sharing.can_manage_note_access")
     def test_returns_access_list(
         self,
         mock_can_manage,
         mock_get_access,
-        mock_get_member,
+        mock_get_current_user,
         mock_current_member,
     ):
-        mock_get_member.return_value = mock_current_member
+        mock_get_current_user.return_value = mock_current_member
         mock_can_manage.return_value = True
         mock_get_access.return_value = []
 
         response = client.get(
             "/api/notes/1/share",
-            params={"authorization": "Bearer valid-token"},
+            headers={"Authorization": "Bearer valid-token"},
         )
 
         assert response.status_code == 200
@@ -71,68 +71,68 @@ class TestGrantNoteSharing:
         )
         assert response.status_code == 401
 
-    @patch("app.api.sharing.get_current_member")
+    @patch("app.api.sharing.get_current_user")
     @patch("app.api.sharing.can_manage_note_access")
     def test_requires_manage_permission(
         self,
         mock_can_manage,
-        mock_get_member,
+        mock_get_current_user,
         mock_current_member,
     ):
         mock_current_member["role"] = MemberRole.VIEWER
-        mock_get_member.return_value = mock_current_member
+        mock_get_current_user.return_value = mock_current_member
         mock_can_manage.return_value = False
 
         response = client.post(
             "/api/notes/1/share",
             json={"email": "user@example.com", "permission": "read"},
-            params={"authorization": "Bearer valid-token"},
+            headers={"Authorization": "Bearer valid-token"},
         )
 
         assert response.status_code == 403
 
-    @patch("app.api.sharing.get_current_member")
+    @patch("app.api.sharing.get_current_user")
     @patch("app.api.sharing.can_manage_note_access")
     @patch("app.api.sharing.get_user_by_email")
     def test_user_not_found(
         self,
-        mock_get_user,
+        mock_get_user_by_email,
         mock_can_manage,
-        mock_get_member,
+        mock_get_current_user,
         mock_current_member,
     ):
-        mock_get_member.return_value = mock_current_member
+        mock_get_current_user.return_value = mock_current_member
         mock_can_manage.return_value = True
-        mock_get_user.return_value = None
+        mock_get_user_by_email.return_value = None
 
         response = client.post(
             "/api/notes/1/share",
             json={"email": "nonexistent@example.com", "permission": "read"},
-            params={"authorization": "Bearer valid-token"},
+            headers={"Authorization": "Bearer valid-token"},
         )
 
         assert response.status_code == 404
 
-    @patch("app.api.sharing.get_current_member")
+    @patch("app.api.sharing.get_current_user")
     @patch("app.api.sharing.can_manage_note_access")
     @patch("app.api.sharing.get_user_by_email")
     @patch("app.api.sharing.grant_note_access")
     def test_grants_access_successfully(
         self,
         mock_grant,
-        mock_get_user,
+        mock_get_user_by_email,
         mock_can_manage,
-        mock_get_member,
+        mock_get_current_user,
         mock_current_member,
     ):
-        mock_get_member.return_value = mock_current_member
+        mock_get_current_user.return_value = mock_current_member
         mock_can_manage.return_value = True
 
         target_user = MagicMock()
         target_user.id = 2
         target_user.email = "user@example.com"
         target_user.name = "Test User"
-        mock_get_user.return_value = target_user
+        mock_get_user_by_email.return_value = target_user
 
         access = MagicMock()
         access.id = 1
@@ -146,7 +146,7 @@ class TestGrantNoteSharing:
         response = client.post(
             "/api/notes/1/share",
             json={"email": "user@example.com", "permission": "read"},
-            params={"authorization": "Bearer valid-token"},
+            headers={"Authorization": "Bearer valid-token"},
         )
 
         assert response.status_code == 201
@@ -160,21 +160,21 @@ class TestRevokeNoteSharing:
         response = client.delete("/api/notes/1/share/1")
         assert response.status_code == 401
 
-    @patch("app.api.sharing.get_current_member")
+    @patch("app.api.sharing.get_current_user")
     @patch("app.api.sharing.can_manage_note_access")
     def test_requires_manage_permission(
         self,
         mock_can_manage,
-        mock_get_member,
+        mock_get_current_user,
         mock_current_member,
     ):
         mock_current_member["role"] = MemberRole.VIEWER
-        mock_get_member.return_value = mock_current_member
+        mock_get_current_user.return_value = mock_current_member
         mock_can_manage.return_value = False
 
         response = client.delete(
             "/api/notes/1/share/1",
-            params={"authorization": "Bearer valid-token"},
+            headers={"Authorization": "Bearer valid-token"},
         )
 
         assert response.status_code == 403
@@ -185,17 +185,17 @@ class TestGrantOrgWideAccess:
         response = client.post("/api/notes/1/share/org")
         assert response.status_code == 401
 
-    @patch("app.api.sharing.get_current_member")
+    @patch("app.api.sharing.get_current_user")
     @patch("app.api.sharing.can_manage_note_access")
     @patch("app.api.sharing.grant_note_access")
     def test_grants_org_access_successfully(
         self,
         mock_grant,
         mock_can_manage,
-        mock_get_member,
+        mock_get_current_user,
         mock_current_member,
     ):
-        mock_get_member.return_value = mock_current_member
+        mock_get_current_user.return_value = mock_current_member
         mock_can_manage.return_value = True
 
         access = MagicMock()
@@ -209,7 +209,8 @@ class TestGrantOrgWideAccess:
 
         response = client.post(
             "/api/notes/1/share/org",
-            params={"authorization": "Bearer valid-token", "permission": "read"},
+            params={"permission": "read"},
+            headers={"Authorization": "Bearer valid-token"},
         )
 
         assert response.status_code == 201

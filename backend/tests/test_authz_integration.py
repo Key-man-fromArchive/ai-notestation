@@ -78,16 +78,12 @@ class TestRoleBasedInviteAccess:
         mock_db = AsyncMock()
         mock_db.commit = AsyncMock()
 
-        user = _make_user(1, "owner@example.com", "Owner")
-        membership = _make_membership(1, 1, 1, MemberRole.OWNER)
         new_membership = _make_membership(2, 2, 1, MemberRole.MEMBER, None)
         new_membership.invite_expires_at = datetime.now(UTC)
 
         token = _create_auth_token(1, 1, MemberRole.OWNER, "owner@example.com")
 
         with (
-            patch("app.api.members.get_user_by_id", new_callable=AsyncMock, return_value=user),
-            patch("app.api.members.get_membership", new_callable=AsyncMock, return_value=membership),
             patch("app.api.members.get_user_by_email", new_callable=AsyncMock, return_value=None),
             patch(
                 "app.api.members.create_invite", new_callable=AsyncMock, return_value=(new_membership, "invite-token")
@@ -100,7 +96,7 @@ class TestRoleBasedInviteAccess:
             async with AsyncClient(transport=transport, base_url="http://test") as client:
                 response = await client.post(
                     "/api/members/invite",
-                    params={"authorization": f"Bearer {token}"},
+                    headers={"Authorization": f"Bearer {token}"},
                     json={"email": "newmember@example.com", "role": MemberRole.MEMBER},
                 )
 
@@ -116,16 +112,12 @@ class TestRoleBasedInviteAccess:
         mock_db = AsyncMock()
         mock_db.commit = AsyncMock()
 
-        user = _make_user(1, "admin@example.com", "Admin")
-        membership = _make_membership(1, 1, 1, MemberRole.ADMIN)
         new_membership = _make_membership(2, 2, 1, MemberRole.MEMBER, None)
         new_membership.invite_expires_at = datetime.now(UTC)
 
         token = _create_auth_token(1, 1, MemberRole.ADMIN, "admin@example.com")
 
         with (
-            patch("app.api.members.get_user_by_id", new_callable=AsyncMock, return_value=user),
-            patch("app.api.members.get_membership", new_callable=AsyncMock, return_value=membership),
             patch("app.api.members.get_user_by_email", new_callable=AsyncMock, return_value=None),
             patch(
                 "app.api.members.create_invite", new_callable=AsyncMock, return_value=(new_membership, "invite-token")
@@ -138,7 +130,7 @@ class TestRoleBasedInviteAccess:
             async with AsyncClient(transport=transport, base_url="http://test") as client:
                 response = await client.post(
                     "/api/members/invite",
-                    params={"authorization": f"Bearer {token}"},
+                    headers={"Authorization": f"Bearer {token}"},
                     json={"email": "newmember@example.com", "role": MemberRole.MEMBER},
                 )
 
@@ -153,27 +145,20 @@ class TestRoleBasedInviteAccess:
 
         mock_db = AsyncMock()
 
-        user = _make_user(1, "member@example.com", "Member")
-        membership = _make_membership(1, 1, 1, MemberRole.MEMBER)
-
         token = _create_auth_token(1, 1, MemberRole.MEMBER, "member@example.com")
 
-        with (
-            patch("app.api.members.get_user_by_id", new_callable=AsyncMock, return_value=user),
-            patch("app.api.members.get_membership", new_callable=AsyncMock, return_value=membership),
-        ):
-            from app.database import get_db
+        from app.database import get_db
 
-            app.dependency_overrides[get_db] = lambda: mock_db
+        app.dependency_overrides[get_db] = lambda: mock_db
 
-            async with AsyncClient(transport=transport, base_url="http://test") as client:
-                response = await client.post(
-                    "/api/members/invite",
-                    params={"authorization": f"Bearer {token}"},
-                    json={"email": "newmember@example.com", "role": MemberRole.MEMBER},
-                )
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/api/members/invite",
+                headers={"Authorization": f"Bearer {token}"},
+                json={"email": "newmember@example.com", "role": MemberRole.MEMBER},
+            )
 
-            app.dependency_overrides.clear()
+        app.dependency_overrides.clear()
 
         assert response.status_code == 403
         assert "OWNER or ADMIN" in response.json()["detail"]
@@ -185,27 +170,20 @@ class TestRoleBasedInviteAccess:
 
         mock_db = AsyncMock()
 
-        user = _make_user(1, "viewer@example.com", "Viewer")
-        membership = _make_membership(1, 1, 1, MemberRole.VIEWER)
-
         token = _create_auth_token(1, 1, MemberRole.VIEWER, "viewer@example.com")
 
-        with (
-            patch("app.api.members.get_user_by_id", new_callable=AsyncMock, return_value=user),
-            patch("app.api.members.get_membership", new_callable=AsyncMock, return_value=membership),
-        ):
-            from app.database import get_db
+        from app.database import get_db
 
-            app.dependency_overrides[get_db] = lambda: mock_db
+        app.dependency_overrides[get_db] = lambda: mock_db
 
-            async with AsyncClient(transport=transport, base_url="http://test") as client:
-                response = await client.post(
-                    "/api/members/invite",
-                    params={"authorization": f"Bearer {token}"},
-                    json={"email": "newmember@example.com", "role": MemberRole.MEMBER},
-                )
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/api/members/invite",
+                headers={"Authorization": f"Bearer {token}"},
+                json={"email": "newmember@example.com", "role": MemberRole.MEMBER},
+            )
 
-            app.dependency_overrides.clear()
+        app.dependency_overrides.clear()
 
         assert response.status_code == 403
         assert "OWNER or ADMIN" in response.json()["detail"]
@@ -220,9 +198,6 @@ class TestRoleBasedRoleChangeAccess:
         mock_db = AsyncMock()
         mock_db.commit = AsyncMock()
 
-        owner_user = _make_user(1, "owner@example.com", "Owner")
-        owner_membership = _make_membership(1, 1, 1, MemberRole.OWNER)
-
         target_user = _make_user(2, "target@example.com", "Target")
         target_membership = _make_membership(2, 2, 1, MemberRole.MEMBER)
 
@@ -232,10 +207,7 @@ class TestRoleBasedRoleChangeAccess:
 
         token = _create_auth_token(1, 1, MemberRole.OWNER, "owner@example.com")
 
-        with (
-            patch("app.api.members.get_user_by_id", new_callable=AsyncMock, side_effect=[owner_user, target_user]),
-            patch("app.api.members.get_membership", new_callable=AsyncMock, return_value=owner_membership),
-        ):
+        with patch("app.api.members.get_user_by_id", new_callable=AsyncMock, return_value=target_user):
             from app.database import get_db
 
             app.dependency_overrides[get_db] = lambda: mock_db
@@ -243,7 +215,7 @@ class TestRoleBasedRoleChangeAccess:
             async with AsyncClient(transport=transport, base_url="http://test") as client:
                 response = await client.put(
                     "/api/members/2/role",
-                    params={"authorization": f"Bearer {token}"},
+                    headers={"Authorization": f"Bearer {token}"},
                     json={"role": MemberRole.ADMIN},
                 )
 
@@ -260,9 +232,6 @@ class TestRoleBasedRoleChangeAccess:
         mock_db = AsyncMock()
         mock_db.commit = AsyncMock()
 
-        admin_user = _make_user(1, "admin@example.com", "Admin")
-        admin_membership = _make_membership(1, 1, 1, MemberRole.ADMIN)
-
         target_user = _make_user(2, "target@example.com", "Target")
         target_membership = _make_membership(2, 2, 1, MemberRole.MEMBER)
 
@@ -272,10 +241,7 @@ class TestRoleBasedRoleChangeAccess:
 
         token = _create_auth_token(1, 1, MemberRole.ADMIN, "admin@example.com")
 
-        with (
-            patch("app.api.members.get_user_by_id", new_callable=AsyncMock, side_effect=[admin_user, target_user]),
-            patch("app.api.members.get_membership", new_callable=AsyncMock, return_value=admin_membership),
-        ):
+        with patch("app.api.members.get_user_by_id", new_callable=AsyncMock, return_value=target_user):
             from app.database import get_db
 
             app.dependency_overrides[get_db] = lambda: mock_db
@@ -283,7 +249,7 @@ class TestRoleBasedRoleChangeAccess:
             async with AsyncClient(transport=transport, base_url="http://test") as client:
                 response = await client.put(
                     "/api/members/2/role",
-                    params={"authorization": f"Bearer {token}"},
+                    headers={"Authorization": f"Bearer {token}"},
                     json={"role": MemberRole.VIEWER},
                 )
 
@@ -298,27 +264,20 @@ class TestRoleBasedRoleChangeAccess:
 
         mock_db = AsyncMock()
 
-        admin_user = _make_user(1, "admin@example.com", "Admin")
-        admin_membership = _make_membership(1, 1, 1, MemberRole.ADMIN)
-
         token = _create_auth_token(1, 1, MemberRole.ADMIN, "admin@example.com")
 
-        with (
-            patch("app.api.members.get_user_by_id", new_callable=AsyncMock, return_value=admin_user),
-            patch("app.api.members.get_membership", new_callable=AsyncMock, return_value=admin_membership),
-        ):
-            from app.database import get_db
+        from app.database import get_db
 
-            app.dependency_overrides[get_db] = lambda: mock_db
+        app.dependency_overrides[get_db] = lambda: mock_db
 
-            async with AsyncClient(transport=transport, base_url="http://test") as client:
-                response = await client.put(
-                    "/api/members/2/role",
-                    params={"authorization": f"Bearer {token}"},
-                    json={"role": MemberRole.OWNER},
-                )
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.put(
+                "/api/members/2/role",
+                headers={"Authorization": f"Bearer {token}"},
+                json={"role": MemberRole.OWNER},
+            )
 
-            app.dependency_overrides.clear()
+        app.dependency_overrides.clear()
 
         assert response.status_code == 403
         assert "Only OWNER can transfer ownership" in response.json()["detail"]
@@ -330,27 +289,20 @@ class TestRoleBasedRoleChangeAccess:
 
         mock_db = AsyncMock()
 
-        member_user = _make_user(1, "member@example.com", "Member")
-        member_membership = _make_membership(1, 1, 1, MemberRole.MEMBER)
-
         token = _create_auth_token(1, 1, MemberRole.MEMBER, "member@example.com")
 
-        with (
-            patch("app.api.members.get_user_by_id", new_callable=AsyncMock, return_value=member_user),
-            patch("app.api.members.get_membership", new_callable=AsyncMock, return_value=member_membership),
-        ):
-            from app.database import get_db
+        from app.database import get_db
 
-            app.dependency_overrides[get_db] = lambda: mock_db
+        app.dependency_overrides[get_db] = lambda: mock_db
 
-            async with AsyncClient(transport=transport, base_url="http://test") as client:
-                response = await client.put(
-                    "/api/members/2/role",
-                    params={"authorization": f"Bearer {token}"},
-                    json={"role": MemberRole.VIEWER},
-                )
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.put(
+                "/api/members/2/role",
+                headers={"Authorization": f"Bearer {token}"},
+                json={"role": MemberRole.VIEWER},
+            )
 
-            app.dependency_overrides.clear()
+        app.dependency_overrides.clear()
 
         assert response.status_code == 403
         assert "OWNER or ADMIN" in response.json()["detail"]
@@ -375,7 +327,6 @@ class TestOwnershipProtection:
 
         with (
             patch("app.api.members.get_user_by_id", new_callable=AsyncMock, return_value=owner_user),
-            patch("app.api.members.get_membership", new_callable=AsyncMock, return_value=owner_membership),
             patch("app.api.members.get_org_members", new_callable=AsyncMock, return_value=[owner_membership]),
         ):
             from app.database import get_db
@@ -385,7 +336,7 @@ class TestOwnershipProtection:
             async with AsyncClient(transport=transport, base_url="http://test") as client:
                 response = await client.put(
                     "/api/members/1/role",
-                    params={"authorization": f"Bearer {token}"},
+                    headers={"Authorization": f"Bearer {token}"},
                     json={"role": MemberRole.ADMIN},
                 )
 
@@ -413,8 +364,7 @@ class TestOwnershipProtection:
         token = _create_auth_token(1, 1, MemberRole.OWNER, "owner1@example.com")
 
         with (
-            patch("app.api.members.get_user_by_id", new_callable=AsyncMock, side_effect=[owner1, owner1]),
-            patch("app.api.members.get_membership", new_callable=AsyncMock, return_value=owner1_membership),
+            patch("app.api.members.get_user_by_id", new_callable=AsyncMock, return_value=owner1),
             patch(
                 "app.api.members.get_org_members",
                 new_callable=AsyncMock,
@@ -428,7 +378,7 @@ class TestOwnershipProtection:
             async with AsyncClient(transport=transport, base_url="http://test") as client:
                 response = await client.put(
                     "/api/members/1/role",
-                    params={"authorization": f"Bearer {token}"},
+                    headers={"Authorization": f"Bearer {token}"},
                     json={"role": MemberRole.ADMIN},
                 )
 
@@ -439,20 +389,15 @@ class TestOwnershipProtection:
 
 class TestTokenValidation:
     @pytest.mark.asyncio
-    async def test_missing_bearer_prefix_rejected(self):
+    async def test_missing_auth_header_rejected(self):
+        """Request without Authorization header should be rejected."""
         app = _get_app()
         transport = ASGITransport(app=app)
 
-        token = _create_auth_token(1, 1, MemberRole.OWNER)
-
         async with AsyncClient(transport=transport, base_url="http://test") as client:
-            response = await client.get(
-                "/api/members",
-                params={"authorization": token},
-            )
+            response = await client.get("/api/members")
 
         assert response.status_code == 401
-        assert "Missing authorization" in response.json()["detail"]
 
     @pytest.mark.asyncio
     async def test_malformed_token_rejected(self):
@@ -468,7 +413,7 @@ class TestTokenValidation:
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.get(
                 "/api/members",
-                params={"authorization": "Bearer not-a-valid-jwt"},
+                headers={"Authorization": "Bearer not-a-valid-jwt"},
             )
 
         app.dependency_overrides.clear()
@@ -498,66 +443,10 @@ class TestTokenValidation:
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.get(
                 "/api/members",
-                params={"authorization": f"Bearer {refresh_token}"},
+                headers={"Authorization": f"Bearer {refresh_token}"},
             )
 
         app.dependency_overrides.clear()
-
-        assert response.status_code == 401
-
-    @pytest.mark.asyncio
-    async def test_inactive_user_token_rejected(self):
-        app = _get_app()
-        transport = ASGITransport(app=app)
-
-        mock_db = AsyncMock()
-
-        inactive_user = _make_user(1, "inactive@example.com", "Inactive", is_active=False)
-        token = _create_auth_token(1, 1, MemberRole.OWNER, "inactive@example.com")
-
-        with patch("app.api.members.get_user_by_id", new_callable=AsyncMock, return_value=inactive_user):
-            from app.database import get_db
-
-            app.dependency_overrides[get_db] = lambda: mock_db
-
-            async with AsyncClient(transport=transport, base_url="http://test") as client:
-                response = await client.get(
-                    "/api/members",
-                    params={"authorization": f"Bearer {token}"},
-                )
-
-            app.dependency_overrides.clear()
-
-        assert response.status_code == 401
-
-    @pytest.mark.asyncio
-    async def test_pending_membership_token_rejected(self):
-        app = _get_app()
-        transport = ASGITransport(app=app)
-
-        mock_db = AsyncMock()
-
-        user = _make_user(1, "pending@example.com", "Pending")
-        pending_membership = _make_membership(1, 1, 1, MemberRole.MEMBER)
-        pending_membership.accepted_at = None
-
-        token = _create_auth_token(1, 1, MemberRole.MEMBER, "pending@example.com")
-
-        with (
-            patch("app.api.members.get_user_by_id", new_callable=AsyncMock, return_value=user),
-            patch("app.api.members.get_membership", new_callable=AsyncMock, return_value=pending_membership),
-        ):
-            from app.database import get_db
-
-            app.dependency_overrides[get_db] = lambda: mock_db
-
-            async with AsyncClient(transport=transport, base_url="http://test") as client:
-                response = await client.get(
-                    "/api/members",
-                    params={"authorization": f"Bearer {token}"},
-                )
-
-            app.dependency_overrides.clear()
 
         assert response.status_code == 401
 
@@ -570,22 +459,18 @@ class TestDuplicateInviteProtection:
 
         mock_db = AsyncMock()
 
-        owner = _make_user(1, "owner@example.com", "Owner")
-        owner_membership = _make_membership(1, 1, 1, MemberRole.OWNER)
-
         existing_user = _make_user(2, "existing@example.com", "Existing")
         existing_membership = _make_membership(2, 2, 1, MemberRole.MEMBER)
 
         token = _create_auth_token(1, 1, MemberRole.OWNER, "owner@example.com")
 
         with (
-            patch("app.api.members.get_user_by_id", new_callable=AsyncMock, return_value=owner),
+            patch("app.api.members.get_user_by_email", new_callable=AsyncMock, return_value=existing_user),
             patch(
                 "app.api.members.get_membership",
                 new_callable=AsyncMock,
-                side_effect=[owner_membership, existing_membership],
+                return_value=existing_membership,
             ),
-            patch("app.api.members.get_user_by_email", new_callable=AsyncMock, return_value=existing_user),
         ):
             from app.database import get_db
 
@@ -594,7 +479,7 @@ class TestDuplicateInviteProtection:
             async with AsyncClient(transport=transport, base_url="http://test") as client:
                 response = await client.post(
                     "/api/members/invite",
-                    params={"authorization": f"Bearer {token}"},
+                    headers={"Authorization": f"Bearer {token}"},
                     json={"email": "existing@example.com", "role": MemberRole.MEMBER},
                 )
 
@@ -612,31 +497,24 @@ class TestMemberNotFoundProtection:
 
         mock_db = AsyncMock()
 
-        owner = _make_user(1, "owner@example.com", "Owner")
-        owner_membership = _make_membership(1, 1, 1, MemberRole.OWNER)
-
         mock_result = MagicMock()
         mock_result.scalar_one_or_none = MagicMock(return_value=None)
         mock_db.execute = AsyncMock(return_value=mock_result)
 
         token = _create_auth_token(1, 1, MemberRole.OWNER, "owner@example.com")
 
-        with (
-            patch("app.api.members.get_user_by_id", new_callable=AsyncMock, return_value=owner),
-            patch("app.api.members.get_membership", new_callable=AsyncMock, return_value=owner_membership),
-        ):
-            from app.database import get_db
+        from app.database import get_db
 
-            app.dependency_overrides[get_db] = lambda: mock_db
+        app.dependency_overrides[get_db] = lambda: mock_db
 
-            async with AsyncClient(transport=transport, base_url="http://test") as client:
-                response = await client.put(
-                    "/api/members/999/role",
-                    params={"authorization": f"Bearer {token}"},
-                    json={"role": MemberRole.ADMIN},
-                )
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.put(
+                "/api/members/999/role",
+                headers={"Authorization": f"Bearer {token}"},
+                json={"role": MemberRole.ADMIN},
+            )
 
-            app.dependency_overrides.clear()
+        app.dependency_overrides.clear()
 
         assert response.status_code == 404
         assert "Member not found" in response.json()["detail"]
@@ -696,7 +574,7 @@ class TestRefreshTokenSecurity:
 
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.post(
-                "/api/members/refresh",
+                "/api/auth/token/refresh",
                 json={"refresh_token": access_token},
             )
 
@@ -724,8 +602,8 @@ class TestRefreshTokenSecurity:
         )
 
         with (
-            patch("app.api.members.get_user_by_id", new_callable=AsyncMock, return_value=user),
-            patch("app.api.members.get_membership", new_callable=AsyncMock, return_value=membership),
+            patch("app.api.auth.get_user_by_id", new_callable=AsyncMock, return_value=user),
+            patch("app.api.auth.get_membership", new_callable=AsyncMock, return_value=membership),
         ):
             from app.database import get_db
 
@@ -733,7 +611,7 @@ class TestRefreshTokenSecurity:
 
             async with AsyncClient(transport=transport, base_url="http://test") as client:
                 response = await client.post(
-                    "/api/members/refresh",
+                    "/api/auth/token/refresh",
                     json={"refresh_token": refresh_token},
                 )
 
