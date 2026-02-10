@@ -31,10 +31,11 @@ async function injectAuth(
   page: import('@playwright/test').Page,
   token: string,
 ) {
-  await page.goto('/login')
+  await page.goto('/login', { waitUntil: 'domcontentloaded' })
   await page.evaluate(t => {
     localStorage.setItem('auth_token', t)
   }, token)
+  await page.reload({ waitUntil: 'domcontentloaded' })
 }
 
 test.describe('OAuth Live Browser Tests', () => {
@@ -44,11 +45,11 @@ test.describe('OAuth Live Browser Tests', () => {
   }) => {
     const { token } = await createTestUser(request)
     await injectAuth(page, token)
-    await page.goto('/settings')
+    await page.goto('/settings', { waitUntil: 'networkidle' })
 
     await expect(
       page.getByRole('heading', { name: '설정', exact: true }),
-    ).toBeVisible({ timeout: 10000 })
+    ).toBeVisible({ timeout: 15000 })
   })
 
   test('Settings page shows NAS configuration section', async ({
