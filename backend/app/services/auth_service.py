@@ -109,16 +109,12 @@ async def get_current_user(
 ) -> dict:
     """FastAPI dependency that extracts the current user from a Bearer token.
 
-    This function is designed to be used with ``Depends(get_current_user)``.
-
-    Args:
-        token: JWT bearer token (injected by ``OAuth2PasswordBearer``).
-
-    Returns:
-        A dict with at least ``{"username": "<sub_claim>"}``.
-
-    Raises:
-        HTTPException: 401 if the token is invalid, expired, or missing ``sub``.
+    Returns a dict with user context from member JWT:
+    - username: email (backward compat)
+    - email: user email
+    - user_id: int
+    - org_id: int
+    - role: member role string
     """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -131,7 +127,6 @@ async def get_current_user(
     except JWTError:
         raise credentials_exception from None
 
-    # Only access tokens are allowed for API authentication
     if payload.get("type") != "access":
         raise credentials_exception
 
@@ -139,4 +134,17 @@ async def get_current_user(
     if username is None:
         raise credentials_exception
 
-    return {"username": username}
+    user_id = payload.get("user_id")
+    org_id = payload.get("org_id")
+    role = payload.get("role")
+
+    if user_id is None or org_id is None:
+        raise credentials_exception
+
+    return {
+        "username": username,
+        "email": username,
+        "user_id": user_id,
+        "org_id": org_id,
+        "role": role or "member",
+    }
