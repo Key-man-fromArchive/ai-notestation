@@ -25,7 +25,12 @@ def _make_fake_chatgpt_jwt(account_id: str = "acct-test123") -> str:
 def _get_valid_token() -> str:
     global _VALID_TOKEN  # noqa: PLW0603
     if _VALID_TOKEN is None:
-        _VALID_TOKEN = create_access_token(data={"sub": "testuser"})
+        _VALID_TOKEN = create_access_token(data={
+            "sub": "testuser@example.com",
+            "user_id": 1,
+            "org_id": 1,
+            "role": "owner",
+        })
     return _VALID_TOKEN
 
 

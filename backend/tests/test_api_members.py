@@ -250,8 +250,17 @@ class TestInvite:
 
     @pytest.mark.asyncio
     async def test_invite_validates_role(self):
+        from app.services.auth_service import create_access_token
+
         app = _get_app()
         transport = ASGITransport(app=app)
+
+        token = create_access_token(data={
+            "sub": "admin@example.com",
+            "user_id": 1,
+            "org_id": 1,
+            "role": MemberRole.OWNER,
+        })
 
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.post(
@@ -260,6 +269,7 @@ class TestInvite:
                     "email": "invite@example.com",
                     "role": "invalid_role",
                 },
+                headers={"Authorization": f"Bearer {token}"},
             )
 
         assert response.status_code == 422
@@ -322,13 +332,23 @@ class TestUpdateRole:
 
     @pytest.mark.asyncio
     async def test_update_role_validates_role(self):
+        from app.services.auth_service import create_access_token
+
         app = _get_app()
         transport = ASGITransport(app=app)
+
+        token = create_access_token(data={
+            "sub": "admin@example.com",
+            "user_id": 1,
+            "org_id": 1,
+            "role": MemberRole.OWNER,
+        })
 
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.put(
                 "/api/members/1/role",
                 json={"role": "invalid_role"},
+                headers={"Authorization": f"Bearer {token}"},
             )
 
         assert response.status_code == 422

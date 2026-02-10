@@ -110,11 +110,20 @@ async def test_client(test_app) -> AsyncGenerator[AsyncClient, None]:
         yield client
 
 
-def make_auth_headers(sub: str = "testuser") -> dict[str, str]:
-    """Create Authorization headers with a valid access token."""
+def make_auth_headers(sub: str = "testuser@example.com") -> dict[str, str]:
+    """Create Authorization headers with a valid access token.
+
+    Generates a unified member JWT containing user_id, org_id, and role claims
+    required by get_current_user.
+    """
     from app.services.auth_service import create_access_token
 
-    token = create_access_token(data={"sub": sub})
+    token = create_access_token(data={
+        "sub": sub,
+        "user_id": 1,
+        "org_id": 1,
+        "role": "owner",
+    })
     return {"Authorization": f"Bearer {token}"}
 
 

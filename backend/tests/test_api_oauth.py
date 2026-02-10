@@ -17,7 +17,13 @@ def _setup_overrides(app):
     from app.services.auth_service import get_current_user
 
     async def _fake_current_user():
-        return {"username": "testuser"}
+        return {
+            "username": "testuser@example.com",
+            "email": "testuser@example.com",
+            "user_id": 1,
+            "org_id": 1,
+            "role": "owner",
+        }
 
     app.dependency_overrides[get_current_user] = _fake_current_user
     return app

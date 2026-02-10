@@ -152,9 +152,18 @@ class TestGetCurrentUser:
         """get_current_user should return the username from a valid token."""
         from app.services.auth_service import create_access_token, get_current_user
 
-        token = create_access_token(data={"sub": "depuser"})
+        token = create_access_token(data={
+            "sub": "depuser@example.com",
+            "user_id": 1,
+            "org_id": 1,
+            "role": "owner",
+        })
         result = await get_current_user(token=token)
-        assert result["username"] == "depuser"
+        assert result["username"] == "depuser@example.com"
+        assert result["email"] == "depuser@example.com"
+        assert result["user_id"] == 1
+        assert result["org_id"] == 1
+        assert result["role"] == "owner"
 
     @pytest.mark.asyncio
     async def test_missing_subject_raises(self):
@@ -163,8 +172,34 @@ class TestGetCurrentUser:
 
         from app.services.auth_service import create_access_token, get_current_user
 
-        # Create a token without 'sub'
-        token = create_access_token(data={"role": "admin"})
+        # Create a token without 'sub' but with other required claims
+        token = create_access_token(data={"user_id": 1, "org_id": 1, "role": "admin"})
+        with pytest.raises(HTTPException) as exc_info:
+            await get_current_user(token=token)
+        assert exc_info.value.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_missing_user_id_raises(self):
+        """get_current_user should raise HTTPException if 'user_id' is missing."""
+        from fastapi import HTTPException
+
+        from app.services.auth_service import create_access_token, get_current_user
+
+        # Create a token without 'user_id'
+        token = create_access_token(data={"sub": "test@example.com", "org_id": 1, "role": "member"})
+        with pytest.raises(HTTPException) as exc_info:
+            await get_current_user(token=token)
+        assert exc_info.value.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_missing_org_id_raises(self):
+        """get_current_user should raise HTTPException if 'org_id' is missing."""
+        from fastapi import HTTPException
+
+        from app.services.auth_service import create_access_token, get_current_user
+
+        # Create a token without 'org_id'
+        token = create_access_token(data={"sub": "test@example.com", "user_id": 1, "role": "member"})
         with pytest.raises(HTTPException) as exc_info:
             await get_current_user(token=token)
         assert exc_info.value.status_code == 401
@@ -211,49 +246,83 @@ def _get_app():
 
 
 class TestLoginEndpoint:
-    """Test POST /api/auth/login endpoint."""
+    """Test POST /api/auth/login endpoint (member auth)."""
 
     @pytest.mark.asyncio
     async def test_login_success(self):
-        """Successful Synology auth should return access + refresh tokens."""
+        """Successful member auth should return access + refresh tokens with org context."""
+        from datetime import UTC, datetime
+
         app = _get_app()
         transport = ASGITransport(app=app)
 
-        mock_client = AsyncMock()
-        mock_client.login = AsyncMock(return_value="fake-sid-12345")
-        mock_client.close = AsyncMock()
+        mock_user = AsyncMock()
+        mock_user.id = 1
+        mock_user.email = "admin@example.com"
+        mock_user.name = "Admin User"
+        mock_user.is_active = True
+        mock_user.password_hash = "hashed"
 
-        with patch("app.api.auth._create_synology_client", return_value=mock_client):
+        mock_membership = AsyncMock()
+        mock_membership.org_id = 1
+        mock_membership.role = "owner"
+        mock_membership.accepted_at = datetime.now(UTC)
+
+        mock_org = AsyncMock()
+        mock_org.id = 1
+        mock_org.slug = "test-org"
+
+        mock_org_result = AsyncMock()
+        mock_org_result.scalar_one = lambda: mock_org
+
+        mock_db = AsyncMock()
+        mock_db.execute = AsyncMock(return_value=mock_org_result)
+
+        with (
+            patch("app.api.auth.get_user_by_email", new_callable=AsyncMock, return_value=mock_user),
+            patch("app.api.auth.verify_password", return_value=True),
+            patch("app.api.auth.get_user_memberships", new_callable=AsyncMock, return_value=[mock_membership]),
+        ):
+            from app.database import get_db
+            app.dependency_overrides[get_db] = lambda: mock_db
+
             async with AsyncClient(transport=transport, base_url="http://test") as client:
                 response = await client.post(
                     "/api/auth/login",
-                    json={"username": "admin", "password": "secret123"},
+                    json={"email": "admin@example.com", "password": "secret123"},
                 )
+
+            app.dependency_overrides.pop(get_db, None)
 
         assert response.status_code == 200
         data = response.json()
         assert "access_token" in data
         assert "refresh_token" in data
         assert data["token_type"] == "bearer"
+        assert data["email"] == "admin@example.com"
+        assert data["user_id"] == 1
+        assert data["org_id"] == 1
+        assert data["role"] == "owner"
 
     @pytest.mark.asyncio
     async def test_login_invalid_credentials(self):
-        """Invalid Synology credentials should return 401."""
-        from app.synology_gateway.client import SynologyAuthError
-
+        """Invalid credentials should return 401."""
         app = _get_app()
         transport = ASGITransport(app=app)
 
-        mock_client = AsyncMock()
-        mock_client.login = AsyncMock(side_effect=SynologyAuthError(code=400))
-        mock_client.close = AsyncMock()
+        mock_db = AsyncMock()
 
-        with patch("app.api.auth._create_synology_client", return_value=mock_client):
+        with patch("app.api.auth.get_user_by_email", new_callable=AsyncMock, return_value=None):
+            from app.database import get_db
+            app.dependency_overrides[get_db] = lambda: mock_db
+
             async with AsyncClient(transport=transport, base_url="http://test") as client:
                 response = await client.post(
                     "/api/auth/login",
-                    json={"username": "admin", "password": "wrong"},
+                    json={"email": "admin@example.com", "password": "wrong"},
                 )
+
+            app.dependency_overrides.pop(get_db, None)
 
         assert response.status_code == 401
         data = response.json()
@@ -261,14 +330,14 @@ class TestLoginEndpoint:
 
     @pytest.mark.asyncio
     async def test_login_missing_fields(self):
-        """Missing username/password should return 422."""
+        """Missing email/password should return 422."""
         app = _get_app()
         transport = ASGITransport(app=app)
 
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.post(
                 "/api/auth/login",
-                json={"username": "admin"},  # missing password
+                json={"email": "admin@example.com"},  # missing password
             )
 
         assert response.status_code == 422
@@ -285,13 +354,38 @@ class TestRefreshEndpoint:
         app = _get_app()
         transport = ASGITransport(app=app)
 
-        refresh = create_refresh_token(data={"sub": "refreshuser"})
+        mock_user = AsyncMock()
+        mock_user.id = 1
+        mock_user.email = "refreshuser@example.com"
+        mock_user.name = "Refresh User"
+        mock_user.is_active = True
 
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            response = await client.post(
-                "/api/auth/token/refresh",
-                json={"refresh_token": refresh},
-            )
+        mock_membership = AsyncMock()
+        mock_membership.role = "owner"
+        mock_membership.accepted_at = True
+
+        refresh = create_refresh_token(data={
+            "sub": "refreshuser@example.com",
+            "user_id": 1,
+            "org_id": 1,
+            "role": "owner",
+        })
+
+        with (
+            patch("app.api.auth.get_user_by_id", new_callable=AsyncMock, return_value=mock_user),
+            patch("app.api.auth.get_membership", new_callable=AsyncMock, return_value=mock_membership),
+        ):
+            from app.database import get_db
+            mock_db = AsyncMock()
+            app.dependency_overrides[get_db] = lambda: mock_db
+
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.post(
+                    "/api/auth/token/refresh",
+                    json={"refresh_token": refresh},
+                )
+
+            app.dependency_overrides.pop(get_db, None)
 
         assert response.status_code == 200
         data = response.json()
@@ -306,13 +400,24 @@ class TestRefreshEndpoint:
         app = _get_app()
         transport = ASGITransport(app=app)
 
-        access = create_access_token(data={"sub": "user1"})
+        access = create_access_token(data={
+            "sub": "user1@example.com",
+            "user_id": 1,
+            "org_id": 1,
+            "role": "owner",
+        })
+
+        from app.database import get_db
+        mock_db = AsyncMock()
+        app.dependency_overrides[get_db] = lambda: mock_db
 
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.post(
                 "/api/auth/token/refresh",
                 json={"refresh_token": access},
             )
+
+        app.dependency_overrides.pop(get_db, None)
 
         assert response.status_code == 401
 
@@ -342,17 +447,47 @@ class TestMeEndpoint:
         app = _get_app()
         transport = ASGITransport(app=app)
 
-        token = create_access_token(data={"sub": "meuser"})
+        token = create_access_token(data={
+            "sub": "meuser@example.com",
+            "user_id": 1,
+            "org_id": 1,
+            "role": "owner",
+        })
 
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            response = await client.get(
-                "/api/auth/me",
-                headers={"Authorization": f"Bearer {token}"},
-            )
+        mock_user = AsyncMock()
+        mock_user.id = 1
+        mock_user.email = "meuser@example.com"
+        mock_user.name = "Me User"
+        mock_user.is_active = True
+
+        mock_org = AsyncMock()
+        mock_org.id = 1
+        mock_org.slug = "test-org"
+
+        mock_org_result = AsyncMock()
+        mock_org_result.scalar_one_or_none = lambda: mock_org
+
+        mock_db = AsyncMock()
+        mock_db.execute = AsyncMock(return_value=mock_org_result)
+
+        with patch("app.api.auth.get_user_by_id", new_callable=AsyncMock, return_value=mock_user):
+            from app.database import get_db
+            app.dependency_overrides[get_db] = lambda: mock_db
+
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.get(
+                    "/api/auth/me",
+                    headers={"Authorization": f"Bearer {token}"},
+                )
+
+            app.dependency_overrides.pop(get_db, None)
 
         assert response.status_code == 200
         data = response.json()
-        assert data["username"] == "meuser"
+        assert data["email"] == "meuser@example.com"
+        assert data["user_id"] == 1
+        assert data["org_id"] == 1
+        assert data["role"] == "owner"
 
     @pytest.mark.asyncio
     async def test_me_unauthenticated(self):

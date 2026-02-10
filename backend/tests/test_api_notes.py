@@ -101,7 +101,13 @@ def _setup_overrides(app, mock_ns=None, mock_db=None):
     from app.services.auth_service import get_current_user
 
     async def _fake_current_user():
-        return {"username": "testuser"}
+        return {
+            "username": "testuser@example.com",
+            "email": "testuser@example.com",
+            "user_id": 1,
+            "org_id": 1,
+            "role": "owner",
+        }
 
     def _fake_ns_service():
         return mock_ns

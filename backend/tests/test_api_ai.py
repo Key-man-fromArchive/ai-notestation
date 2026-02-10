@@ -39,7 +39,12 @@ def _get_valid_token() -> str:
     """Create a valid JWT access token for test authentication."""
     global _VALID_TOKEN  # noqa: PLW0603
     if _VALID_TOKEN is None:
-        _VALID_TOKEN = create_access_token(data={"sub": "testuser"})
+        _VALID_TOKEN = create_access_token(data={
+            "sub": "testuser@example.com",
+            "user_id": 1,
+            "org_id": 1,
+            "role": "owner",
+        })
     return _VALID_TOKEN
 
 

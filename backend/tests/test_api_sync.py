@@ -37,11 +37,19 @@ def _get_app():
     return app
 
 
-def _create_test_token(username: str = "testuser") -> str:
-    """Create a valid JWT access token for testing."""
+def _create_test_token(username: str = "testuser@example.com") -> str:
+    """Create a valid JWT access token for testing.
+
+    Generates a unified member JWT with user_id, org_id, and role claims.
+    """
     from app.services.auth_service import create_access_token
 
-    return create_access_token(data={"sub": username})
+    return create_access_token(data={
+        "sub": username,
+        "user_id": 1,
+        "org_id": 1,
+        "role": "owner",
+    })
 
 
 # ---------------------------------------------------------------------------
