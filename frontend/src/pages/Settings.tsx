@@ -211,6 +211,10 @@ function NasConnectionSection({
   onCancel,
   onEditValueChange,
 }: NasConnectionSectionProps) {
+  const nasUrl = (data?.settings['nas_url'] || '').replace(/^"|"$/g, '').trim()
+  const nasUser = (data?.settings['nas_user'] || '').trim()
+  const isConfigured = Boolean(nasUrl && nasUser)
+
   return (
     <div className="p-4 border border-input rounded-md">
       <h3 className="text-lg font-semibold mb-3">Synology NAS 연결</h3>
@@ -219,17 +223,19 @@ function NasConnectionSection({
         <div
           className={cn(
             'h-3 w-3 rounded-full',
-            syncStatus === 'idle' && 'bg-green-500',
-            syncStatus === 'syncing' && 'bg-yellow-500 animate-pulse',
-            syncStatus === 'completed' && 'bg-green-500',
+            !isConfigured && 'bg-gray-400',
+            isConfigured && syncStatus === 'idle' && 'bg-green-500',
+            isConfigured && syncStatus === 'syncing' && 'bg-yellow-500 animate-pulse',
+            isConfigured && syncStatus === 'completed' && 'bg-green-500',
             syncStatus === 'error' && 'bg-red-500',
           )}
           aria-hidden="true"
         />
         <span className="text-sm font-medium">
-          {syncStatus === 'idle' && '연결됨'}
-          {syncStatus === 'syncing' && '동기화 중...'}
-          {syncStatus === 'completed' && '동기화 완료'}
+          {!isConfigured && syncStatus !== 'error' && '미설정'}
+          {isConfigured && syncStatus === 'idle' && '연결됨'}
+          {isConfigured && syncStatus === 'syncing' && '동기화 중...'}
+          {isConfigured && syncStatus === 'completed' && '동기화 완료'}
           {syncStatus === 'error' && 'NAS 연결에 실패했습니다'}
         </span>
         {lastSync && (
