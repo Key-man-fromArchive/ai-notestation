@@ -20,9 +20,8 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
-from uuid import uuid4
-
 from pathlib import Path
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel
@@ -32,6 +31,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.database import get_db
 from app.models import Note, NoteAttachment, NoteImage
+from app.services.activity_log import get_trigger_name, log_activity
 from app.services.auth_service import get_current_user
 from app.synology_gateway.client import SynologyApiError, SynologyClient
 from app.synology_gateway.notestation import NoteStationService
@@ -442,6 +442,12 @@ async def create_note(
     db.add(note)
     await db.flush()
 
+    await log_activity(
+        "note", "completed",
+        message=f"노트 생성: {payload.title}",
+        triggered_by=get_trigger_name(current_user),
+    )
+
     return NoteDetailResponse(
         note_id=note.synology_note_id,
         title=note.title,
@@ -484,6 +490,12 @@ async def update_note(
         note.tags = payload.tags
 
     note.source_updated_at = datetime.now(UTC)
+
+    await log_activity(
+        "note", "completed",
+        message=f"노트 수정: {note.title}",
+        triggered_by=get_trigger_name(current_user),
+    )
 
     return NoteDetailResponse(
         note_id=note.synology_note_id,
@@ -549,6 +561,13 @@ async def add_attachment(
     db.add(attachment)
     await db.flush()
 
+    await log_activity(
+        "note", "completed",
+        message=f"첨부 파일 추가: {file.filename}",
+        details={"note_id": note_id},
+        triggered_by=get_trigger_name(current_user),
+    )
+
     return AttachmentItem(
         file_id=attachment.file_id,
         name=attachment.name,
@@ -587,6 +606,13 @@ async def delete_attachment(
     file_path = Path(settings.UPLOADS_PATH) / file_id
     if file_path.exists():
         file_path.unlink(missing_ok=True)
+
+    await log_activity(
+        "note", "completed",
+        message="첨부 파일 삭제",
+        details={"note_id": note_id, "file_id": file_id},
+        triggered_by=get_trigger_name(current_user),
+    )
 
 
 @router.get("/notebooks", response_model=NotebooksListResponse)

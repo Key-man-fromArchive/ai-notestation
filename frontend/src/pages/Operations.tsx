@@ -15,7 +15,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-type FilterType = 'all' | 'sync' | 'embedding' | 'image_sync'
+type FilterType = 'all' | 'sync' | 'embedding' | 'image_sync' | 'nsx' | 'auth' | 'member' | 'oauth' | 'note' | 'notebook' | 'access' | 'share_link' | 'settings' | 'admin'
 
 export default function Operations() {
   const [filter, setFilter] = useState<FilterType>('all')
@@ -187,24 +187,40 @@ export default function Operations() {
       <div>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold">작업 로그</h2>
-          <div className="flex gap-1">
-            {(['all', 'sync', 'embedding', 'image_sync'] as const).map((type) => (
-              <button
-                key={type}
-                onClick={() => setFilter(type)}
-                className={cn(
-                  'px-3 py-1.5 rounded-md text-xs transition-colors',
-                  filter === type
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted text-muted-foreground hover:bg-muted/80',
-                )}
-              >
-                {type === 'all' && '전체'}
-                {type === 'sync' && '동기화'}
-                {type === 'embedding' && '임베딩'}
-                {type === 'image_sync' && '이미지'}
-              </button>
-            ))}
+          <div className="flex flex-wrap gap-x-4 gap-y-2">
+            {/* 전체 */}
+            <div className="flex gap-1">
+              <FilterButton label="전체" value="all" current={filter} onClick={setFilter} />
+            </div>
+            {/* 시스템 */}
+            <div className="flex gap-1 items-center">
+              <span className="text-xs text-muted-foreground mr-1">시스템</span>
+              <FilterButton label="동기화" value="sync" current={filter} onClick={setFilter} />
+              <FilterButton label="임베딩" value="embedding" current={filter} onClick={setFilter} />
+              <FilterButton label="이미지" value="image_sync" current={filter} onClick={setFilter} />
+              <FilterButton label="NSX" value="nsx" current={filter} onClick={setFilter} />
+            </div>
+            {/* 사용자 */}
+            <div className="flex gap-1 items-center">
+              <span className="text-xs text-muted-foreground mr-1">사용자</span>
+              <FilterButton label="인증" value="auth" current={filter} onClick={setFilter} />
+              <FilterButton label="멤버" value="member" current={filter} onClick={setFilter} />
+              <FilterButton label="OAuth" value="oauth" current={filter} onClick={setFilter} />
+            </div>
+            {/* 콘텐츠 */}
+            <div className="flex gap-1 items-center">
+              <span className="text-xs text-muted-foreground mr-1">콘텐츠</span>
+              <FilterButton label="노트" value="note" current={filter} onClick={setFilter} />
+              <FilterButton label="노트북" value="notebook" current={filter} onClick={setFilter} />
+              <FilterButton label="권한" value="access" current={filter} onClick={setFilter} />
+              <FilterButton label="공유링크" value="share_link" current={filter} onClick={setFilter} />
+            </div>
+            {/* 관리 */}
+            <div className="flex gap-1 items-center">
+              <span className="text-xs text-muted-foreground mr-1">관리</span>
+              <FilterButton label="설정" value="settings" current={filter} onClick={setFilter} />
+              <FilterButton label="관리" value="admin" current={filter} onClick={setFilter} />
+            </div>
           </div>
         </div>
 
@@ -229,16 +245,7 @@ export default function Operations() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className={cn(
-                      'text-xs px-1.5 py-0.5 rounded',
-                      item.operation === 'sync' && 'bg-blue-100 text-blue-700',
-                      item.operation === 'embedding' && 'bg-purple-100 text-purple-700',
-                      item.operation === 'image_sync' && 'bg-amber-100 text-amber-700',
-                    )}>
-                      {item.operation === 'sync' && '동기화'}
-                      {item.operation === 'embedding' && '임베딩'}
-                      {item.operation === 'image_sync' && '이미지'}
-                    </span>
+                    <OperationBadge operation={item.operation} />
                     {item.message && (
                       <span className="text-sm text-foreground truncate">{item.message}</span>
                     )}
@@ -248,8 +255,10 @@ export default function Operations() {
                     {item.triggered_by && <span>by {item.triggered_by}</span>}
                     {item.details && item.status === 'completed' && (
                       <span className="text-foreground/60">
-                        {item.operation === 'sync' && `+${(item.details as Record<string, number>).added} / ~${(item.details as Record<string, number>).updated} / -${(item.details as Record<string, number>).deleted}`}
-                        {item.operation === 'embedding' && `${(item.details as Record<string, number>).indexed}개 인덱싱`}
+                        {item.operation === 'sync' && `+${(item.details as Record<string, number>).added ?? 0} / ~${(item.details as Record<string, number>).updated ?? 0} / -${(item.details as Record<string, number>).deleted ?? 0}`}
+                        {item.operation === 'embedding' && `${(item.details as Record<string, number>).indexed ?? 0}개 인덱싱`}
+                        {item.operation === 'nsx' && `${(item.details as Record<string, number>).notes ?? 0}개 노트`}
+                        {item.operation === 'image_sync' && `${(item.details as Record<string, number>).images ?? 0}개 이미지`}
                       </span>
                     )}
                   </div>
@@ -260,6 +269,47 @@ export default function Operations() {
         )}
       </div>
     </div>
+  )
+}
+
+function FilterButton({ label, value, current, onClick }: { label: string; value: FilterType; current: FilterType; onClick: (v: FilterType) => void }) {
+  return (
+    <button
+      onClick={() => onClick(value)}
+      className={cn(
+        'px-3 py-1.5 rounded-md text-xs transition-colors',
+        current === value
+          ? 'bg-primary text-primary-foreground'
+          : 'bg-muted text-muted-foreground hover:bg-muted/80',
+      )}
+    >
+      {label}
+    </button>
+  )
+}
+
+const OPERATION_LABELS: Record<string, { label: string; color: string }> = {
+  sync: { label: '동기화', color: 'bg-blue-100 text-blue-700' },
+  embedding: { label: '임베딩', color: 'bg-purple-100 text-purple-700' },
+  image_sync: { label: '이미지', color: 'bg-amber-100 text-amber-700' },
+  nsx: { label: 'NSX', color: 'bg-indigo-100 text-indigo-700' },
+  auth: { label: '인증', color: 'bg-green-100 text-green-700' },
+  member: { label: '멤버', color: 'bg-teal-100 text-teal-700' },
+  oauth: { label: 'OAuth', color: 'bg-cyan-100 text-cyan-700' },
+  note: { label: '노트', color: 'bg-pink-100 text-pink-700' },
+  notebook: { label: '노트북', color: 'bg-rose-100 text-rose-700' },
+  access: { label: '권한', color: 'bg-violet-100 text-violet-700' },
+  share_link: { label: '공유링크', color: 'bg-fuchsia-100 text-fuchsia-700' },
+  settings: { label: '설정', color: 'bg-slate-100 text-slate-700' },
+  admin: { label: '관리', color: 'bg-red-100 text-red-700' },
+}
+
+function OperationBadge({ operation }: { operation: string }) {
+  const info = OPERATION_LABELS[operation] ?? { label: operation, color: 'bg-gray-100 text-gray-700' }
+  return (
+    <span className={cn('text-xs px-1.5 py-0.5 rounded', info.color)}>
+      {info.label}
+    </span>
   )
 }
 

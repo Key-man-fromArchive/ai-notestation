@@ -27,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.database import get_db
 from app.models import Setting
+from app.services.activity_log import get_trigger_name, log_activity
 from app.services.auth_service import get_current_user
 
 logger = logging.getLogger(__name__)
@@ -263,6 +264,15 @@ async def update_setting(
     await _save_to_db(db, key, body.value)
     logger.info("Setting '%s' updated by user", key)
 
+    # Mask API key values in log details
+    log_value = _mask_value(key, body.value) if key.endswith("_api_key") or key == "nas_password" else body.value
+    await log_activity(
+        "settings", "completed",
+        message=f"설정 변경: {key}",
+        details={"key": key, "value": log_value},
+        triggered_by=get_trigger_name(_current_user),
+    )
+
     if key.endswith("_api_key") and key != "nas_password":
         try:
             from app.api.ai import reset_ai_router
@@ -332,15 +342,30 @@ async def test_nas_connection(
     )
     try:
         await client.login()
+        await log_activity(
+            "auth", "completed",
+            message="NAS 연결 테스트 성공",
+            triggered_by=get_trigger_name(_current_user),
+        )
         return NasTestResponse(success=True, message="NAS에 성공적으로 연결되었습니다.")
     except Synology2FARequired:
         return NasTestResponse(success=True, message="NAS 연결 성공 (2FA 계정)")
     except SynologyAuthError:
+        await log_activity(
+            "auth", "error",
+            message="NAS 연결 테스트 실패: 인증 오류",
+            triggered_by=get_trigger_name(_current_user),
+        )
         return NasTestResponse(
             success=False,
             message="NAS 인증에 실패했습니다. 사용자 이름과 비밀번호를 확인하세요.",
         )
     except Exception as exc:
+        await log_activity(
+            "auth", "error",
+            message=f"NAS 연결 테스트 실패: {exc}",
+            triggered_by=get_trigger_name(_current_user),
+        )
         return NasTestResponse(
             success=False,
             message=f"NAS 연결에 실패했습니다: {exc}",

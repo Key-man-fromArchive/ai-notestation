@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
 
 from app.config import get_settings
+from app.services.activity_log import get_trigger_name, log_activity
 from app.services.auth_service import get_current_user
 
 router = APIRouter(tags=["files"])
@@ -48,6 +49,13 @@ async def upload_file(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"File upload failed: {exc}",
         ) from exc
+
+    await log_activity(
+        "note", "completed",
+        message=f"파일 업로드: {file.filename}",
+        details={"file_id": file_id},
+        triggered_by=get_trigger_name(current_user),
+    )
 
     return {
         "id": file_id,

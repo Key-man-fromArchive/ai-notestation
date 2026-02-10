@@ -26,6 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import MemberRole
 from app.database import get_db
+from app.services.activity_log import get_trigger_name, log_activity
 from app.services.auth_service import (
     create_access_token,
     create_refresh_token,
@@ -233,6 +234,13 @@ async def signup(
 
     logger.info("User signed up: email=%s, org=%s", user.email, org.slug)
 
+    await log_activity(
+        "member", "completed",
+        message=f"회원 가입: {request.email}",
+        details={"org": request.org_slug},
+        triggered_by=request.email,
+    )
+
     return TokenResponse(
         access_token=access_token,
         refresh_token=refresh_token,
@@ -285,6 +293,13 @@ async def invite_member(
         request.email,
         current_user["org_id"],
         current_user["email"],
+    )
+
+    await log_activity(
+        "member", "completed",
+        message=f"멤버 초대: {request.email}",
+        details={"role": request.role},
+        triggered_by=get_trigger_name(current_user),
     )
 
     if not membership.invite_expires_at:
@@ -346,6 +361,8 @@ async def accept_invitation(
     refresh_token = create_refresh_token(data=token_data)
 
     logger.info("Invite accepted: email=%s, org=%s", user.email, org.slug)
+
+    await log_activity("member", "completed", message=f"초대 수락: {user.email}", triggered_by=user.email)
 
     return TokenResponse(
         access_token=access_token,
@@ -448,6 +465,13 @@ async def update_member_role(
         old_role,
         request.role,
         current_user["email"],
+    )
+
+    await log_activity(
+        "member", "completed",
+        message=f"역할 변경: {old_role} → {request.role}",
+        details={"member_id": member_id, "user_email": user.email if user else ""},
+        triggered_by=get_trigger_name(current_user),
     )
 
     return MemberResponse(

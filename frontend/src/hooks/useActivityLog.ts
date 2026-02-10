@@ -3,7 +3,7 @@ import { apiClient } from '@/lib/api'
 
 interface ActivityLogItem {
   id: number
-  operation: 'sync' | 'embedding' | 'image_sync'
+  operation: 'sync' | 'embedding' | 'image_sync' | 'nsx' | 'auth' | 'member' | 'oauth' | 'note' | 'notebook' | 'access' | 'share_link' | 'settings' | 'admin'
   status: 'started' | 'completed' | 'error'
   message: string | null
   details: Record<string, unknown> | null

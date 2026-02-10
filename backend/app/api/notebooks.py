@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.constants import NotePermission
 from app.database import get_db
 from app.models import Note, Notebook, User
+from app.services.activity_log import log_activity
 from app.services.auth_service import get_current_user
 from app.services.notebook_access_control import (
     can_manage_notebook_access,
@@ -116,6 +117,11 @@ async def create_notebook(
     )
 
     await db.commit()
+    await log_activity(
+        "notebook", "completed",
+        message=f"노트북 생성: {notebook.name}",
+        triggered_by=current_user.email,
+    )
     await db.refresh(new_notebook)
 
     stmt = select(func.count(Note.id)).where(Note.notebook_id == new_notebook.id)
@@ -191,6 +197,11 @@ async def update_notebook(
         existing_notebook.description = notebook.description
 
     await db.commit()
+    await log_activity(
+        "notebook", "completed",
+        message=f"노트북 수정: {existing_notebook.name}",
+        triggered_by=current_user.email,
+    )
     await db.refresh(existing_notebook)
 
     count_stmt = select(func.count(Note.id)).where(Note.notebook_id == notebook_id)
@@ -237,6 +248,11 @@ async def delete_notebook(
 
     await db.delete(notebook)
     await db.commit()
+    await log_activity(
+        "notebook", "completed",
+        message=f"노트북 삭제: {notebook.name}",
+        triggered_by=current_user.email,
+    )
 
     return {"success": True}
 
@@ -338,6 +354,13 @@ async def grant_notebook_access_endpoint(
     elif new_access.permission == NotePermission.ADMIN:
         permission_str = "admin"
 
+    await log_activity(
+        "access", "completed",
+        message=f"노트북 접근 권한 부여: {request.email} ({request.permission})",
+        details={"notebook_id": notebook_id},
+        triggered_by=current_user.email,
+    )
+
     return AccessResponse(
         id=new_access.id,
         user_id=new_access.user_id,
@@ -402,6 +425,13 @@ async def update_notebook_access(
         if user:
             user_email = user.email
 
+    await log_activity(
+        "access", "completed",
+        message=f"노트북 접근 권한 변경: {request.permission}",
+        details={"notebook_id": notebook_id, "access_id": access_id},
+        triggered_by=current_user.email,
+    )
+
     return AccessResponse(
         id=updated_access.id,
         user_id=updated_access.user_id,
@@ -438,5 +468,11 @@ async def revoke_notebook_access_endpoint(
             raise HTTPException(status_code=400, detail="Cannot remove the last owner")
 
     await revoke_notebook_access(db, access_id)
+    await log_activity(
+        "access", "completed",
+        message="노트북 접근 권한 회수",
+        details={"notebook_id": notebook_id, "access_id": access_id},
+        triggered_by=current_user.email,
+    )
 
     return {"success": True}

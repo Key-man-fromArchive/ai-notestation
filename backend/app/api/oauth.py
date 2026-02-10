@@ -18,6 +18,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
+from app.services.activity_log import get_trigger_name, log_activity
 from app.services.auth_service import get_current_user
 from app.services.oauth_service import SUPPORTED_PROVIDERS, OAuthError, OAuthService
 
@@ -164,6 +165,12 @@ async def handle_callback(
             state=body.state,
             db=db,
         )
+        await log_activity(
+            "oauth", "completed",
+            message=f"OAuth 연결: {provider}",
+            details={"provider": provider, "email": result.get("email")},
+            triggered_by=get_trigger_name(current_user),
+        )
         return CallbackResponse(**result)
     except OAuthError as exc:
         raise HTTPException(
@@ -204,6 +211,12 @@ async def disconnect(
         username=current_user["username"],
         provider=provider,
         db=db,
+    )
+    await log_activity(
+        "oauth", "completed",
+        message=f"OAuth 연결 해제: {provider}",
+        details={"provider": provider},
+        triggered_by=get_trigger_name(current_user),
     )
     return DisconnectResponse(**result)
 

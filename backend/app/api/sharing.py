@@ -16,6 +16,7 @@ from app.services.access_control import (
     grant_note_access,
     revoke_note_access,
 )
+from app.services.activity_log import get_trigger_name, log_activity
 from app.services.auth_service import get_current_user
 from app.services.user_service import get_user_by_email, get_user_by_id
 
@@ -132,6 +133,13 @@ async def grant_note_sharing(
         current_user["email"],
     )
 
+    await log_activity(
+        "access", "completed",
+        message=f"노트 공유 권한 부여: {request.email} ({request.permission})",
+        details={"note_id": note_id},
+        triggered_by=get_trigger_name(current_user),
+    )
+
     return AccessResponse(
         id=access.id,
         note_id=access.note_id,
@@ -183,6 +191,13 @@ async def revoke_note_sharing(
         current_user["email"],
     )
 
+    await log_activity(
+        "access", "completed",
+        message="노트 공유 권한 회수",
+        details={"note_id": note_id, "access_id": access_id},
+        triggered_by=get_trigger_name(current_user),
+    )
+
     return MessageResponse(message="Access revoked successfully")
 
 
@@ -216,6 +231,13 @@ async def grant_org_wide_access(
         current_user["org_id"],
         permission,
         current_user["email"],
+    )
+
+    await log_activity(
+        "access", "completed",
+        message="노트 조직 전체 공유",
+        details={"note_id": note_id, "permission": permission},
+        triggered_by=get_trigger_name(current_user),
     )
 
     return AccessResponse(

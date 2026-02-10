@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.constants import MemberRole
 from app.database import get_db
 from app.models import Organization
+from app.services.activity_log import get_trigger_name, log_activity
 from app.services.auth_service import (
     create_access_token,
     create_refresh_token,
@@ -103,6 +104,12 @@ async def login(
     """Authenticate user with email/password. Returns JWT with org context."""
     user = await get_user_by_email(db, request.email)
     if not user or not user.is_active:
+        await log_activity(
+            "auth", "error",
+            message="로그인 실패: 비활성 계정",
+            details={"email": request.email},
+            triggered_by=request.email,
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials",
@@ -111,6 +118,12 @@ async def login(
 
     if not verify_password(request.password, user.password_hash):
         logger.warning("Login failed for email=%s", request.email)
+        await log_activity(
+            "auth", "error",
+            message="로그인 실패: 잘못된 자격 증명",
+            details={"email": request.email},
+            triggered_by=request.email,
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials",
@@ -121,6 +134,12 @@ async def login(
     accepted = [m for m in memberships if m.accepted_at]
 
     if not accepted:
+        await log_activity(
+            "auth", "error",
+            message="로그인 실패: 조직 멤버십 없음",
+            details={"email": request.email},
+            triggered_by=request.email,
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="No active organization membership",
@@ -143,6 +162,7 @@ async def login(
     refresh_token = create_refresh_token(data=token_data)
 
     logger.info("User logged in: email=%s, org=%s", user.email, org.slug)
+    await log_activity("auth", "completed", message=f"로그인 성공: {user.email}", triggered_by=user.email)
 
     return TokenResponse(
         access_token=access_token,
@@ -256,6 +276,11 @@ async def test_nas_connection(
     try:
         await client.login(otp_code=request.otp_code)
         await client.close()
+        await log_activity(
+            "auth", "completed",
+            message="NAS 연결 테스트 성공",
+            triggered_by=get_trigger_name(current_user),
+        )
         return NasTestResponse(success=True, message="NAS connection successful")
     except Synology2FARequired:
         await client.close()
@@ -269,6 +294,11 @@ async def test_nas_connection(
         msg = "Invalid credentials"
         if e.code == 404:
             msg = "Invalid OTP code"
+        await log_activity(
+            "auth", "error",
+            message=f"NAS 연결 테스트 실패: {msg}",
+            triggered_by=get_trigger_name(current_user),
+        )
         return NasTestResponse(success=False, message=msg)
     except Exception as e:
         await client.close()

@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models import Note, Notebook, ShareLink, User
+from app.services.activity_log import log_activity
 from app.services.auth_service import get_current_user
 from app.services.notebook_access_control import can_manage_notebook_access
 
@@ -124,6 +125,13 @@ async def create_notebook_share_link(
     await db.commit()
     await db.refresh(share_link)
 
+    await log_activity(
+        "share_link", "completed",
+        message="노트북 공유 링크 생성",
+        details={"notebook_id": notebook_id, "link_type": data.link_type},
+        triggered_by=current_user.email,
+    )
+
     return _share_link_to_response(share_link)
 
 
@@ -185,6 +193,13 @@ async def revoke_share_link(
     link.is_active = False
     await db.commit()
 
+    await log_activity(
+        "share_link", "completed",
+        message="공유 링크 삭제",
+        details={"notebook_id": notebook_id, "link_id": link_id},
+        triggered_by=current_user.email,
+    )
+
 
 note_router = APIRouter(prefix="/notes", tags=["share_links"])
 
@@ -237,5 +252,12 @@ async def create_note_share_link(
     db.add(share_link)
     await db.commit()
     await db.refresh(share_link)
+
+    await log_activity(
+        "share_link", "completed",
+        message="노트 공유 링크 생성",
+        details={"note_id": note_id, "link_type": data.link_type},
+        triggered_by=current_user.email,
+    )
 
     return _share_link_to_response(share_link)

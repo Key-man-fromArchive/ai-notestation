@@ -36,6 +36,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.database import async_session_factory, get_db
 from app.models import Note, NoteAttachment, NoteImage
+from app.services.activity_log import get_trigger_name, log_activity
 from app.services.auth_service import get_current_user
 from app.services.nsx_parser import NoteRecord, NsxParser
 from app.synology_gateway.notestation import NoteStationService
@@ -108,7 +109,7 @@ class ImageSyncState:
     """Mutable in-memory tracker for image sync progress."""
 
     def __init__(self) -> None:
-        self.status: str = "idle"  # idle | syncing | completed | error
+        self.status: str = "idle"  # idle | syncing | completed | partial | error
         self.is_syncing: bool = False
         self.last_sync_at: str | None = None
         self.total_notes: int = 0
@@ -116,6 +117,7 @@ class ImageSyncState:
         self.images_extracted: int = 0
         self.failed_notes: int = 0
         self.error_message: str | None = None
+        self.remaining_notes: int = 0
 
 
 _image_sync_state = ImageSyncState()
@@ -264,6 +266,11 @@ async def _run_import_background(nsx_path: Path, state: ImportState) -> None:
 
         state.status = "completed"
         state.last_import_at = datetime.now(UTC).isoformat()
+        await log_activity(
+            "nsx", "completed",
+            message=f"NSX 가져오기 완료: {result.notes_processed}개 노트, {result.images_extracted}개 이미지",
+            details={"notes": result.notes_processed, "images": result.images_extracted, "errors": len(result.errors)},
+        )
 
         logger.info(
             "NSX import completed: %d notes, %d images, %d errors",
@@ -275,6 +282,10 @@ async def _run_import_background(nsx_path: Path, state: ImportState) -> None:
     except Exception as exc:
         state.status = "error"
         state.error_message = str(exc)
+        await log_activity(
+            "nsx", "error",
+            message=f"NSX 가져오기 실패: {exc}",
+        )
         logger.exception("NSX import failed: %s", exc)
 
     finally:
@@ -388,6 +399,11 @@ async def import_nsx(
 
     # Start background import
     background_tasks.add_task(_run_import_background, nsx_path, _import_state)
+    await log_activity(
+        "nsx", "started",
+        message=f"NSX 가져오기 시작: {file.filename}",
+        triggered_by=get_trigger_name(current_user),
+    )
 
     return NsxImportResponse(
         status="importing",
@@ -530,6 +546,13 @@ async def export_nsx(
 
             archive.writestr(note.synology_note_id, json.dumps(note_payload, ensure_ascii=False))
 
+    await log_activity(
+        "nsx", "completed",
+        message=f"NSX 내보내기: {len(notes)}개 노트",
+        details={"note_count": len(notes), "notebook_count": len(notebook_map)},
+        triggered_by=get_trigger_name(current_user),
+    )
+
     return NsxExportResponse(
         filename=export_path.name,
         note_count=len(notes),
@@ -598,6 +621,7 @@ class ImageSyncStatusResponse(BaseModel):
     failed_notes: int = 0
     last_sync_at: str | None = None
     error_message: str | None = None
+    remaining_notes: int = 0
 
 
 class ImageSyncTriggerResponse(BaseModel):
@@ -615,8 +639,9 @@ async def _export_note_images(
     note_id: str,
     output_dir: Path,
 ) -> tuple[int, str | None]:
-    import httpx
     import io
+
+    import httpx
 
     images_extracted = 0
 
@@ -773,6 +798,7 @@ async def _run_image_sync_background(state: ImageSyncState) -> None:
     state.images_extracted = 0
     state.failed_notes = 0
     state.error_message = None
+    state.remaining_notes = 0
 
     try:
         nas = get_nas_config()
@@ -784,6 +810,21 @@ async def _run_image_sync_background(state: ImageSyncState) -> None:
         output_dir.mkdir(parents=True, exist_ok=True)
 
         async with async_session_factory() as db:
+            # Count total notes needing image sync
+            count_result = await db.execute(
+                text("""
+                    SELECT COUNT(DISTINCT n.synology_note_id)
+                    FROM notes n
+                    WHERE n.content_html ~ '<img[^>]*ref="[^"]+"'
+                    AND NOT EXISTS (
+                        SELECT 1 FROM note_images ni
+                        WHERE ni.synology_note_id = n.synology_note_id
+                    )
+                """)
+            )
+            total_needing_sync = count_result.scalar() or 0
+
+            # Fetch batch of 500
             result = await db.execute(
                 text("""
                     SELECT DISTINCT n.synology_note_id
@@ -799,7 +840,7 @@ async def _run_image_sync_background(state: ImageSyncState) -> None:
             note_ids = [row[0] for row in result.fetchall()]
 
         state.total_notes = len(note_ids)
-        logger.info("Starting image sync for %d notes", state.total_notes)
+        logger.info("Starting image sync for %d notes (%d total needing sync)", state.total_notes, total_needing_sync)
 
         if not note_ids:
             state.status = "completed"
@@ -822,19 +863,43 @@ async def _run_image_sync_background(state: ImageSyncState) -> None:
 
         await client.close()
 
-        state.status = "completed"
+        # Check if there are remaining notes after this batch
+        remaining = total_needing_sync - len(note_ids)
+        state.remaining_notes = max(0, remaining)
+
+        if state.remaining_notes > 0:
+            state.status = "partial"
+        else:
+            state.status = "completed"
+
         state.last_sync_at = datetime.now(UTC).isoformat()
+        await log_activity(
+            "image_sync", "completed",
+            message=f"이미지 동기화 완료: {state.images_extracted}개 이미지",
+            details={
+                "processed": state.processed_notes,
+                "images": state.images_extracted,
+                "failed": state.failed_notes,
+                "remaining": state.remaining_notes,
+            },
+        )
         logger.info(
-            "Image sync completed: %d/%d notes, %d images",
+            "Image sync %s: %d/%d notes, %d images, %d remaining",
+            state.status,
             state.processed_notes,
             state.total_notes,
             state.images_extracted,
+            state.remaining_notes,
         )
 
     except Exception as exc:
         logger.exception("Image sync failed: %s", exc)
         state.status = "error"
         state.error_message = str(exc)
+        await log_activity(
+            "image_sync", "error",
+            message=f"이미지 동기화 실패: {exc}",
+        )
     finally:
         state.is_syncing = False
 
@@ -882,6 +947,11 @@ async def sync_images_from_nas(
 
     _image_sync_state.total_notes = total
     background_tasks.add_task(_run_image_sync_background, _image_sync_state)
+    await log_activity(
+        "image_sync", "started",
+        message=f"이미지 동기화 시작: {total}개 노트",
+        triggered_by=get_trigger_name(current_user),
+    )
 
     return ImageSyncTriggerResponse(
         status="syncing",
@@ -903,6 +973,7 @@ async def get_image_sync_status(
         failed_notes=_image_sync_state.failed_notes,
         last_sync_at=_image_sync_state.last_sync_at,
         error_message=_image_sync_state.error_message,
+        remaining_notes=_image_sync_state.remaining_notes,
     )
 
 

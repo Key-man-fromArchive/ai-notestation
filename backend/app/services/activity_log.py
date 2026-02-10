@@ -1,10 +1,16 @@
 """Thin helper for writing activity log entries."""
 
 import logging
-from app.models import ActivityLog
+
 from app.database import async_session_factory
+from app.models import ActivityLog
 
 logger = logging.getLogger(__name__)
+
+
+def get_trigger_name(user: dict) -> str:
+    """Extract display name from current_user dict for activity log."""
+    return user.get("username") or user.get("email") or user.get("sub") or "unknown"
 
 
 async def log_activity(

@@ -15,6 +15,7 @@ from app.api.settings import _load_from_db as load_settings_from_db
 from app.config import get_settings
 from app.constants import MemberRole
 from app.database import get_db
+from app.services.activity_log import get_trigger_name, log_activity
 from app.services.auth_service import get_current_user
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -304,6 +305,12 @@ async def update_user(
         )
 
     await db.commit()
+    await log_activity(
+        "admin", "completed",
+        message=f"사용자 상태 변경: user_id={user_id}",
+        details={"user_id": user_id, "is_active": body.is_active},
+        triggered_by=get_trigger_name(admin),
+    )
     return {"status": "ok", "user_id": user_id}
 
 
