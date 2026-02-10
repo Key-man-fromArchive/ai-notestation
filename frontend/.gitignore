@@ -8,6 +8,8 @@ dist-ssr
 
 # Testing
 coverage
+e2e/.auth
+e2e/test-results
 
 # Environment
 .env
