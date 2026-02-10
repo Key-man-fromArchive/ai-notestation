@@ -11,6 +11,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai_router.router import AIRouter
+from app.api.settings import _load_from_db as load_settings_from_db
 from app.config import get_settings
 from app.constants import MemberRole
 from app.database import get_db
@@ -314,17 +315,12 @@ async def get_nas_status(
     db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> dict:
     """NAS connection status and configuration."""
-    result = await db.execute(
-        text("SELECT key, value FROM settings WHERE key = ANY(:keys)"),
-        {"keys": ["nas_url", "nas_user", "nas_password"]},
-    )
-    settings_map = {row.key: row.value for row in result.fetchall()}
+    settings_map = await load_settings_from_db(db)
 
-    nas_url = settings_map.get("nas_url", "") or ""
-    if isinstance(nas_url, str):
-        nas_url = nas_url.strip('"')
+    nas_url = (settings_map.get("nas_url", "") or "").strip().strip('"')
+    nas_user = (settings_map.get("nas_user", "") or "").strip()
 
-    configured = bool(nas_url and settings_map.get("nas_user"))
+    configured = bool(nas_url and nas_user)
 
     sync_result = await db.execute(
         text("SELECT MAX(synced_at) AS last_sync FROM notes WHERE synced_at IS NOT NULL")

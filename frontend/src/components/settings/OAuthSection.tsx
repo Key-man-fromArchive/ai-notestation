@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { apiClient } from '@/lib/api'
 import { useOAuth } from '@/hooks/useOAuth'
 import { cn } from '@/lib/utils'
 import {
@@ -538,6 +540,13 @@ export function OAuthSection({ provider, label }: OAuthSectionProps) {
   )
 }
 
+const providerToSettingsKey: Record<string, string> = {
+  openai: 'openai_api_key',
+  anthropic: 'anthropic_api_key',
+  google: 'google_api_key',
+  zhipuai: 'zhipuai_api_key',
+}
+
 function ApiKeySection({
   provider,
   label,
@@ -548,6 +557,7 @@ function ApiKeySection({
   const [apiKey, setApiKey] = useState('')
   const [saving, setSaving] = useState(false)
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle')
+  const queryClient = useQueryClient()
 
   const handleSave = async () => {
     if (!apiKey.trim()) return
@@ -556,18 +566,11 @@ function ApiKeySection({
     setStatus('idle')
 
     try {
-      const response = await fetch(`/api/settings/api-keys/${provider}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ api_key: apiKey.trim() }),
-      })
-
-      if (response.ok) {
-        setStatus('success')
-        setApiKey('')
-      } else {
-        setStatus('error')
-      }
+      const settingsKey = providerToSettingsKey[provider] || `${provider}_api_key`
+      await apiClient.put(`/settings/${settingsKey}`, { value: apiKey.trim() })
+      setStatus('success')
+      setApiKey('')
+      queryClient.invalidateQueries({ queryKey: ['settings'] })
     } catch {
       setStatus('error')
     } finally {
