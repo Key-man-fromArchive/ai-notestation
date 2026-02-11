@@ -89,13 +89,16 @@ class NoteIndexer:
         """
         note = await self._get_note(note_id)
 
-        # Skip notes with no meaningful text content
-        if not note.content_text or not note.content_text.strip():
-            logger.debug("Note %d has empty content_text, skipping embedding", note_id)
+        # Use content_text, fall back to title for notes with no body
+        text = (note.content_text or "").strip()
+        if not text:
+            text = (note.title or "").strip()
+        if not text:
+            logger.debug("Note %d has no content or title, skipping embedding", note_id)
             return 0
 
         # Generate embeddings for each text chunk
-        chunks = await self._embedding_service.embed_chunks(note.content_text)
+        chunks = await self._embedding_service.embed_chunks(text)
 
         # Store each chunk as a NoteEmbedding record
         for chunk_index, (chunk_text, embedding) in enumerate(chunks):
