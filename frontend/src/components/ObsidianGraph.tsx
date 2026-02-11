@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, useCallback } from 'react'
+import { useRef, useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import ForceGraph2D, {
   type ForceGraphMethods,
@@ -55,7 +55,7 @@ const COLOR_PALETTE = [
 ]
 let colorIndex = 0
 
-// Module-level cache: persists across route navigations (component unmount/remount)
+// Module-level cache: persists across client-side route navigations
 const positionCache = new Map<number, { x: number; y: number }>()
 
 function getNotebookColor(notebook: string | null): string {
@@ -91,6 +91,9 @@ export function ObsidianGraph({
   const [searchQuery, setSearchQuery] = useState('')
   const [hoveredNode, setHoveredNode] = useState<GraphNodeObject | null>(null)
 
+  // Track the live node objects that d3-force mutates with x,y positions
+  const liveNodesRef = useRef<GraphNodeObject[]>([])
+
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
@@ -109,21 +112,20 @@ export function ObsidianGraph({
     return () => resizeObserver.disconnect()
   }, [])
 
+  // Check if we have cached positions for the current data
+  const hasCache = positionCache.size > 0
+
   useEffect(() => {
-    if (data && data.nodes.length > 0 && graphRef.current) {
+    if (data && data.nodes.length > 0 && graphRef.current && !hasCache) {
       setTimeout(() => {
         graphRef.current?.zoomToFit(400, 50)
       }, 500)
     }
-  }, [data?.nodes.length])
+  }, [data?.nodes.length, hasCache])
 
-  const savePositions = useCallback(() => {
-    const fg = graphRef.current
-    if (!fg) return
-    // Read positions from the library's internal graph state
-    const internalNodes = (fg as any).graphData?.()?.nodes as GraphNodeObject[] | undefined
-    if (!internalNodes) return
-    for (const node of internalNodes) {
+  // Auto-save all node positions when d3-force simulation finishes
+  const handleEngineStop = useCallback(() => {
+    for (const node of liveNodesRef.current) {
       if (node.x != null && node.y != null) {
         positionCache.set(node.id, { x: node.x, y: node.y })
       }
@@ -132,59 +134,76 @@ export function ObsidianGraph({
 
   const handleNodeClick = useCallback(
     (node: GraphNodeObject) => {
-      savePositions()
+      // Also save positions on click (simulation may still be running)
+      for (const n of liveNodesRef.current) {
+        if (n.x != null && n.y != null) {
+          positionCache.set(n.id, { x: n.x, y: n.y })
+        }
+      }
       navigate(`/notes/${node.note_key}`)
     },
-    [navigate, savePositions]
+    [navigate]
   )
 
   const handleZoomIn = () => graphRef.current?.zoom(1.5, 300)
   const handleZoomOut = () => graphRef.current?.zoom(0.67, 300)
   const handleFit = () => graphRef.current?.zoomToFit(400, 50)
 
-  const filteredNodes = data?.nodes.filter(node =>
-    searchQuery
-      ? node.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        node.notebook?.toLowerCase().includes(searchQuery.toLowerCase())
-      : true
-  )
+  // Memoize filtered data so graphData useMemo doesn't re-run on hover/resize re-renders
+  const filteredNodes = useMemo(() => {
+    if (!data?.nodes) return []
+    if (!searchQuery) return data.nodes
+    const q = searchQuery.toLowerCase()
+    return data.nodes.filter(node =>
+      node.label.toLowerCase().includes(q) ||
+      node.notebook?.toLowerCase().includes(q)
+    )
+  }, [data?.nodes, searchQuery])
 
-  const filteredNodeIds = new Set(filteredNodes?.map(n => n.id))
-  const filteredLinks = data?.links.filter(link => {
-    const sourceId = typeof link.source === 'number' ? link.source : link.source
-    const targetId = typeof link.target === 'number' ? link.target : link.target
-    return filteredNodeIds.has(sourceId as number) && filteredNodeIds.has(targetId as number)
-  })
+  const filteredNodeIds = useMemo(() => new Set(filteredNodes.map(n => n.id)), [filteredNodes])
 
-  // Restore cached positions so the layout doesn't reset after navigation
-  const hasCache = positionCache.size > 0
-  const restoredNodes = (filteredNodes ?? []).map(node => {
-    const cached = positionCache.get(node.id)
-    if (cached) {
-      return { ...node, x: cached.x, y: cached.y, fx: cached.x, fy: cached.y }
+  const filteredLinks = useMemo(() => {
+    if (!data?.links) return []
+    return data.links.filter(link => {
+      const sourceId = typeof link.source === 'number' ? link.source : link.source
+      const targetId = typeof link.target === 'number' ? link.target : link.target
+      return filteredNodeIds.has(sourceId as number) && filteredNodeIds.has(targetId as number)
+    })
+  }, [data?.links, filteredNodeIds])
+
+  // Build graphData: restore cached positions if available
+  // useMemo ensures stable references so ForceGraph2D doesn't restart simulation on re-renders
+  const graphData = useMemo(() => {
+    const nodes = filteredNodes.map(node => {
+      const cached = positionCache.get(node.id)
+      if (cached) {
+        return { ...node, x: cached.x, y: cached.y, fx: cached.x, fy: cached.y }
+      }
+      return { ...node }
+    }) as GraphNodeObject[]
+
+    // Store reference so we can read d3-mutated x,y positions later
+    liveNodesRef.current = nodes
+
+    return {
+      nodes,
+      links: filteredLinks,
     }
-    return node
-  })
+  }, [filteredNodes, filteredLinks])
 
-  const graphData = {
-    nodes: restoredNodes,
-    links: filteredLinks ?? [],
-  }
-
-  // After restoring, unpin nodes so dragging still works
-  const hasFrozen = useRef(false)
+  // After restoring cached positions, unpin nodes so dragging works
   useEffect(() => {
-    if (hasCache && !hasFrozen.current && graphRef.current) {
-      hasFrozen.current = true
-      // Unpin after a brief freeze so positions stick
-      setTimeout(() => {
-        for (const node of restoredNodes as GraphNodeObject[]) {
+    if (hasCache && graphData.nodes.length > 0) {
+      const timer = setTimeout(() => {
+        for (const node of liveNodesRef.current) {
           (node as any).fx = undefined;
           (node as any).fy = undefined;
         }
-      }, 500)
+        graphRef.current?.zoomToFit(400, 50)
+      }, 300)
+      return () => clearTimeout(timer)
     }
-  }, [hasCache, restoredNodes])
+  }, [hasCache, graphData.nodes.length])
 
   if (isLoading) {
     return (
@@ -294,6 +313,7 @@ export function ObsidianGraph({
           linkWidth={(link: GraphLinkObject) => Math.max(0.5, link.weight * 2)}
           onNodeClick={handleNodeClick}
           onNodeHover={(node: GraphNodeObject | null) => setHoveredNode(node)}
+          onEngineStop={handleEngineStop}
           cooldownTicks={hasCache ? 0 : 100}
           d3AlphaDecay={0.02}
           d3VelocityDecay={0.3}
