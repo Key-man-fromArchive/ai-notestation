@@ -55,6 +55,9 @@ const COLOR_PALETTE = [
 ]
 let colorIndex = 0
 
+// Module-level cache: persists across route navigations (component unmount/remount)
+const positionCache = new Map<number, { x: number; y: number }>()
+
 function getNotebookColor(notebook: string | null): string {
   if (!notebook) return '#9ca3af'
   if (!NOTEBOOK_COLORS[notebook]) {
@@ -114,11 +117,25 @@ export function ObsidianGraph({
     }
   }, [data?.nodes.length])
 
+  const savePositions = useCallback(() => {
+    const fg = graphRef.current
+    if (!fg) return
+    // Read positions from the library's internal graph state
+    const internalNodes = (fg as any).graphData?.()?.nodes as GraphNodeObject[] | undefined
+    if (!internalNodes) return
+    for (const node of internalNodes) {
+      if (node.x != null && node.y != null) {
+        positionCache.set(node.id, { x: node.x, y: node.y })
+      }
+    }
+  }, [])
+
   const handleNodeClick = useCallback(
     (node: GraphNodeObject) => {
+      savePositions()
       navigate(`/notes/${node.note_key}`)
     },
-    [navigate]
+    [navigate, savePositions]
   )
 
   const handleZoomIn = () => graphRef.current?.zoom(1.5, 300)
@@ -139,10 +156,35 @@ export function ObsidianGraph({
     return filteredNodeIds.has(sourceId as number) && filteredNodeIds.has(targetId as number)
   })
 
+  // Restore cached positions so the layout doesn't reset after navigation
+  const hasCache = positionCache.size > 0
+  const restoredNodes = (filteredNodes ?? []).map(node => {
+    const cached = positionCache.get(node.id)
+    if (cached) {
+      return { ...node, x: cached.x, y: cached.y, fx: cached.x, fy: cached.y }
+    }
+    return node
+  })
+
   const graphData = {
-    nodes: filteredNodes ?? [],
+    nodes: restoredNodes,
     links: filteredLinks ?? [],
   }
+
+  // After restoring, unpin nodes so dragging still works
+  const hasFrozen = useRef(false)
+  useEffect(() => {
+    if (hasCache && !hasFrozen.current && graphRef.current) {
+      hasFrozen.current = true
+      // Unpin after a brief freeze so positions stick
+      setTimeout(() => {
+        for (const node of restoredNodes as GraphNodeObject[]) {
+          (node as any).fx = undefined;
+          (node as any).fy = undefined;
+        }
+      }, 500)
+    }
+  }, [hasCache, restoredNodes])
 
   if (isLoading) {
     return (
@@ -252,7 +294,7 @@ export function ObsidianGraph({
           linkWidth={(link: GraphLinkObject) => Math.max(0.5, link.weight * 2)}
           onNodeClick={handleNodeClick}
           onNodeHover={(node: GraphNodeObject | null) => setHoveredNode(node)}
-          cooldownTicks={100}
+          cooldownTicks={hasCache ? 0 : 100}
           d3AlphaDecay={0.02}
           d3VelocityDecay={0.3}
           enableNodeDrag={true}
