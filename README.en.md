@@ -4,7 +4,7 @@
     <strong>An AI research platform that brings your Synology NAS notes to life</strong>
   </p>
   <p align="center">
-    <a href="#quickstart">Quick Start</a> · <a href="#features">Features</a> · <a href="#architecture">Architecture</a> · <a href="#api">API Docs</a>
+    <a href="#quickstart">Quick Start</a> · <a href="#features">Features</a> · <a href="#architecture">Architecture</a> · <a href="#api">API Docs</a> · <a href="README.md">한국어</a>
   </p>
 </p>
 
