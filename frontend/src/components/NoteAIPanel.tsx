@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useAIStream } from '@/hooks/useAIStream'
 import { MarkdownRenderer } from './MarkdownRenderer'
 import { LoadingSpinner } from './LoadingSpinner'
@@ -10,17 +10,32 @@ import {
   Lightbulb,
   CheckCircle,
   FileEdit,
+  MessageSquare,
+  FileType,
   Copy,
   Check,
   X,
+  Send,
+  Square,
+  FileText,
 } from 'lucide-react'
 
-type QuickAction = 'insight' | 'spellcheck' | 'writing'
+type AIFeature = 'insight' | 'spellcheck' | 'writing' | 'search_qa' | 'template'
 
-const actions: { id: QuickAction; label: string; icon: typeof Lightbulb; description: string }[] = [
+/** 원클릭 액션: 노트 본문을 바로 전송 */
+const quickActions: { id: AIFeature; label: string; icon: typeof Lightbulb; description: string }[] = [
   { id: 'insight', label: '인사이트', icon: Lightbulb, description: '핵심 발견 도출' },
   { id: 'spellcheck', label: '교정', icon: CheckCircle, description: '맞춤법/문법 검사' },
   { id: 'writing', label: '보완 제안', icon: FileEdit, description: '내용 보완 제안' },
+]
+
+/** 템플릿 유형 (백엔드 VALID_TEMPLATE_TYPES와 동기화) */
+const templateTypes: { id: string; label: string }[] = [
+  { id: 'experiment_log', label: '실험 기록' },
+  { id: 'paper_review', label: '논문 리뷰' },
+  { id: 'meeting_notes', label: '회의록' },
+  { id: 'lab_report', label: '실험 보고서' },
+  { id: 'research_proposal', label: '연구 제안서' },
 ]
 
 interface NoteAIPanelProps {
@@ -34,16 +49,52 @@ export function NoteAIPanel({ noteId, noteContent, noteTitle }: NoteAIPanelProps
   const [copied, setCopied] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [selectedModel, setSelectedModel] = useState('')
-  const { content, isStreaming, error, startStream, reset } = useAIStream()
+  const [activePanel, setActivePanel] = useState<'search_qa' | 'template' | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const { content, isStreaming, error, matchedNotes, startStream, stopStream, reset } = useAIStream()
 
-  const handleAction = async (action: QuickAction) => {
+  const plainText = noteContent.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+  const truncated = plainText.slice(0, 8000)
+
+  const handleQuickAction = async (action: AIFeature) => {
+    setActivePanel(null)
     reset()
-    const plainText = noteContent.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
-    const truncated = plainText.slice(0, 8000)
-
     await startStream({
       message: truncated,
       feature: action,
+      model: selectedModel || undefined,
+    })
+  }
+
+  const handleOpenPanel = (panel: 'search_qa' | 'template') => {
+    setActivePanel(panel)
+    reset()
+    if (panel === 'search_qa') {
+      setTimeout(() => inputRef.current?.focus(), 50)
+    }
+  }
+
+  const handleSearchSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    const formData = new FormData(e.currentTarget)
+    const message = (formData.get('ai_input') as string)?.trim()
+    if (!message) return
+
+    reset()
+    await startStream({
+      message,
+      feature: 'search_qa',
+      model: selectedModel || undefined,
+      options: { mode: 'search' },
+    })
+  }
+
+  const handleTemplateAction = async (templateType: string) => {
+    setActivePanel(null)
+    reset()
+    await startStream({
+      message: templateType,
+      feature: 'template',
       model: selectedModel || undefined,
     })
   }
@@ -87,7 +138,7 @@ export function NoteAIPanel({ noteId, noteContent, noteTitle }: NoteAIPanelProps
           AI 분석 — {noteTitle}
         </div>
         <button
-          onClick={() => { setIsOpen(false); reset() }}
+          onClick={() => { setIsOpen(false); reset(); setActivePanel(null) }}
           className="p-1 text-muted-foreground hover:text-foreground rounded transition-colors"
           aria-label="닫기"
         >
@@ -102,14 +153,15 @@ export function NoteAIPanel({ noteId, noteContent, noteTitle }: NoteAIPanelProps
           onChange={setSelectedModel}
           className="text-xs py-1.5 px-2 min-w-[140px]"
         />
-        <div className="flex gap-2">
-          {actions.map((action) => {
+        <div className="flex flex-wrap gap-2">
+          {quickActions.map((action) => {
             const Icon = action.icon
             return (
               <button
                 key={action.id}
-                onClick={() => handleAction(action.id)}
+                onClick={() => handleQuickAction(action.id)}
                 disabled={isStreaming}
+                title={action.description}
                 className={cn(
                   'flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md',
                   'border border-input hover:border-primary/30 hover:bg-primary/5',
@@ -121,8 +173,97 @@ export function NoteAIPanel({ noteId, noteContent, noteTitle }: NoteAIPanelProps
               </button>
             )
           })}
+          <span className="w-px h-6 bg-border self-center" />
+          <button
+            onClick={() => handleOpenPanel('search_qa')}
+            disabled={isStreaming}
+            title="다른 노트 검색 기반 Q&A"
+            className={cn(
+              'flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md',
+              'border transition-colors disabled:opacity-50 disabled:cursor-not-allowed',
+              activePanel === 'search_qa'
+                ? 'border-primary bg-primary/10 text-primary'
+                : 'border-input hover:border-primary/30 hover:bg-primary/5'
+            )}
+          >
+            <MessageSquare className="h-3.5 w-3.5" />
+            검색 QA
+          </button>
+          <button
+            onClick={() => handleOpenPanel('template')}
+            disabled={isStreaming}
+            title="노트 템플릿 생성"
+            className={cn(
+              'flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md',
+              'border transition-colors disabled:opacity-50 disabled:cursor-not-allowed',
+              activePanel === 'template'
+                ? 'border-primary bg-primary/10 text-primary'
+                : 'border-input hover:border-primary/30 hover:bg-primary/5'
+            )}
+          >
+            <FileType className="h-3.5 w-3.5" />
+            템플릿
+          </button>
         </div>
       </div>
+
+      {/* 검색 QA 입력 */}
+      {activePanel === 'search_qa' && (
+        <form onSubmit={handleSearchSubmit} className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/30">
+          <input
+            ref={inputRef}
+            type="text"
+            name="ai_input"
+            placeholder="질문을 입력하세요 (예: PCR 최적화 조건?)..."
+            disabled={isStreaming}
+            className={cn(
+              'flex-1 px-3 py-1.5 text-sm border border-input rounded-md',
+              'bg-background text-foreground placeholder:text-muted-foreground',
+              'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring',
+              'disabled:opacity-50 disabled:cursor-not-allowed'
+            )}
+          />
+          {isStreaming ? (
+            <button
+              type="button"
+              onClick={stopStream}
+              className="px-3 py-1.5 text-xs bg-destructive text-destructive-foreground rounded-md hover:bg-destructive/90 flex items-center gap-1"
+            >
+              <Square className="h-3 w-3" />
+              중단
+            </button>
+          ) : (
+            <button
+              type="submit"
+              className="px-3 py-1.5 text-xs bg-primary text-primary-foreground rounded-md hover:bg-primary/90 flex items-center gap-1"
+            >
+              <Send className="h-3 w-3" />
+              전송
+            </button>
+          )}
+        </form>
+      )}
+
+      {/* 템플릿 유형 선택 */}
+      {activePanel === 'template' && (
+        <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/30">
+          <span className="text-xs text-muted-foreground mr-1">유형 선택:</span>
+          {templateTypes.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => handleTemplateAction(t.id)}
+              disabled={isStreaming}
+              className={cn(
+                'px-2.5 py-1 text-xs rounded-md',
+                'border border-input hover:border-primary/30 hover:bg-primary/5',
+                'transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
+              )}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Result area */}
       <div className="px-4 py-3 max-h-[400px] overflow-y-auto">
@@ -135,7 +276,28 @@ export function NoteAIPanel({ noteId, noteContent, noteTitle }: NoteAIPanelProps
         {isStreaming && !content && (
           <div className="flex items-center gap-3 text-muted-foreground">
             <LoadingSpinner />
-            <span className="text-sm">노트를 분석하고 있습니다...</span>
+            <span className="text-sm">
+              {activePanel === 'search_qa' ? '관련 노트를 검색하고 있습니다...' : '노트를 분석하고 있습니다...'}
+            </span>
+          </div>
+        )}
+
+        {/* 매칭된 노트 표시 (검색 QA 모드) */}
+        {matchedNotes.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-3 pb-3 border-b border-input">
+            <span className="text-xs text-muted-foreground flex items-center gap-1 mr-1">
+              <FileText className="h-3 w-3" />
+              참조 노트:
+            </span>
+            {matchedNotes.map((note) => (
+              <span
+                key={note.note_id}
+                className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-primary/10 text-primary"
+                title={`${note.title} (관련도: ${(note.score * 100).toFixed(0)}%)`}
+              >
+                {note.title.length > 25 ? note.title.slice(0, 25) + '...' : note.title}
+              </span>
+            ))}
           </div>
         )}
 
@@ -176,7 +338,11 @@ export function NoteAIPanel({ noteId, noteContent, noteTitle }: NoteAIPanelProps
 
         {!isStreaming && !content && !error && (
           <p className="text-sm text-muted-foreground text-center py-4">
-            위 버튼을 클릭하여 이 노트를 AI로 분석하세요
+            {activePanel === 'search_qa'
+              ? '질문을 입력하고 전송 버튼을 누르세요'
+              : activePanel === 'template'
+                ? '생성할 템플릿 유형을 선택하세요'
+                : '위 버튼을 클릭하여 이 노트를 AI로 분석하세요'}
           </p>
         )}
       </div>
