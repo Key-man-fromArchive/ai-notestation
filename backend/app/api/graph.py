@@ -19,6 +19,7 @@ router = APIRouter(prefix="/graph", tags=["graph"])
 
 class GraphNode(BaseModel):
     id: int
+    note_key: str
     label: str
     notebook: str | None = None
     size: int = 1
@@ -56,7 +57,7 @@ async def get_global_graph(
     indexed_notes = indexed_result.scalar() or 0
 
     notes_query = (
-        select(Note.id, Note.title, Note.notebook_name)
+        select(Note.id, Note.synology_note_id, Note.title, Note.notebook_name)
         .where(Note.id.in_(select(NoteEmbedding.note_id).distinct()))
         .order_by(Note.updated_at.desc())
         .limit(limit)
@@ -67,11 +68,12 @@ async def get_global_graph(
     nodes = [
         GraphNode(
             id=note_id,
+            note_key=synology_note_id,
             label=title or f"Note {note_id}",
             notebook=notebook_name,
             size=1,
         )
-        for note_id, title, notebook_name in notes
+        for note_id, synology_note_id, title, notebook_name in notes
     ]
 
     node_ids = [n.id for n in nodes]

@@ -13,6 +13,7 @@ import { EmptyState } from '@/components/EmptyState'
 
 interface GraphNode {
   id: number
+  note_key: string
   label: string
   notebook: string | null
   size: number
@@ -33,6 +34,7 @@ interface GraphData {
 
 interface GraphNodeObject extends NodeObject {
   id: number
+  note_key: string
   label: string
   notebook: string | null
   size: number
@@ -114,7 +116,7 @@ export function ObsidianGraph({
 
   const handleNodeClick = useCallback(
     (node: GraphNodeObject) => {
-      navigate(`/notes/${node.id}`)
+      navigate(`/notes/${node.note_key}`)
     },
     [navigate]
   )
