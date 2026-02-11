@@ -36,6 +36,7 @@ from app.database import async_session_factory, get_db
 from app.models import Note
 from app.search.embeddings import EmbeddingService
 from app.search.engine import (
+    ExactMatchSearchEngine,
     FullTextSearchEngine,
     HybridSearchEngine,
     SearchPage,
@@ -63,6 +64,7 @@ class SearchType(str, Enum):
 
     search = "search"
     semantic = "semantic"
+    exact = "exact"
     # Legacy types kept for backward compatibility
     hybrid = "hybrid"
     fts = "fts"
@@ -77,6 +79,8 @@ class SearchResultResponse(BaseModel):
     snippet: str
     score: float
     search_type: str
+    created_at: str | None = None
+    updated_at: str | None = None
 
 
 class SearchResponse(BaseModel):
@@ -145,6 +149,10 @@ def _build_unified_engine(session: AsyncSession) -> UnifiedSearchEngine:
     fts = _build_fts_engine(session)
     trigram = _build_trigram_engine(session)
     return UnifiedSearchEngine(fts_engine=fts, trigram_engine=trigram)
+
+
+def _build_exact_engine(session: AsyncSession) -> ExactMatchSearchEngine:
+    return ExactMatchSearchEngine(session=session)
 
 
 # ---------------------------------------------------------------------------
@@ -249,7 +257,11 @@ async def search(
         "date_to": parsed_date_to,
     }
 
-    if type == SearchType.semantic:
+    if type == SearchType.exact:
+        engine = _build_exact_engine(db)
+        page = await engine.search(q, limit=limit, offset=offset, **filter_kwargs)
+
+    elif type == SearchType.semantic:
         engine = _build_semantic_engine(db, api_key=api_key)
         page = await engine.search(q, limit=limit, offset=offset, **filter_kwargs)
 
@@ -289,6 +301,8 @@ async def search(
                 snippet=r.snippet,
                 score=r.score,
                 search_type=r.search_type,
+                created_at=r.created_at,
+                updated_at=r.updated_at,
             )
             for r in results
         ],

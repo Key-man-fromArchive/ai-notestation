@@ -64,6 +64,7 @@ class NoteItem(BaseModel):
     tags: list[str] = []
     created_at: str | None = None
     updated_at: str | None = None
+    sync_status: str | None = None
 
 
 class NoteListResponse(BaseModel):
@@ -167,6 +168,7 @@ def _model_to_item(note: Note) -> NoteItem:
         tags=normalize_db_tags(note.tags),
         created_at=datetime_to_iso(created_at),
         updated_at=datetime_to_iso(updated_at),
+        sync_status=note.sync_status,
     )
 
 
@@ -298,6 +300,112 @@ async def list_notes(
     )
 
 
+class ConflictItem(BaseModel):
+    """A note with sync conflict, including both versions."""
+
+    note_id: str
+    title: str
+    local_content: str
+    local_updated_at: str | None = None
+    remote_content: str
+    remote_title: str
+    remote_updated_at: str | None = None
+
+
+class ConflictListResponse(BaseModel):
+    """List of notes with sync conflicts."""
+
+    items: list[ConflictItem]
+    total: int
+
+
+class ResolveConflictRequest(BaseModel):
+    """Request to resolve a sync conflict."""
+
+    resolution: str  # "keep_local" | "keep_remote"
+
+
+@router.get("/notes/conflicts", response_model=ConflictListResponse)
+async def list_conflicts(
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> ConflictListResponse:
+    """List all notes with sync conflicts (both local and remote versions)."""
+    stmt = select(Note).where(Note.sync_status == "conflict")
+    result = await db.execute(stmt)
+    notes = result.scalars().all()
+
+    items = []
+    for note in notes:
+        remote_data = note.remote_conflict_data or {}
+        items.append(ConflictItem(
+            note_id=note.synology_note_id,
+            title=note.title,
+            local_content=note.content_html or "",
+            local_updated_at=datetime_to_iso(note.local_modified_at),
+            remote_content=remote_data.get("content", ""),
+            remote_title=remote_data.get("title", note.title),
+            remote_updated_at=remote_data.get("source_updated_at"),
+        ))
+
+    return ConflictListResponse(items=items, total=len(items))
+
+
+@router.post("/notes/{note_id}/resolve-conflict", response_model=NoteDetailResponse)
+async def resolve_conflict(
+    note_id: str,
+    payload: ResolveConflictRequest,
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> NoteDetailResponse:
+    """Resolve a sync conflict by choosing local or remote version."""
+    result = await db.execute(select(Note).where(Note.synology_note_id == note_id))
+    note = result.scalar_one_or_none()
+    if not note:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Note not found: {note_id}")
+
+    if note.sync_status != "conflict":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Note has no conflict to resolve")
+
+    if payload.resolution == "keep_remote":
+        remote_data = note.remote_conflict_data or {}
+        if remote_data.get("title"):
+            note.title = remote_data["title"]
+        if remote_data.get("content"):
+            note.content_html = remote_data["content"]
+            note.content_text = NoteStationService.extract_text(remote_data["content"])
+        note.sync_status = "synced"
+        note.local_modified_at = None
+    elif payload.resolution == "keep_local":
+        note.sync_status = "local_modified"
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="resolution must be 'keep_local' or 'keep_remote'",
+        )
+
+    note.remote_conflict_data = None
+
+    await log_activity(
+        "sync", "completed",
+        message=f"충돌 해결 ({payload.resolution}): {note.title}",
+        triggered_by=get_trigger_name(current_user),
+    )
+
+    return NoteDetailResponse(
+        note_id=note.synology_note_id,
+        title=note.title,
+        snippet=truncate_snippet(note.content_text),
+        notebook=note.notebook_name,
+        tags=normalize_db_tags(note.tags),
+        created_at=datetime_to_iso(note.source_created_at),
+        updated_at=datetime_to_iso(note.local_modified_at or note.source_updated_at),
+        content=note.content_html,
+        attachments=await _load_note_attachments(db, note.id),
+        sync_status=note.sync_status,
+    )
+
+
 @router.get("/notes/{note_id}", response_model=NoteDetailResponse)
 async def get_note(
     note_id: str,
@@ -335,11 +443,23 @@ async def get_note(
         except Exception:
             logger.warning("Failed to fetch images for note %s", note_id)
 
+        # Fetch NAS attachment metadata for NAS image proxy (if note has NAS link data)
+        nas_attachments: dict[str, dict] | None = None
+        if db_note.link_id and db_note.nas_ver:
+            try:
+                nas_detail = await ns_service.get_note(note_id)
+                att_raw = nas_detail.get("attachment")
+                if isinstance(att_raw, dict):
+                    nas_attachments = att_raw
+            except Exception:
+                logger.debug("Could not fetch NAS attachment metadata for note %s", note_id)
+
         content = rewrite_image_urls(
             db_note.content_html or "",
             note_id,
             attachment_lookup=None,
             image_map=image_map,
+            nas_attachments=nas_attachments,
         )
 
         updated_at = db_note.source_updated_at or db_note.updated_at
@@ -355,6 +475,7 @@ async def get_note(
             updated_at=datetime_to_iso(updated_at),
             content=content,
             attachments=await _load_note_attachments(db, db_note.id),
+            sync_status=db_note.sync_status,
         )
 
     try:
@@ -408,7 +529,13 @@ async def get_note(
         tags=normalize_tags(note),
         created_at=unix_to_iso(note.get("ctime")),
         updated_at=unix_to_iso(note.get("mtime")),
-        content=rewrite_image_urls(note.get("content", ""), note_id, att_lookup, image_map),
+        content=rewrite_image_urls(
+            note.get("content", ""),
+            note_id,
+            att_lookup,
+            image_map,
+            nas_attachments=att_lookup if att_lookup else None,
+        ),
         attachments=attachments,
     )
 
@@ -489,7 +616,12 @@ async def update_note(
     if payload.tags is not None:
         note.tags = payload.tags
 
-    note.source_updated_at = datetime.now(UTC)
+    # Track local modification for bidirectional sync
+    # Do NOT touch source_updated_at — it only tracks the Synology mtime
+    now = datetime.now(UTC)
+    note.local_modified_at = now
+    if note.sync_status == "synced":
+        note.sync_status = "local_modified"
 
     await log_activity(
         "note", "completed",
@@ -504,9 +636,10 @@ async def update_note(
         notebook=note.notebook_name,
         tags=normalize_db_tags(note.tags),
         created_at=datetime_to_iso(note.source_created_at),
-        updated_at=datetime_to_iso(note.source_updated_at),
+        updated_at=datetime_to_iso(note.local_modified_at or note.source_updated_at),
         content=note.content_html,
         attachments=await _load_note_attachments(db, note.id),
+        sync_status=note.sync_status,
     )
 
 

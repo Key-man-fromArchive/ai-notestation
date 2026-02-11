@@ -8,6 +8,7 @@ import ReactMarkdown from 'react-markdown'
 import rehypeRaw from 'rehype-raw'
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
 import { cn } from '@/lib/utils'
+import { apiClient } from '@/lib/api'
 
 // Custom sanitize schema that allows our API image URLs, table styles, etc.
 const sanitizeSchema = {
@@ -187,11 +188,14 @@ const markdownComponents: Components = {
       return <ImagePlaceholder filename={filename} width={width} height={height} />
     }
 
-    // Check if this is an API-served NoteStation image
-    if (src?.startsWith('/api/images/')) {
+    // Check if this is an API-served NoteStation image (local or NAS proxy)
+    if (src?.startsWith('/api/images/') || src?.startsWith('/api/nas-images/')) {
+      // Append auth token for <img> tags (browser can't send Authorization header)
+      const token = apiClient.getToken()
+      const authedSrc = token ? `${src}${src.includes('?') ? '&' : '?'}token=${token}` : src
       return (
         <NoteStationImage
-          src={src}
+          src={authedSrc}
           alt={alt}
           width={width}
           height={height}

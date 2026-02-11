@@ -4,22 +4,98 @@
 
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Notebook, Tag, Paperclip, Image, File, AlertCircle, Calendar, Pencil, Share2 } from 'lucide-react'
+import { ArrowLeft, Notebook, Tag, Paperclip, Image, File, AlertCircle, Calendar, Pencil, Share2, AlertTriangle, CloudOff, CloudUpload, CloudDownload, Loader2, Check } from 'lucide-react'
 import { apiClient } from '@/lib/api'
 import { useNote } from '@/hooks/useNote'
+import { useQueryClient } from '@tanstack/react-query'
 import { MarkdownRenderer } from '@/components/MarkdownRenderer'
 import { NoteAIPanel } from '@/components/NoteAIPanel'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
 import { EmptyState } from '@/components/EmptyState'
 import { NoteEditor } from '@/components/NoteEditor'
 import { NoteSharing } from '@/components/NoteSharing'
+import { ConflictDialog } from '@/components/ConflictDialog'
+import { useConflicts } from '@/hooks/useConflicts'
+import { useTimezone, formatDateWithTz } from '@/hooks/useTimezone'
 
 export default function NoteDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const { data: note, error, isLoading } = useNote(id)
   const [isEditing, setIsEditing] = useState(false)
   const [isSharingOpen, setIsSharingOpen] = useState(false)
+  const [isConflictOpen, setIsConflictOpen] = useState(false)
+  const [syncState, setSyncState] = useState<'idle' | 'syncing' | 'success' | 'error' | 'skipped' | 'conflict'>('idle')
+  const [syncMessage, setSyncMessage] = useState('')
+  const [pullState, setPullState] = useState<'idle' | 'syncing' | 'success' | 'error' | 'skipped' | 'conflict'>('idle')
+  const [pullMessage, setPullMessage] = useState('')
+  const { conflicts } = useConflicts()
+  const timezone = useTimezone()
+
+  const handlePushSync = async (force = false) => {
+    if (!id || syncState === 'syncing') return
+    setSyncState('syncing')
+    setSyncMessage('')
+    try {
+      const url = force ? `/sync/push/${id}?force=true` : `/sync/push/${id}`
+      const res = await apiClient.post(url, {}) as { status: string; message: string }
+      if (res.status === 'success') {
+        setSyncState('success')
+        setSyncMessage(res.message)
+        queryClient.invalidateQueries({ queryKey: ['note', id] })
+        queryClient.invalidateQueries({ queryKey: ['notes'] })
+        setTimeout(() => setSyncState('idle'), 3000)
+      } else if (res.status === 'skipped') {
+        setSyncState('skipped')
+        setSyncMessage(res.message)
+        setTimeout(() => setSyncState('idle'), 3000)
+      } else if (res.status === 'conflict') {
+        setSyncState('conflict')
+        setSyncMessage(res.message)
+      } else {
+        setSyncState('error')
+        setSyncMessage(res.message || '동기화 실패')
+        setTimeout(() => setSyncState('idle'), 3000)
+      }
+    } catch {
+      setSyncState('error')
+      setSyncMessage('동기화 실패')
+      setTimeout(() => setSyncState('idle'), 3000)
+    }
+  }
+
+  const handlePullSync = async (force = false) => {
+    if (!id || pullState === 'syncing') return
+    setPullState('syncing')
+    setPullMessage('')
+    try {
+      const url = force ? `/sync/pull/${id}?force=true` : `/sync/pull/${id}`
+      const res = await apiClient.post(url, {}) as { status: string; message: string }
+      if (res.status === 'success') {
+        setPullState('success')
+        setPullMessage(res.message)
+        queryClient.invalidateQueries({ queryKey: ['note', id] })
+        queryClient.invalidateQueries({ queryKey: ['notes'] })
+        setTimeout(() => setPullState('idle'), 3000)
+      } else if (res.status === 'skipped') {
+        setPullState('skipped')
+        setPullMessage(res.message)
+        setTimeout(() => setPullState('idle'), 3000)
+      } else if (res.status === 'conflict') {
+        setPullState('conflict')
+        setPullMessage(res.message)
+      } else {
+        setPullState('error')
+        setPullMessage(res.message || '가져오기 실패')
+        setTimeout(() => setPullState('idle'), 3000)
+      }
+    } catch {
+      setPullState('error')
+      setPullMessage('가져오기 실패')
+      setTimeout(() => setPullState('idle'), 3000)
+    }
+  }
 
   // 로딩 상태
   if (isLoading) {
@@ -65,8 +141,7 @@ export default function NoteDetail() {
     return null
   }
 
-  const formatDate = (iso: string) =>
-    new Date(iso).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })
+  const formatDate = (iso: string) => formatDateWithTz(iso, timezone)
 
   return (
     <div className="h-full overflow-y-auto">
@@ -84,6 +159,118 @@ export default function NoteDetail() {
         <div className="flex items-start justify-between gap-4 mb-2">
           <h1 className="text-2xl font-bold text-foreground">{note.title}</h1>
           <div className="flex items-center gap-2">
+            {/* Sync status badges */}
+            {note.sync_status === 'local_modified' && (
+              <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded bg-amber-100 text-amber-700 border border-amber-200">
+                <CloudOff className="h-3.5 w-3.5" />
+                미동기화
+              </span>
+            )}
+            {note.sync_status === 'conflict' && (
+              <button
+                onClick={() => setIsConflictOpen(true)}
+                className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded bg-red-100 text-red-700 border border-red-200 hover:bg-red-200"
+              >
+                <AlertTriangle className="h-3.5 w-3.5" />
+                충돌 해결
+              </button>
+            )}
+            {note.sync_status === 'local_only' && (
+              <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded bg-purple-100 text-purple-700 border border-purple-200">
+                <CloudOff className="h-3.5 w-3.5" />
+                로컬 전용
+              </span>
+            )}
+            {/* Pull button (NAS → local) */}
+            {pullState === 'conflict' ? (
+              <div className="inline-flex items-center gap-1">
+                <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded border border-amber-300 bg-amber-50 text-amber-700">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  {pullMessage || '로컬 수정 있음'}
+                </span>
+                <button
+                  onClick={() => handlePullSync(true)}
+                  className="text-xs px-2 py-1.5 rounded border border-red-300 bg-red-50 text-red-700 hover:bg-red-100"
+                >
+                  강제 가져오기
+                </button>
+                <button
+                  onClick={() => setPullState('idle')}
+                  className="text-xs px-2 py-1.5 rounded border border-input text-muted-foreground hover:text-foreground"
+                >
+                  취소
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => handlePullSync()}
+                disabled={pullState === 'syncing'}
+                title={pullMessage || undefined}
+                className={`inline-flex items-center gap-2 text-xs px-2.5 py-1.5 rounded border transition-colors ${
+                  pullState === 'success'
+                    ? 'border-green-300 bg-green-50 text-green-700'
+                    : pullState === 'error'
+                      ? 'border-red-300 bg-red-50 text-red-700'
+                      : pullState === 'skipped'
+                        ? 'border-blue-300 bg-blue-50 text-blue-700'
+                        : 'border-input text-muted-foreground hover:text-foreground hover:border-primary/30'
+                }`}
+              >
+                {pullState === 'syncing' ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : pullState === 'success' ? (
+                  <Check className="h-3.5 w-3.5" />
+                ) : (
+                  <CloudDownload className="h-3.5 w-3.5" />
+                )}
+                {pullState === 'syncing' ? '가져오는 중...' : pullState === 'success' ? '완료' : pullState === 'error' ? '실패' : pullState === 'skipped' ? '변경 없음' : '가져오기'}
+              </button>
+            )}
+            {/* Push button (local → NAS) */}
+            {syncState === 'conflict' ? (
+              <div className="inline-flex items-center gap-1">
+                <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded border border-amber-300 bg-amber-50 text-amber-700">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  {syncMessage || 'NAS가 더 최신'}
+                </span>
+                <button
+                  onClick={() => handlePushSync(true)}
+                  className="text-xs px-2 py-1.5 rounded border border-red-300 bg-red-50 text-red-700 hover:bg-red-100"
+                >
+                  강제 보내기
+                </button>
+                <button
+                  onClick={() => setSyncState('idle')}
+                  className="text-xs px-2 py-1.5 rounded border border-input text-muted-foreground hover:text-foreground"
+                >
+                  취소
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => handlePushSync()}
+                disabled={syncState === 'syncing'}
+                title={syncMessage || undefined}
+                className={`inline-flex items-center gap-2 text-xs px-2.5 py-1.5 rounded border transition-colors ${
+                  syncState === 'success'
+                    ? 'border-green-300 bg-green-50 text-green-700'
+                    : syncState === 'error'
+                      ? 'border-red-300 bg-red-50 text-red-700'
+                      : syncState === 'skipped'
+                        ? 'border-blue-300 bg-blue-50 text-blue-700'
+                        : 'border-input text-muted-foreground hover:text-foreground hover:border-primary/30'
+                }`}
+              >
+                {syncState === 'syncing' ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : syncState === 'success' ? (
+                  <Check className="h-3.5 w-3.5" />
+                ) : (
+                  <CloudUpload className="h-3.5 w-3.5" />
+                )}
+                {syncState === 'syncing' ? '보내는 중...' : syncState === 'success' ? '완료' : syncState === 'error' ? '실패' : syncState === 'skipped' ? '수정 없음' : '보내기'}
+              </button>
+            )}
             <button
               onClick={() => setIsSharingOpen(true)}
               className="inline-flex items-center gap-2 text-xs px-2.5 py-1.5 rounded border border-input text-muted-foreground hover:text-foreground hover:border-primary/30"
@@ -159,7 +346,8 @@ export default function NoteDetail() {
               onSave={async (html, json) => {
                 await apiClient.put(`/notes/${note.note_id}`, { content: html, content_json: json })
                 setIsEditing(false)
-                window.location.reload()
+                queryClient.invalidateQueries({ queryKey: ['note', note.note_id] })
+                queryClient.invalidateQueries({ queryKey: ['notes'] })
               }}
             />
           ) : (
@@ -214,6 +402,22 @@ export default function NoteDetail() {
         isOpen={isSharingOpen}
         onClose={() => setIsSharingOpen(false)}
       />
+
+      {/* Conflict resolution dialog */}
+      {note.sync_status === 'conflict' && (() => {
+        const conflict = conflicts.find(c => c.note_id === note.note_id)
+        if (!conflict) return null
+        return (
+          <ConflictDialog
+            conflict={conflict}
+            isOpen={isConflictOpen}
+            onClose={() => {
+              setIsConflictOpen(false)
+              queryClient.invalidateQueries({ queryKey: ['note', note.note_id] })
+            }}
+          />
+        )
+      })()}
     </div>
   )
 }

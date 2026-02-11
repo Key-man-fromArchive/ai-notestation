@@ -8,7 +8,7 @@ import { useGlobalGraph } from '@/hooks/useGlobalGraph'
 export default function Graph() {
   const [showSettings, setShowSettings] = useState(false)
   const [limit, setLimit] = useState(200)
-  const [threshold, setThreshold] = useState(0.75)
+  const [threshold, setThreshold] = useState(0.5)
 
   const { data, isLoading, error, refetch } = useGlobalGraph({
     limit,
@@ -68,7 +68,7 @@ export default function Graph() {
               </label>
               <input
                 type="range"
-                min={0.5}
+                min={0.3}
                 max={0.95}
                 step={0.05}
                 value={threshold}
@@ -76,7 +76,7 @@ export default function Graph() {
                 className="w-full"
               />
               <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                <span>50% (더 많은 연결)</span>
+                <span>30% (더 많은 연결)</span>
                 <span>95% (강한 연결만)</span>
               </div>
             </div>

@@ -12,6 +12,8 @@ interface SearchResult {
   snippet: string
   score: number
   search_type: string
+  created_at: string | null
+  updated_at: string | null
 }
 
 interface SearchResponse {
@@ -21,7 +23,7 @@ interface SearchResponse {
   total: number
 }
 
-type SearchType = 'search' | 'semantic' | 'hybrid'
+type SearchType = 'search' | 'semantic' | 'hybrid' | 'exact'
 
 interface SearchFilters {
   notebook?: string

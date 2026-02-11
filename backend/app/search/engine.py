@@ -34,6 +34,11 @@ from app.search.query_preprocessor import QueryAnalysis, analyze_query
 logger = logging.getLogger(__name__)
 
 
+def _dt_to_iso(dt: datetime | None) -> str | None:
+    """Convert a datetime to ISO 8601 string, or None."""
+    return dt.isoformat() if dt else None
+
+
 class SearchResult(BaseModel):
     """A single search result from full-text or semantic search.
 
@@ -50,6 +55,8 @@ class SearchResult(BaseModel):
     snippet: str
     score: float
     search_type: str = Field(default="fts")
+    created_at: str | None = None
+    updated_at: str | None = None
 
 
 class SearchPage(BaseModel):
@@ -126,6 +133,8 @@ class FullTextSearchEngine:
                 headline,
                 score,
                 total_count,
+                Note.source_created_at,
+                Note.source_updated_at,
             )
             .where(Note.search_vector.op("@@")(tsquery))
             .order_by(score.desc())
@@ -152,6 +161,8 @@ class FullTextSearchEngine:
                 snippet=row.snippet,
                 score=float(row.score),
                 search_type="fts",
+                created_at=_dt_to_iso(row.source_created_at),
+                updated_at=_dt_to_iso(row.source_updated_at),
             )
             for row in rows
         ]
@@ -256,6 +267,8 @@ class TrigramSearchEngine:
                 func.left(Note.content_text, self._SNIPPET_MAX_LENGTH).label("snippet"),
                 combined_score,
                 total_count,
+                Note.source_created_at,
+                Note.source_updated_at,
             )
             .where(
                 (func.similarity(Note.title, query) >= threshold)
@@ -284,6 +297,8 @@ class TrigramSearchEngine:
                 snippet=row.snippet or "",
                 score=float(row.score),
                 search_type="trigram",
+                created_at=_dt_to_iso(row.source_created_at),
+                updated_at=_dt_to_iso(row.source_updated_at),
             )
             for row in rows
         ]
@@ -309,6 +324,8 @@ class TrigramSearchEngine:
                 func.left(Note.content_text, self._SNIPPET_MAX_LENGTH).label("snippet"),
                 literal_column("1.0").label("score"),
                 total_count,
+                Note.source_created_at,
+                Note.source_updated_at,
             )
             .where((Note.title.ilike(pattern)) | (Note.content_text.ilike(pattern)))
             .order_by(Note.source_updated_at.desc())
@@ -334,6 +351,8 @@ class TrigramSearchEngine:
                 snippet=row.snippet or "",
                 score=float(row.score),
                 search_type="trigram",
+                created_at=_dt_to_iso(row.source_created_at),
+                updated_at=_dt_to_iso(row.source_updated_at),
             )
             for row in rows
         ]
@@ -409,6 +428,8 @@ class SemanticSearchEngine:
                 NoteEmbedding.chunk_text,
                 cosine_distance.label("cosine_distance"),
                 total_count,
+                Note.source_created_at,
+                Note.source_updated_at,
             )
             .join(Note, NoteEmbedding.note_id == Note.id)
             .order_by(cosine_distance.asc())
@@ -435,6 +456,8 @@ class SemanticSearchEngine:
                 snippet=self._truncate_snippet(row.chunk_text),
                 score=round(1.0 - float(row.cosine_distance), 10),
                 search_type="semantic",
+                created_at=_dt_to_iso(row.source_created_at),
+                updated_at=_dt_to_iso(row.source_updated_at),
             )
             for row in rows
         ]
@@ -610,23 +633,24 @@ class HybridSearchEngine:
             with search_type="hybrid".
         """
         scores: dict[str, float] = {}
-        metadata: dict[str, tuple[str, str]] = {}  # note_id -> (title, snippet)
+        # note_id -> (title, snippet, created_at, updated_at)
+        metadata: dict[str, tuple[str, str, str | None, str | None]] = {}
 
         for rank, result in enumerate(fts_results):
             rrf_score = fts_weight * (1.0 / (k + rank))
             scores[result.note_id] = scores.get(result.note_id, 0.0) + rrf_score
             if result.note_id not in metadata:
-                metadata[result.note_id] = (result.title, result.snippet)
+                metadata[result.note_id] = (result.title, result.snippet, result.created_at, result.updated_at)
 
         for rank, result in enumerate(semantic_results):
             rrf_score = semantic_weight * (1.0 / (k + rank))
             scores[result.note_id] = scores.get(result.note_id, 0.0) + rrf_score
             if result.note_id not in metadata:
-                metadata[result.note_id] = (result.title, result.snippet)
+                metadata[result.note_id] = (result.title, result.snippet, result.created_at, result.updated_at)
 
         merged: list[SearchResult] = []
         for note_id, rrf_score in sorted(scores.items(), key=lambda item: item[1], reverse=True):
-            title, snippet = metadata[note_id]
+            title, snippet, created_at, updated_at = metadata[note_id]
             merged.append(
                 SearchResult(
                     note_id=note_id,
@@ -634,6 +658,8 @@ class HybridSearchEngine:
                     snippet=snippet,
                     score=rrf_score,
                     search_type="hybrid",
+                    created_at=created_at,
+                    updated_at=updated_at,
                 )
             )
 
@@ -747,23 +773,24 @@ class UnifiedSearchEngine:
     ) -> list[SearchResult]:
         """Merge FTS and Trigram results using Weighted RRF."""
         scores: dict[str, float] = {}
-        metadata: dict[str, tuple[str, str]] = {}
+        # note_id -> (title, snippet, created_at, updated_at)
+        metadata: dict[str, tuple[str, str, str | None, str | None]] = {}
 
         for rank, result in enumerate(fts_results):
             rrf_score = fts_weight * (1.0 / (k + rank))
             scores[result.note_id] = scores.get(result.note_id, 0.0) + rrf_score
             if result.note_id not in metadata:
-                metadata[result.note_id] = (result.title, result.snippet)
+                metadata[result.note_id] = (result.title, result.snippet, result.created_at, result.updated_at)
 
         for rank, result in enumerate(trigram_results):
             rrf_score = trigram_weight * (1.0 / (k + rank))
             scores[result.note_id] = scores.get(result.note_id, 0.0) + rrf_score
             if result.note_id not in metadata:
-                metadata[result.note_id] = (result.title, result.snippet)
+                metadata[result.note_id] = (result.title, result.snippet, result.created_at, result.updated_at)
 
         merged: list[SearchResult] = []
         for note_id, rrf_score in sorted(scores.items(), key=lambda item: item[1], reverse=True):
-            title, snippet = metadata[note_id]
+            title, snippet, created_at, updated_at = metadata[note_id]
             merged.append(
                 SearchResult(
                     note_id=note_id,
@@ -771,6 +798,8 @@ class UnifiedSearchEngine:
                     snippet=snippet,
                     score=rrf_score,
                     search_type="search",
+                    created_at=created_at,
+                    updated_at=updated_at,
                 )
             )
 
@@ -796,3 +825,83 @@ class UnifiedSearchEngine:
         except Exception:
             logger.warning("%s engine failed for query: %r", label, query)
             return SearchPage(results=[], total=0)
+
+
+class ExactMatchSearchEngine:
+    """Exact substring match search using ILIKE.
+
+    Finds notes where the exact query string appears as-is in the title
+    or content, without morpheme analysis or tokenization. Matched text
+    is highlighted with <b> tags. Results are sorted by updated date.
+    """
+
+    _SNIPPET_MAX_LENGTH: int = 200
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def search(
+        self,
+        query: str,
+        limit: int = 20,
+        offset: int = 0,
+        notebook_name: str | None = None,
+        date_from: datetime | None = None,
+        date_to: datetime | None = None,
+    ) -> SearchPage:
+        """Execute an exact substring match search against notes."""
+        stripped = query.strip()
+        if not stripped:
+            return SearchPage(results=[], total=0)
+
+        pattern = f"%{stripped}%"
+        total_count = func.count().over().label("total_count")
+
+        # Use regexp_replace for case-insensitive highlighting
+        highlighted_snippet = func.regexp_replace(
+            func.left(Note.content_text, self._SNIPPET_MAX_LENGTH),
+            f"({stripped})",
+            r"<b>\1</b>",
+            literal_column("'gi'"),
+        ).label("snippet")
+
+        stmt = (
+            select(
+                Note.synology_note_id.label("note_id"),
+                Note.title,
+                highlighted_snippet,
+                literal_column("1.0").label("score"),
+                total_count,
+                Note.source_created_at,
+                Note.source_updated_at,
+            )
+            .where((Note.title.ilike(pattern)) | (Note.content_text.ilike(pattern)))
+            .order_by(Note.source_updated_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+
+        if notebook_name is not None:
+            stmt = stmt.where(Note.notebook_name == notebook_name)
+        if date_from is not None:
+            stmt = stmt.where(Note.source_updated_at >= date_from)
+        if date_to is not None:
+            stmt = stmt.where(Note.source_updated_at <= date_to)
+
+        result = await self._session.execute(stmt)
+        rows = result.fetchall()
+
+        total = rows[0].total_count if rows else 0
+        results = [
+            SearchResult(
+                note_id=row.note_id,
+                title=row.title,
+                snippet=row.snippet or "",
+                score=float(row.score),
+                search_type="exact",
+                created_at=_dt_to_iso(row.source_created_at),
+                updated_at=_dt_to_iso(row.source_updated_at),
+            )
+            for row in rows
+        ]
+        return SearchPage(results=results, total=total)

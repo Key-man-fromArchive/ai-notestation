@@ -21,7 +21,7 @@ import logging
 
 from bs4 import BeautifulSoup
 
-from app.synology_gateway.client import SynologyClient
+from app.synology_gateway.client import SynologyApiError, SynologyClient
 
 logger = logging.getLogger(__name__)
 
@@ -202,6 +202,83 @@ class NoteStationService:
             version=1,
         )
         return data.get("smarts", [])
+
+    # ------------------------------------------------------------------
+    # Write operations
+    # ------------------------------------------------------------------
+
+    async def discover_write_capability(self) -> bool:
+        """Check if NoteStation supports write operations (set method).
+
+        Queries ``SYNO.API.Info`` and inspects available methods for
+        ``SYNO.NoteStation.Note``.
+
+        Returns:
+            True if write (set) appears to be supported, False otherwise.
+        """
+        try:
+            data = await self._client.request(
+                "SYNO.API.Info",
+                "query",
+                version=1,
+                query=f"{self.NOTESTATION_API}.Note",
+            )
+            note_info = data.get(f"{self.NOTESTATION_API}.Note", {})
+            if note_info:
+                logger.info(
+                    "NoteStation.Note API info: %s (versions %s-%s)",
+                    note_info.get("path", "unknown"),
+                    note_info.get("minVersion", "?"),
+                    note_info.get("maxVersion", "?"),
+                )
+                return True
+            logger.info("NoteStation.Note API not found in SYNO.API.Info")
+            return False
+        except Exception:
+            logger.warning("Failed to discover NoteStation write capability")
+            return False
+
+    async def update_note(self, object_id: str, title: str | None = None, content: str | None = None) -> dict:
+        """Update a note on NoteStation via the ``set`` method.
+
+        Uses POST to handle potentially large content payloads.
+        Falls back to GET if POST fails.
+
+        Args:
+            object_id: The unique note identifier.
+            title: New title (optional, omit to keep existing).
+            content: New HTML content (optional, omit to keep existing).
+
+        Returns:
+            The response data dict from NoteStation.
+
+        Raises:
+            SynologyApiError: If the update fails on both POST and GET.
+        """
+        params: dict[str, object] = {"object_id": object_id}
+        if title is not None:
+            params["title"] = title
+        if content is not None:
+            params["content"] = content
+
+        # Try POST first (handles large content)
+        try:
+            return await self._client.post_request(
+                f"{self.NOTESTATION_API}.Note",
+                "set",
+                version=1,
+                **params,
+            )
+        except SynologyApiError:
+            logger.info("POST update_note failed, falling back to GET for note %s", object_id)
+
+        # Fallback to GET
+        return await self._client.request(
+            f"{self.NOTESTATION_API}.Note",
+            "set",
+            version=1,
+            **params,
+        )
 
     # ------------------------------------------------------------------
     # Utilities

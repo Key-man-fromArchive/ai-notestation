@@ -20,6 +20,7 @@ import {
   ImageOff,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useTimezone } from '@/hooks/useTimezone'
 
 interface Note {
   note_id: string
@@ -45,6 +46,7 @@ interface NotebooksResponse {
 
 export default function Dashboard() {
   const { status: syncStatus, lastSync, error: syncError, notesMissingImages, triggerSync } = useSync()
+  const timezone = useTimezone()
 
   const { data, isLoading } = useQuery<NotesResponse>({
     queryKey: ['notes', 'recent'],
@@ -191,7 +193,7 @@ export default function Dashboard() {
               </div>
               <div className="text-xs text-muted-foreground">
                 {lastSync
-                  ? new Date(lastSync).toLocaleString('ko-KR')
+                  ? new Date(lastSync).toLocaleString('ko-KR', { timeZone: timezone })
                   : '동기화 기록 없음'}
               </div>
             </div>
@@ -308,7 +310,7 @@ export default function Dashboard() {
                         {note.updated_at && (
                           <span className="flex items-center gap-1">
                             <Clock className="h-3 w-3" aria-hidden="true" />
-                            {new Date(note.updated_at).toLocaleDateString('ko-KR')}
+                            {new Date(note.updated_at).toLocaleDateString('ko-KR', { timeZone: timezone })}
                           </span>
                         )}
                       </div>

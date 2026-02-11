@@ -11,6 +11,7 @@ export interface NoteListItem {
   notebook: string | null
   updated_at: string | null
   tags: string[]
+  sync_status?: string
 }
 
 /**
@@ -24,11 +25,30 @@ export interface Note {
   created_at: string | null
   updated_at: string | null
   tags: string[]
+  sync_status?: string
   attachments?: Array<{
     file_id?: string
     name: string
     url: string
   }>
+}
+
+/**
+ * 동기화 충돌 아이템
+ */
+export interface ConflictItem {
+  note_id: string
+  title: string
+  local_content: string
+  local_updated_at: string | null
+  remote_content: string
+  remote_title: string
+  remote_updated_at: string | null
+}
+
+export interface ConflictListResponse {
+  items: ConflictItem[]
+  total: number
 }
 
 /**

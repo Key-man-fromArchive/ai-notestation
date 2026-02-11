@@ -2,18 +2,17 @@
 # @SPEC docs/plans/2026-01-29-labnote-ai-design.md#synology-gateway
 # @TEST tests/test_sync_service.py
 
-"""Synchronise Synology NoteStation notes to the local PostgreSQL database.
+"""Bidirectional sync between Synology NoteStation and local PostgreSQL.
 
-Full sync strategy:
-1. Fetch ALL notes from NoteStation (paginated).
-2. Load ALL existing notes from the local DB.
-3. Compare by ``synology_note_id``:
-   - Present in NoteStation but not in DB -> INSERT
-   - Present in both but ``source_updated_at`` changed -> UPDATE
-   - Present in DB but not in NoteStation -> DELETE
-4. Flush changes and return a :class:`SyncResult` summary.
-
-Incremental / delta sync is planned for a future iteration.
+Sync strategy (Push before Pull):
+1. **Push** — Local edits (sync_status='local_modified') are pushed to NoteStation.
+2. **Pull** — Remote notes are compared with local DB:
+   - New remote note → INSERT
+   - Remote changed, local clean → UPDATE
+   - Both changed → CONFLICT (store remote version in remote_conflict_data)
+3. **Delete** — Notes absent from remote:
+   - If local_modified → mark as 'local_only' (preserve)
+   - Otherwise → DELETE
 """
 
 from __future__ import annotations
@@ -36,136 +35,197 @@ _PAGE_SIZE = 500
 
 @dataclass
 class SyncResult:
-    """Summary of a synchronisation run.
-
-    Attributes:
-        added: Number of newly inserted notes.
-        updated: Number of existing notes that were updated.
-        deleted: Number of notes removed (no longer in NoteStation).
-        total: Total notes currently in NoteStation.
-        synced_at: UTC timestamp when the sync completed.
-    """
+    """Summary of a synchronisation run."""
 
     added: int = 0
     updated: int = 0
     deleted: int = 0
+    pushed: int = 0
+    conflicts: int = 0
     total: int = 0
     synced_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 class SyncService:
-    """NoteStation -> PostgreSQL synchronisation service.
+    """Bidirectional NoteStation <-> PostgreSQL synchronisation service.
 
     Args:
         notestation: An authenticated NoteStationService instance.
         db: An SQLAlchemy async session (caller manages transaction boundaries).
+        write_enabled: Whether push-to-NoteStation is available.
     """
 
-    def __init__(self, notestation: NoteStationService, db: AsyncSession) -> None:
+    def __init__(
+        self,
+        notestation: NoteStationService,
+        db: AsyncSession,
+        write_enabled: bool = False,
+    ) -> None:
         self._notestation = notestation
         self._db = db
+        self._write_enabled = write_enabled
 
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
     async def sync_all(self) -> SyncResult:
-        """Run a full synchronisation.
+        """Run a full bidirectional synchronisation.
 
-        The NoteStation ``list`` API returns summary data (no content).
-        For new or updated notes we fetch the full note via ``get`` to
-        obtain ``content`` (HTML) and ``tag`` metadata.
+        Step 1: Push local changes to NoteStation (if write_enabled).
+        Step 2: Pull remote changes, detecting conflicts.
+        Step 3: Handle deletions (preserve local_modified notes).
 
         Returns:
-            A :class:`SyncResult` with add/update/delete counts.
-
-        Raises:
-            Any exception from NoteStation or the DB; the session is
-            rolled back automatically on error.
+            A :class:`SyncResult` with add/update/delete/pushed/conflicts counts.
         """
         try:
             now = datetime.now(UTC)
 
-            # 1. Fetch all remote notes (list – summary only)
+            # Step 1: Push local changes to NoteStation
+            pushed = await self._push_local_changes()
+
+            # Step 2: Fetch all remote notes (list – summary only)
             remote_notes = await self._fetch_all_notes()
-
-            # 2. Build notebook ID -> name lookup
             notebook_map = await self._fetch_notebook_map()
-
-            # 3. Load existing local notes, keyed by synology_note_id
             existing = await self._get_existing_notes()
 
-            # 4. Build a set of remote IDs for deletion detection
             remote_ids: set[str] = set()
-
             added = 0
             updated = 0
+            conflicts = 0
 
             for note_summary in remote_notes:
-                # NoteStation API uses ``object_id``, not ``note_id``
                 note_id = str(note_summary["object_id"])
                 remote_ids.add(note_id)
 
                 is_new = note_id not in existing
-                is_updated = False
-                if not is_new:
-                    db_note = existing[note_id]
-                    remote_updated = _unix_to_utc(note_summary.get("mtime"))
-                    is_updated = bool(
-                        remote_updated and remote_updated != db_note.source_updated_at
-                    )
-
-                if is_new or is_updated:
-                    # Fetch full note detail (content, tags)
+                if is_new:
+                    # New remote note → INSERT
                     try:
                         detail = await self._notestation.get_note(note_id)
                     except Exception:
-                        # If we can't fetch detail, fall back to summary
                         logger.warning("Failed to fetch detail for note %s, using summary", note_id)
                         detail = note_summary
 
-                    # Merge summary + detail, resolve notebook name
                     merged = _merge_note_data(note_summary, detail, notebook_map)
+                    new_note = self._note_to_model(merged, synced_at=now)
+                    self._db.add(new_note)
+                    added += 1
+                    continue
 
-                    if is_new:
-                        new_note = self._note_to_model(merged, synced_at=now)
-                        self._db.add(new_note)
-                        added += 1
-                    else:
-                        self._update_note(existing[note_id], merged, synced_at=now)
-                        updated += 1
+                db_note = existing[note_id]
+                remote_updated = _unix_to_utc(note_summary.get("mtime"))
+                remote_changed = bool(
+                    remote_updated and remote_updated != db_note.source_updated_at
+                )
+                local_changed = db_note.sync_status in ("local_modified", "conflict")
 
-            # 5. Delete notes that are no longer in NoteStation
+                if remote_changed and local_changed:
+                    # Both sides changed → CONFLICT
+                    try:
+                        detail = await self._notestation.get_note(note_id)
+                    except Exception:
+                        detail = note_summary
+
+                    merged = _merge_note_data(note_summary, detail, notebook_map)
+                    db_note.remote_conflict_data = {
+                        "title": merged.get("title", ""),
+                        "content": merged.get("content", ""),
+                        "source_updated_at": remote_updated.isoformat() if remote_updated else None,
+                    }
+                    db_note.sync_status = "conflict"
+                    db_note.synced_at = now
+                    conflicts += 1
+                    logger.info("Conflict detected for note %s", note_id)
+
+                elif remote_changed:
+                    # Remote only changed → UPDATE local
+                    try:
+                        detail = await self._notestation.get_note(note_id)
+                    except Exception:
+                        logger.warning("Failed to fetch detail for note %s, using summary", note_id)
+                        detail = note_summary
+
+                    merged = _merge_note_data(note_summary, detail, notebook_map)
+                    self._update_note(db_note, merged, synced_at=now)
+                    updated += 1
+
+                # else: local only changed (already pushed in Step 1) or no change → skip
+
+            # Step 3: Handle deletions
             deleted = 0
             for syn_id, db_note in existing.items():
                 if syn_id not in remote_ids:
-                    await self._db.delete(db_note)
-                    deleted += 1
+                    if db_note.sync_status in ("local_modified", "local_only"):
+                        # Preserve locally modified notes
+                        db_note.sync_status = "local_only"
+                        logger.info("Note %s not on remote, marked as local_only", syn_id)
+                    else:
+                        await self._db.delete(db_note)
+                        deleted += 1
 
-            # 6. Flush all changes
             await self._db.flush()
 
             total = len(remote_notes)
-
             result = SyncResult(
                 added=added,
                 updated=updated,
                 deleted=deleted,
+                pushed=pushed,
+                conflicts=conflicts,
                 total=total,
                 synced_at=now,
             )
             logger.info(
-                "Sync completed: added=%d, updated=%d, deleted=%d, total=%d",
-                added,
-                updated,
-                deleted,
-                total,
+                "Sync completed: added=%d, updated=%d, deleted=%d, pushed=%d, conflicts=%d, total=%d",
+                added, updated, deleted, pushed, conflicts, total,
             )
             return result
 
         except Exception:
             await self._db.rollback()
             raise
+
+    # ------------------------------------------------------------------
+    # Push logic
+    # ------------------------------------------------------------------
+
+    async def _push_local_changes(self) -> int:
+        """Push locally modified notes to NoteStation.
+
+        Returns:
+            Number of notes successfully pushed.
+        """
+        if not self._write_enabled:
+            return 0
+
+        stmt = select(Note).where(Note.sync_status == "local_modified")
+        result = await self._db.execute(stmt)
+        local_modified = result.scalars().all()
+
+        if not local_modified:
+            return 0
+
+        pushed = 0
+        for note in local_modified:
+            try:
+                await self._notestation.update_note(
+                    object_id=note.synology_note_id,
+                    title=note.title,
+                    content=note.content_html,
+                )
+                note.sync_status = "synced"
+                note.local_modified_at = None
+                pushed += 1
+                logger.info("Pushed note %s to NoteStation", note.synology_note_id)
+            except Exception:
+                logger.warning("Failed to push note %s to NoteStation", note.synology_note_id)
+
+        if pushed:
+            await self._db.flush()
+
+        return pushed
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -283,6 +343,8 @@ class SyncService:
             source_created_at=_unix_to_utc(note_data.get("ctime")),
             source_updated_at=_unix_to_utc(note_data.get("mtime")),
             synced_at=synced_at,
+            link_id=note_data.get("link_id"),
+            nas_ver=note_data.get("ver"),
         )
 
     def _update_note(self, db_note: Note, note_data: dict, synced_at: datetime) -> None:
@@ -305,6 +367,8 @@ class SyncService:
         db_note.source_created_at = _unix_to_utc(note_data.get("ctime"))
         db_note.source_updated_at = _unix_to_utc(note_data.get("mtime"))
         db_note.synced_at = synced_at
+        db_note.link_id = note_data.get("link_id")
+        db_note.nas_ver = note_data.get("ver")
 
 
 # ------------------------------------------------------------------

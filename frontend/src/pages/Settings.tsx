@@ -26,6 +26,7 @@ import {
   Search,
   Database,
   Image,
+  Globe,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -142,6 +143,12 @@ export default function Settings() {
           <BackupSection />
         </>
       )}
+      <TimezoneSection
+        data={data}
+        isPending={updateMutation.isPending}
+        onSave={(tz) => updateMutation.mutate({ key: 'timezone', value: tz })}
+      />
+
       <SearchIndexSection />
 
       <ApiKeysSection
@@ -713,6 +720,80 @@ function SearchIndexSection() {
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+
+const TIMEZONE_OPTIONS = [
+  { value: 'Asia/Seoul', label: '한국 (KST, UTC+9)' },
+  { value: 'Asia/Tokyo', label: '일본 (JST, UTC+9)' },
+  { value: 'Asia/Shanghai', label: '중국 (CST, UTC+8)' },
+  { value: 'Asia/Singapore', label: '싱가포르 (SGT, UTC+8)' },
+  { value: 'Asia/Kolkata', label: '인도 (IST, UTC+5:30)' },
+  { value: 'Europe/London', label: '런던 (GMT/BST)' },
+  { value: 'Europe/Paris', label: '파리 (CET/CEST)' },
+  { value: 'Europe/Berlin', label: '베를린 (CET/CEST)' },
+  { value: 'America/New_York', label: '뉴욕 (EST/EDT)' },
+  { value: 'America/Chicago', label: '시카고 (CST/CDT)' },
+  { value: 'America/Denver', label: '덴버 (MST/MDT)' },
+  { value: 'America/Los_Angeles', label: 'LA (PST/PDT)' },
+  { value: 'Pacific/Auckland', label: '오클랜드 (NZST, UTC+12)' },
+  { value: 'Australia/Sydney', label: '시드니 (AEST, UTC+10)' },
+  { value: 'UTC', label: 'UTC' },
+]
+
+function TimezoneSection({
+  data,
+  isPending,
+  onSave,
+}: {
+  data: SettingsData | undefined
+  isPending: boolean
+  onSave: (tz: string) => void
+}) {
+  const currentTz = data?.settings?.timezone || 'Asia/Seoul'
+  const now = new Date()
+  let preview = ''
+  try {
+    preview = now.toLocaleString('ko-KR', {
+      timeZone: currentTz,
+      year: 'numeric', month: 'long', day: 'numeric',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+    })
+  } catch {
+    preview = now.toLocaleString('ko-KR')
+  }
+
+  return (
+    <div className="p-4 border border-input rounded-md">
+      <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
+        <Globe className="h-5 w-5" aria-hidden="true" />
+        시간대 설정
+      </h3>
+      <p className="text-sm text-muted-foreground mb-4">
+        노트 수정일, 동기화 시간 등에 사용할 시간대를 선택합니다.
+      </p>
+      <div className="flex items-center gap-3">
+        <select
+          value={currentTz}
+          onChange={(e) => onSave(e.target.value)}
+          disabled={isPending}
+          className={cn(
+            'flex-1 px-3 py-2 text-sm rounded-md',
+            'border border-input bg-background',
+            'focus:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+            'disabled:opacity-50',
+          )}
+        >
+          {TIMEZONE_OPTIONS.map((tz) => (
+            <option key={tz.value} value={tz.value}>{tz.label}</option>
+          ))}
+        </select>
+      </div>
+      <p className="text-xs text-muted-foreground mt-2">
+        현재 시간: {preview}
+      </p>
     </div>
   )
 }

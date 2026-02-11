@@ -14,11 +14,13 @@ import {
   Play,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useTimezone } from '@/hooks/useTimezone'
 
 type FilterType = 'all' | 'sync' | 'embedding' | 'image_sync' | 'nsx' | 'auth' | 'member' | 'oauth' | 'note' | 'notebook' | 'access' | 'share_link' | 'settings' | 'admin'
 
 export default function Operations() {
   const [filter, setFilter] = useState<FilterType>('all')
+  const timezone = useTimezone()
 
   const {
     status: syncStatus,
@@ -78,7 +80,7 @@ export default function Operations() {
               <p>동기화된 노트: <span className="text-foreground font-medium">{notesSynced.toLocaleString()}개</span></p>
             )}
             {lastSync && (
-              <p>마지막 동기화: {new Date(lastSync).toLocaleString('ko-KR')}</p>
+              <p>마지막 동기화: {new Date(lastSync).toLocaleString('ko-KR', { timeZone: timezone })}</p>
             )}
             {syncError && <p className="text-destructive text-xs">{syncError}</p>}
           </div>
@@ -251,7 +253,7 @@ export default function Operations() {
                     )}
                   </div>
                   <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                    <span>{new Date(item.created_at).toLocaleString('ko-KR')}</span>
+                    <span>{new Date(item.created_at).toLocaleString('ko-KR', { timeZone: timezone })}</span>
                     {item.triggered_by && <span>by {item.triggered_by}</span>}
                     {item.details && item.status === 'completed' && (
                       <span className="text-foreground/60">

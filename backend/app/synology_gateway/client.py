@@ -229,6 +229,41 @@ class SynologyClient:
 
         raise SynologyApiError(error_code)
 
+    async def post_request(
+        self,
+        api: str,
+        method: str,
+        version: int = 1,
+        **params: object,
+    ) -> dict:
+        """Perform an authenticated POST API request against the Synology NAS.
+
+        Same session management as :meth:`request` but uses HTTP POST,
+        which is required for write operations with large payloads.
+        """
+        if self._sid is None:
+            await self.login()
+
+        result = await self._raw_post_request(api, method, version, **params)
+
+        if result.get("success"):
+            return result.get("data", {})
+
+        error_code = result.get("error", {}).get("code", 0)
+
+        if error_code in _SESSION_EXPIRED_CODES:
+            logger.info("Session expired (code=%d), re-authenticating...", error_code)
+            await self.login()
+            result = await self._raw_post_request(api, method, version, **params)
+
+            if result.get("success"):
+                return result.get("data", {})
+
+            retry_code = result.get("error", {}).get("code", 0)
+            raise SynologyApiError(retry_code)
+
+        raise SynologyApiError(error_code)
+
     async def _raw_request(
         self,
         api: str,
@@ -252,6 +287,28 @@ class SynologyClient:
         response = await self._client.get(
             f"{self._url}/webapi/entry.cgi",
             params=query,
+        )
+        return response.json()
+
+    async def _raw_post_request(
+        self,
+        api: str,
+        method: str,
+        version: int,
+        **extra_params: object,
+    ) -> dict:
+        """Send a raw POST request to the Synology ``/webapi/entry.cgi``."""
+        payload: dict[str, object] = {
+            "api": api,
+            "version": version,
+            "method": method,
+            "_sid": self._sid,
+            **extra_params,
+        }
+
+        response = await self._client.post(
+            f"{self._url}/webapi/entry.cgi",
+            data=payload,
         )
         return response.json()
 

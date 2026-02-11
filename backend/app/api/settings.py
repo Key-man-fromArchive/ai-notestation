@@ -96,6 +96,7 @@ _SETTING_DESCRIPTIONS: dict[str, str] = {
     "sync_interval_minutes": "Note synchronization interval in minutes",
     "embedding_model": "Embedding model for semantic search",
     "max_search_results": "Maximum number of search results returned",
+    "timezone": "Display timezone (e.g. Asia/Seoul, UTC)",
 }
 
 
@@ -114,6 +115,7 @@ def _get_default_settings() -> dict[str, Any]:
         "sync_interval_minutes": 30,
         "embedding_model": "text-embedding-3-small",
         "max_search_results": 20,
+        "timezone": "Asia/Seoul",
     }
 
 
@@ -338,6 +340,12 @@ def get_nas_config() -> dict[str, str]:
         "user": store["nas_user"],
         "password": store["nas_password"],
     }
+
+
+def get_timezone() -> str:
+    """Return the configured display timezone (default: Asia/Seoul)."""
+    store = _get_store()
+    return store.get("timezone", "Asia/Seoul")
 
 
 # ---------------------------------------------------------------------------

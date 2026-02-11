@@ -35,6 +35,15 @@ class Note(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
+    # NAS image proxy fields (link_id + ver for constructing NAS image URLs)
+    link_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    nas_ver: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    # Bidirectional sync fields
+    sync_status: Mapped[str] = mapped_column(String(20), server_default="synced", default="synced")
+    local_modified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    remote_conflict_data: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
     # Full-text search vector
     search_vector: Mapped[str | None] = mapped_column(TSVECTOR, nullable=True)
 
@@ -42,6 +51,7 @@ class Note(Base):
         Index("idx_notes_search_vector", "search_vector", postgresql_using="gin"),
         Index("idx_notes_notebook", "notebook_name"),
         Index("idx_notes_synced_at", "synced_at"),
+        Index("idx_notes_sync_status", "sync_status"),
     )
 
 

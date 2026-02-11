@@ -1,114 +1,102 @@
 # CLAUDE.md
 
-> 이 파일은 Claude Code가 프로젝트 컨텍스트를 빠르게 파악하도록 돕습니다.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## 프로젝트 개요
+## Project Overview
 
-- **이름**: LabNote AI (ai-notestation)
-- **설명**: Synology NoteStation을 AI로 강화하는 웹 앱. 검색, 인사이트 도출, 연구노트 작성, 맞춤법 교정, 템플릿 생성 기능 제공
-- **기술 스택**: FastAPI (Python 3.12+) + React 19 + Vite + TailwindCSS + shadcn/ui + PostgreSQL 16 + pgvector
-- **Git Remote**: `https://github.com/Key-man-fromArchive/ai-notestation.git`
+LabNote AI enhances Synology NoteStation with AI capabilities: hybrid search (FTS + semantic), AI-powered insights, research note generation, spell checking, and template creation.
 
-## 빠른 시작
+**Tech Stack**: FastAPI (Python 3.12+) + React 19 + Vite + TailwindCSS + shadcn/ui + PostgreSQL 16 + pgvector
+
+## Development Commands
 
 ```bash
-# 전체 스택 실행
+# Full stack (Docker)
 docker compose up -d
 
-# 백엔드 개발
-cd backend && pip install -e ".[dev]" && uvicorn app.main:app --reload
+# Backend development
+cd backend
+pip install -e ".[dev]"
+uvicorn app.main:app --reload --port 8000
 
-# 프론트엔드 개발
-cd frontend && npm install && npm run dev
+# Frontend development
+cd frontend
+npm install
+npm run dev
 
-# 테스트
+# Run all backend tests
 cd backend && pytest --tb=short
-cd frontend && npm test
+
+# Run single backend test file
+cd backend && pytest tests/test_ai_router.py -v
+
+# Run tests matching pattern
+cd backend && pytest -k "test_hybrid" -v
+
+# Backend with coverage
+cd backend && pytest --cov=app --cov-report=term-missing
+
+# Frontend tests
+cd frontend && npm test           # run once
+cd frontend && npm run test:watch # watch mode
+cd frontend && npm run test:e2e   # Playwright e2e
+
+# Linting
+cd backend && ruff check .
+cd backend && ruff format .
+cd frontend && npm run lint
+
+# DB migrations
+cd backend && alembic upgrade head           # apply all
+cd backend && alembic revision --autogenerate -m "description"  # create new
 ```
 
-## 프로젝트 구조
+## Architecture
 
-```
-labnote-ai/
-├── docker-compose.yml
-├── .env.example
-├── CLAUDE.md
-├── backend/
-│   ├── Dockerfile
-│   ├── pyproject.toml
-│   ├── app/
-│   │   ├── main.py
-│   │   ├── config.py
-│   │   ├── database.py
-│   │   ├── models.py
-│   │   ├── synology_gateway/    # Synology NAS API 래퍼
-│   │   ├── ai_router/           # AI 통합 라우터 (GPT, Claude, Gemini, GLM)
-│   │   ├── search/              # 하이브리드 검색 (FTS + pgvector)
-│   │   ├── api/                 # REST + SSE 엔드포인트
-│   │   └── services/            # 동기화, 인증
-│   ├── alembic/                 # DB 마이그레이션
-│   └── tests/
-├── frontend/
-│   ├── Dockerfile
-│   ├── src/
-│   │   ├── pages/               # React.lazy 코드 스플리팅
-│   │   ├── components/          # shadcn/ui 기반, 가상화 리스트
-│   │   ├── hooks/               # TanStack Query, SSE 스트리밍
-│   │   └── lib/                 # API 클라이언트, 쿼리 설정
-│   └── public/
-└── docs/
-    ├── plans/
-    │   ├── 2026-01-29-labnote-ai-design.md  # 설계 문서
-    │   └── 06-tasks.md                       # 태스크 목록
-    └── Synology_File_Station_API_Guide.md    # API 참조
-```
+### Backend (`backend/app/`)
 
-## 컨벤션
+**Entry point**: `main.py` - FastAPI app with lifespan, CORS, and router includes for all API endpoints under `/api`.
 
-- 커밋 메시지: Conventional Commits (한글 허용)
-- 브랜치 전략: `main`, `phase/{N}-{feature}` (Git Worktree)
-- 백엔드 코드 스타일: ruff (lint + format)
-- 프론트엔드 코드 스타일: ESLint + Prettier
-- UI 테마: Light mode only (다크 모드 없음)
+**Key Modules**:
 
-## 핵심 설계 결정
+- `ai_router/` - Multi-provider AI integration with unified interface
+  - `router.py` - `AIRouter` class auto-detects providers from env vars, routes requests to correct provider
+  - `providers/base.py` - `AIProvider` ABC defining `chat()`, `stream()`, `available_models()`
+  - `providers/` - OpenAI, Anthropic, Google, ZhipuAI implementations
+  - `prompts/` - Task-specific prompt templates (insight, writing, spellcheck, search_qa, template)
 
-- **AI 스트리밍**: SSE (Server-Sent Events) via FastAPI StreamingResponse
-- **검색**: Progressive search (FTS 즉시 반환 → 의미검색 비동기 병합)
-- **노트 목록**: @tanstack/react-virtual 가상화 (1000+ 노트 지원)
-- **데이터 페칭**: TanStack Query (캐싱, staleTime, 무한 스크롤)
-- **마크다운 렌더링**: react-markdown + rehype-sanitize (XSS 방지)
-- **접근성**: Radix 기반 shadcn/ui + 커스텀 ARIA 속성 + motion-reduce 지원
+- `search/` - Hybrid search engine
+  - `engine.py` - `FullTextSearchEngine` (tsvector), `SemanticSearchEngine` (pgvector), `HybridSearchEngine` (RRF merge)
+  - `embeddings.py` - `EmbeddingService` for text→vector conversion
+  - `indexer.py` - `NoteIndexer` for indexing notes
 
----
+- `synology_gateway/` - Synology NAS API wrappers (NoteStation, FileStation)
 
-## Auto-Orchestrate 진행 상황
+- `services/` - Business logic (sync, auth, OAuth)
 
-> 이 섹션은 `/auto-orchestrate` 실행 시 자동으로 업데이트됩니다.
+- `api/` - REST endpoints: auth, notes, notebooks, search, ai, sync, settings, oauth, files, nsx, members, sharing
 
-### 완료된 Phase
+**Database**: SQLAlchemy 2.0 async with asyncpg. Models in `models.py`. Migrations via Alembic.
 
-| Phase | 태스크 | 완료일 | 주요 내용 |
-|-------|--------|--------|----------|
-| P0 | 5/5 | 2026-01-29 | 모노레포 구조, Docker Compose, FastAPI, React, DB 스키마 |
-| P1 | 4/4 | 2026-01-29 | Synology 클라이언트, NoteStation/FileStation 래퍼, 동기화 서비스 |
-| P2 | 5/5 | 2026-01-29 | 임베딩 서비스, 노트 인덱서, 전문검색, 의미검색, 하이브리드검색(RRF) |
-| P3 | 7/7 | 2026-01-29 | Provider ABC, OpenAI/Anthropic/Gemini/ZhipuAI Provider, 통합 라우터+SSE, 프롬프트 템플릿 |
-| P4 | 6/6 | 2026-01-29 | JWT 인증, Notes/Search/AI/Sync/Settings API 엔드포인트 |
-| P5 | 3/3 | 2026-01-30 | App Shell, Notes/NoteDetail, Search/AI/Settings/Dashboard |
+### Frontend (`frontend/src/`)
 
-### 현재 Phase
+- `pages/` - Route components with React.lazy code splitting
+- `components/` - shadcn/ui based, includes virtualized list for 1000+ notes
+- `hooks/` - TanStack Query for data fetching, SSE streaming hooks
+- `lib/` - API client, query configuration
 
-- 전체 완료 (30/30 태스크)
+### Key Patterns
 
-### 재개 명령어
+**AI Streaming**: SSE via FastAPI `StreamingResponse`. Router yields `data: {json}\n\n` chunks, ends with `data: [DONE]\n\n`.
 
-```bash
-/auto-orchestrate --resume
-```
+**Progressive Search**: FTS returns instantly (Phase 1), semantic search runs async, results merged via RRF (Phase 2).
 
----
+**Provider Auto-detection**: `AIRouter` checks env vars (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc.) and registers available providers.
 
-## Lessons Learned
+## Conventions
 
-> 에이전트가 난관을 극복하며 발견한 교훈을 기록합니다.
+- Commits: Conventional Commits (Korean allowed)
+- Branches: `main`, `phase/{N}-{feature}` (Git Worktree)
+- Backend: ruff (lint + format)
+- Frontend: ESLint + Prettier
+- UI: Light mode only

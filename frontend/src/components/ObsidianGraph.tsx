@@ -230,7 +230,7 @@ export function ObsidianGraph({
         </div>
       )}
 
-      <div ref={containerRef} className="w-full h-full bg-background">
+      <div ref={containerRef} className="w-full h-full bg-zinc-900">
         <ForceGraph2D
           ref={graphRef}
           width={dimensions.width}
@@ -246,7 +246,7 @@ export function ObsidianGraph({
           }}
           nodeRelSize={6}
           nodeVal={(node: GraphNodeObject) => node.size + 1}
-          linkColor={() => 'rgba(156, 163, 175, 0.3)'}
+          linkColor={() => 'rgba(156, 163, 175, 0.5)'}
           linkWidth={(link: GraphLinkObject) => Math.max(0.5, link.weight * 2)}
           onNodeClick={handleNodeClick}
           onNodeHover={(node: GraphNodeObject | null) => setHoveredNode(node)}

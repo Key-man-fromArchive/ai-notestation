@@ -11,13 +11,14 @@ import { SearchBar } from '@/components/SearchBar'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
 import { EmptyState } from '@/components/EmptyState'
 import { useSearchIndex } from '@/hooks/useSearchIndex'
-import { Search as SearchIcon, FileText, AlertCircle, Loader2, Filter, X, Sparkles } from 'lucide-react'
+import { Search as SearchIcon, FileText, AlertCircle, Loader2, Filter, X, Sparkles, TextSearch, Calendar } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useTimezone } from '@/hooks/useTimezone'
 
 export default function Search() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [query, setQuery] = useState(searchParams.get('q') || '')
-  const [searchMode, setSearchMode] = useState<'search' | 'hybrid'>('search')
+  const [searchMode, setSearchMode] = useState<'search' | 'hybrid' | 'exact'>('search')
   const [showFilters, setShowFilters] = useState(false)
   const [notebook, setNotebook] = useState(searchParams.get('notebook') || '')
   const [dateFrom, setDateFrom] = useState(searchParams.get('date_from') || '')
@@ -48,6 +49,7 @@ export default function Search() {
     triggerIndex,
   } = useSearchIndex()
 
+  const timezone = useTimezone()
   const hasEmbeddings = indexedNotes > 0
 
   // Notebooks for filter dropdown
@@ -112,6 +114,18 @@ export default function Search() {
         <div className="flex items-center gap-3 mt-4">
           {/* 모드 세그먼트 */}
           <div className="inline-flex rounded-lg border border-border p-0.5 bg-muted/30">
+            <button
+              onClick={() => setSearchMode('exact')}
+              className={cn(
+                'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
+                searchMode === 'exact'
+                  ? 'bg-primary text-primary-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              <TextSearch className="h-3.5 w-3.5" />
+              전문검색
+            </button>
             <button
               onClick={() => setSearchMode('search')}
               className={cn(
@@ -340,6 +354,17 @@ export default function Search() {
                             />
                             {(result.score * 100).toFixed(0)}%
                           </span>
+                          {result.created_at && (
+                            <span className="inline-flex items-center gap-1">
+                              <Calendar className="h-3 w-3" />
+                              작성 {new Date(result.created_at).toLocaleDateString('ko-KR', { timeZone: timezone })}
+                            </span>
+                          )}
+                          {result.updated_at && (
+                            <span>
+                              수정 {new Date(result.updated_at).toLocaleDateString('ko-KR', { timeZone: timezone })}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>

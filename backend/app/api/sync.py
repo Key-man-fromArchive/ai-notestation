@@ -22,9 +22,13 @@ import asyncio
 import logging
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, BackgroundTasks, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.database import get_db
+from app.models import Note
 from app.services.auth_service import get_current_user
 
 logger = logging.getLogger(__name__)
@@ -54,6 +58,9 @@ class SyncStatusResponse(BaseModel):
     notes_missing_images: int | None = None
     notes_indexed: int | None = None
     notes_pending_index: int | None = None
+    pushed_count: int | None = None
+    conflicts_count: int | None = None
+    write_enabled: bool | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -84,6 +91,9 @@ class SyncState:
         self.notes_missing_images: int | None = None
         self.notes_indexed: int | None = None
         self.notes_pending_index: int | None = None
+        self.pushed_count: int | None = None
+        self.conflicts_count: int | None = None
+        self.write_enabled: bool | None = None
         self.triggered_by: str | None = None
 
 
@@ -125,9 +135,14 @@ async def _create_sync_service() -> tuple:
         raise Sync2FARequiredError("2FA 계정은 자동 동기화를 지원하지 않습니다. NSX 파일을 가져오기하세요.")
 
     notestation = NoteStationService(client)
-    service = SyncService(notestation=notestation, db=session)
 
-    return service, session
+    # Discover write capability for bidirectional sync
+    write_enabled = await notestation.discover_write_capability()
+    logger.info("NoteStation write capability: %s", write_enabled)
+
+    service = SyncService(notestation=notestation, db=session, write_enabled=write_enabled)
+
+    return service, session, write_enabled
 
 
 async def _count_notes_missing_images() -> int:
@@ -226,21 +241,26 @@ async def _run_sync_background(state: SyncState) -> None:
     await log_activity("sync", "started", triggered_by=state.triggered_by)
 
     try:
-        service, session = await _create_sync_service()
+        service, session, write_enabled = await _create_sync_service()
+        state.write_enabled = write_enabled
         try:
             result = await service.sync_all()
             await session.commit()
 
             state.last_sync_at = result.synced_at.isoformat()
             state.notes_synced = result.total
+            state.pushed_count = result.pushed
+            state.conflicts_count = result.conflicts
             state.notes_missing_images = await _count_notes_missing_images()
 
             logger.info(
-                "Sync completed: total=%d, added=%d, updated=%d, deleted=%d",
+                "Sync completed: total=%d, added=%d, updated=%d, deleted=%d, pushed=%d, conflicts=%d",
                 result.total,
                 result.added,
                 result.updated,
                 result.deleted,
+                result.pushed,
+                result.conflicts,
             )
 
             # Phase 2: Index notes that need embeddings
@@ -284,6 +304,8 @@ async def _run_sync_background(state: SyncState) -> None:
                     "added": result.added,
                     "updated": result.updated,
                     "deleted": result.deleted,
+                    "pushed": result.pushed,
+                    "conflicts": result.conflicts,
                     "total": result.total,
                     "notes_indexed": state.notes_indexed,
                 },
@@ -356,4 +378,249 @@ async def get_sync_status(
         notes_missing_images=_sync_state.notes_missing_images,
         notes_indexed=_sync_state.notes_indexed,
         notes_pending_index=_sync_state.notes_pending_index,
+        pushed_count=_sync_state.pushed_count,
+        conflicts_count=_sync_state.conflicts_count,
+        write_enabled=_sync_state.write_enabled,
     )
+
+
+# ---------------------------------------------------------------------------
+# Single-note push sync
+# ---------------------------------------------------------------------------
+
+
+class NoteSyncResponse(BaseModel):
+    """Response for a single-note push/pull sync."""
+
+    status: str  # "success" | "error" | "skipped" | "conflict"
+    message: str
+
+
+# Keep alias for backward compatibility in type hints
+NotePushResponse = NoteSyncResponse
+
+
+@router.post("/push/{note_id}", response_model=NoteSyncResponse)
+async def push_note(
+    note_id: str,
+    force: bool = False,
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> NoteSyncResponse:
+    """Push a single note to NAS (NoteStation).
+
+    Only pushes if the note was locally modified. Checks NAS modification
+    time to prevent overwriting newer remote changes.
+
+    Args:
+        force: If True, skip conflict checks and overwrite NAS.
+    """
+    from app.services.activity_log import log_activity
+
+    username = current_user.get("username", "unknown")
+
+    # Fetch the note from local DB
+    result = await db.execute(select(Note).where(Note.synology_note_id == note_id))
+    note = result.scalar_one_or_none()
+    if not note:
+        raise HTTPException(status_code=404, detail="노트를 찾을 수 없습니다.")
+
+    # Guard: only push if locally modified
+    if not note.local_modified_at and not force:
+        return NoteSyncResponse(
+            status="skipped",
+            message="로컬에서 수정된 내용이 없습니다.",
+        )
+
+    try:
+        service, sync_session, write_enabled = await _create_sync_service()
+    except Sync2FARequiredError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        logger.exception("NAS connection failed: %s", exc)
+        raise HTTPException(status_code=502, detail=f"NAS 연결 실패: {exc}")
+
+    if not write_enabled:
+        await sync_session.close()
+        raise HTTPException(
+            status_code=400,
+            detail="NoteStation 쓰기 권한이 없습니다. NAS 설정을 확인하세요.",
+        )
+
+    try:
+        # Conflict check: was NAS modified AFTER our local edit?
+        if not force:
+            nas_note = await service._notestation.get_note(note.synology_note_id)
+            nas_mtime = nas_note.get("mtime")
+            compare_dt = note.local_modified_at or note.source_updated_at
+            if nas_mtime and compare_dt:
+                nas_dt = datetime.fromtimestamp(nas_mtime, tz=UTC)
+                if nas_dt > compare_dt:
+                    from zoneinfo import ZoneInfo
+                    from app.api.settings import get_timezone
+                    nas_local = nas_dt.astimezone(ZoneInfo(get_timezone()))
+                    await sync_session.close()
+                    return NoteSyncResponse(
+                        status="conflict",
+                        message=f"NAS에서 더 최근에 수정되었습니다 ({nas_local.strftime('%m/%d %H:%M')}). 강제 푸시하려면 다시 시도하세요.",
+                    )
+
+        from app.utils.note_utils import inline_local_file_images, restore_nas_image_urls
+
+        # Convert local images: /api/files/ -> data URI, /api/images/ -> NAS ref
+        push_content = note.content_html or ""
+        push_content = inline_local_file_images(push_content)
+        push_content = restore_nas_image_urls(push_content)
+
+        await service._notestation.update_note(
+            object_id=note.synology_note_id,
+            title=note.title,
+            content=push_content,
+        )
+
+        # Mark as synced
+        note.sync_status = "synced"
+        note.local_modified_at = None
+        note.source_updated_at = datetime.now(UTC)
+        await db.commit()
+
+        await log_activity(
+            "sync",
+            "note_pushed",
+            message=f"노트 '{note.title}' NAS 동기화 완료",
+            details={"note_id": note_id},
+            triggered_by=username,
+        )
+
+        return NoteSyncResponse(
+            status="success",
+            message=f"'{note.title}' NAS 동기화 완료",
+        )
+
+    except Exception as exc:
+        logger.exception("Failed to push note %s: %s", note_id, exc)
+        return NoteSyncResponse(
+            status="error",
+            message=f"동기화 실패: {exc}",
+        )
+
+    finally:
+        await sync_session.close()
+
+
+# ---------------------------------------------------------------------------
+# Single-note pull sync (NAS → local)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/pull/{note_id}", response_model=NoteSyncResponse)
+async def pull_note(
+    note_id: str,
+    force: bool = False,
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> NoteSyncResponse:
+    """Pull a single note from NAS (NoteStation) into local DB.
+
+    Fetches the latest version from NAS and updates the local note.
+    If the local note has unsaved modifications, returns a conflict
+    unless ``force=True``.
+
+    Args:
+        force: If True, overwrite local modifications with NAS version.
+    """
+    from app.services.activity_log import log_activity
+    from app.synology_gateway.notestation import NoteStationService
+    from app.utils.note_utils import rewrite_image_urls
+
+    username = current_user.get("username", "unknown")
+
+    # Fetch the note from local DB
+    result = await db.execute(select(Note).where(Note.synology_note_id == note_id))
+    note = result.scalar_one_or_none()
+    if not note:
+        raise HTTPException(status_code=404, detail="노트를 찾을 수 없습니다.")
+
+    # Guard: protect local modifications
+    if note.local_modified_at and not force:
+        return NoteSyncResponse(
+            status="conflict",
+            message="로컬에서 수정된 내용이 있습니다. 덮어쓰시겠습니까?",
+        )
+
+    try:
+        service, sync_session, _write_enabled = await _create_sync_service()
+    except Sync2FARequiredError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        logger.exception("NAS connection failed: %s", exc)
+        raise HTTPException(status_code=502, detail=f"NAS 연결 실패: {exc}")
+
+    try:
+        nas_note = await service._notestation.get_note(note.synology_note_id)
+
+        # Check if NAS has newer content
+        nas_mtime = nas_note.get("mtime")
+        if nas_mtime and note.source_updated_at and not force:
+            nas_dt = datetime.fromtimestamp(nas_mtime, tz=UTC)
+            if nas_dt <= note.source_updated_at:
+                return NoteSyncResponse(
+                    status="skipped",
+                    message="NAS에 변경된 내용이 없습니다.",
+                )
+
+        # Update local note with NAS data
+        content_html = nas_note.get("content", "")
+        note.title = nas_note.get("title", note.title)
+        note.content_html = content_html
+        note.content_text = NoteStationService.extract_text(content_html)
+
+        # Update tags
+        tag_raw = nas_note.get("tag")
+        if isinstance(tag_raw, dict):
+            note.tags = list(tag_raw.values()) if tag_raw else None
+        elif isinstance(tag_raw, list):
+            note.tags = tag_raw if tag_raw else None
+
+        # Update timestamps
+        if nas_note.get("ctime"):
+            note.source_created_at = datetime.fromtimestamp(nas_note["ctime"], tz=UTC)
+        if nas_mtime:
+            note.source_updated_at = datetime.fromtimestamp(nas_mtime, tz=UTC)
+
+        # Update NAS metadata (link_id, ver) for image proxy URLs
+        if nas_note.get("link_id"):
+            note.link_id = nas_note["link_id"]
+        if nas_note.get("ver"):
+            note.nas_ver = nas_note["ver"]
+
+        # Clear local modification state
+        note.sync_status = "synced"
+        note.local_modified_at = None
+        note.remote_conflict_data = None
+        note.synced_at = datetime.now(UTC)
+
+        await db.commit()
+
+        await log_activity(
+            "sync",
+            "note_pulled",
+            message=f"노트 '{note.title}' NAS에서 가져오기 완료",
+            details={"note_id": note_id},
+            triggered_by=username,
+        )
+
+        return NoteSyncResponse(
+            status="success",
+            message=f"'{note.title}' NAS에서 가져오기 완료",
+        )
+
+    except Exception as exc:
+        logger.exception("Failed to pull note %s: %s", note_id, exc)
+        return NoteSyncResponse(
+            status="error",
+            message=f"가져오기 실패: {exc}",
+        )
+
+    finally:
+        await sync_session.close()
