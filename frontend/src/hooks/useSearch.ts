@@ -21,7 +21,7 @@ interface SearchResponse {
   total: number
 }
 
-type SearchType = 'search' | 'semantic'
+type SearchType = 'search' | 'semantic' | 'hybrid'
 
 interface SearchFilters {
   notebook?: string

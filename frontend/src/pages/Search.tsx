@@ -10,12 +10,14 @@ import { useNotebooks } from '@/hooks/useNotebooks'
 import { SearchBar } from '@/components/SearchBar'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
 import { EmptyState } from '@/components/EmptyState'
-import { Search as SearchIcon, FileText, AlertCircle, Loader2, Filter, X } from 'lucide-react'
+import { useSearchIndex } from '@/hooks/useSearchIndex'
+import { Search as SearchIcon, FileText, AlertCircle, Loader2, Filter, X, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export default function Search() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [query, setQuery] = useState(searchParams.get('q') || '')
+  const [searchMode, setSearchMode] = useState<'search' | 'hybrid'>('search')
   const [showFilters, setShowFilters] = useState(false)
   const [notebook, setNotebook] = useState(searchParams.get('notebook') || '')
   const [dateFrom, setDateFrom] = useState(searchParams.get('date_from') || '')
@@ -37,7 +39,16 @@ export default function Search() {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
-  } = useSearch(query, 'search', filters)
+  } = useSearch(query, searchMode, filters)
+
+  const {
+    indexedNotes,
+    pendingNotes,
+    isIndexing,
+    triggerIndex,
+  } = useSearchIndex()
+
+  const hasEmbeddings = indexedNotes > 0
 
   // Notebooks for filter dropdown
   const { data: notebooksData } = useNotebooks()
@@ -97,8 +108,36 @@ export default function Search() {
         {/* 검색 바 */}
         <SearchBar value={query} onChange={setQuery} />
 
-        {/* 필터 토글 */}
-        <div className="flex items-center gap-2 mt-4">
+        {/* 검색 모드 + 필터 */}
+        <div className="flex items-center gap-3 mt-4">
+          {/* 모드 세그먼트 */}
+          <div className="inline-flex rounded-lg border border-border p-0.5 bg-muted/30">
+            <button
+              onClick={() => setSearchMode('search')}
+              className={cn(
+                'px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
+                searchMode === 'search'
+                  ? 'bg-primary text-primary-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              키워드 검색
+            </button>
+            <button
+              onClick={() => setSearchMode('hybrid')}
+              className={cn(
+                'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
+                searchMode === 'hybrid'
+                  ? 'bg-primary text-primary-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              AI 하이브리드
+            </button>
+          </div>
+
+          {/* 필터 버튼 */}
           <button
             onClick={() => setShowFilters(!showFilters)}
             className={cn(
@@ -118,6 +157,33 @@ export default function Search() {
             )}
           </button>
         </div>
+
+        {/* 하이브리드 모드 임베딩 경고 */}
+        {searchMode === 'hybrid' && !hasEmbeddings && (
+          <div className="flex items-start gap-3 mt-3 p-4 rounded-lg bg-amber-50 border border-amber-200 text-sm">
+            <AlertCircle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="font-medium text-amber-800">AI 검색을 위해 임베딩 색인이 필요합니다</p>
+              <p className="text-amber-700 mt-0.5">
+                하이브리드 검색은 키워드 결과만 반환됩니다. 의미 검색 결과를 포함하려면 색인을 실행해주세요.
+              </p>
+            </div>
+            {pendingNotes > 0 && !isIndexing && (
+              <button
+                onClick={() => triggerIndex()}
+                className={cn(
+                  'shrink-0 px-3 py-1.5 rounded-md text-xs font-medium',
+                  'bg-amber-600 text-white hover:bg-amber-700 transition-colors'
+                )}
+              >
+                색인 시작
+              </button>
+            )}
+            {isIndexing && (
+              <Loader2 className="h-4 w-4 animate-spin text-amber-600 shrink-0 mt-0.5" />
+            )}
+          </div>
+        )}
 
         {/* 필터 패널 */}
         {showFilters && (
