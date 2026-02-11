@@ -4,7 +4,7 @@
     <strong>당신의 시놀로지 NAS에 잠든 노트를 깨우는 AI 연구 플랫폼</strong>
   </p>
   <p align="center">
-    <a href="#quickstart">빠른 시작</a> · <a href="#features">핵심 기능</a> · <a href="#architecture">아키텍처</a> · <a href="#api">API 문서</a>
+    <a href="#quickstart">빠른 시작</a> · <a href="#features">핵심 기능</a> · <a href="#architecture">아키텍처</a> · <a href="#api">API 문서</a> · <a href="README.en.md">English</a>
   </p>
 </p>
 
