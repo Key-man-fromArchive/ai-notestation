@@ -34,7 +34,7 @@ export function AIChat({ feature, model, className }: AIChatProps) {
   const { content, isStreaming, error, matchedNotes, startStream, stopStream, reset } =
     useAIStream()
   const [copied, setCopied] = useState(false)
-  const [templateType, setTemplateType] = useState(TEMPLATE_TYPES[0])
+  const [templateType, setTemplateType] = useState<(typeof TEMPLATE_TYPES)[number]>(TEMPLATE_TYPES[0])
 
   const isSearchMode = feature === 'insight'
   const isTemplateMode = feature === 'template'
@@ -77,7 +77,7 @@ export function AIChat({ feature, model, className }: AIChatProps) {
         {isTemplateMode && (
           <select
             value={templateType}
-            onChange={(e) => setTemplateType(e.target.value)}
+            onChange={(e) => setTemplateType(e.target.value as typeof TEMPLATE_TYPES[number])}
             disabled={isStreaming}
             className={cn(
               'px-3 py-2 border border-input rounded-md',

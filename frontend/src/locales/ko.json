@@ -474,7 +474,13 @@
     "sharedBy": "공유한 사용자",
     "sharePassword": "비밀번호 보호",
     "enterPassword": "비밀번호를 입력하세요",
-    "accessDenied": "접근이 거부되었습니다"
+    "accessDenied": "접근이 거부되었습니다",
+    "linkTypePublic": "공개 링크",
+    "publicDesc": "누구나 접근 가능",
+    "linkTypeEmail": "이메일 필수",
+    "emailDesc": "특정 이메일만 접근 가능",
+    "linkTypeTimeLimited": "기간 제한",
+    "timeLimitedDesc": "지정된 기간 동안만 유효"
   },
   "librarian": {
     "title": "AI 사서",

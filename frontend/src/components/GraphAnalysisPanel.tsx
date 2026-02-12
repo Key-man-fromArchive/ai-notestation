@@ -78,7 +78,7 @@ export function GraphAnalysisPanel({
   }, [graphData?.links])
 
   const nodeMap = useMemo(() => {
-    if (!graphData?.nodes) return new Map<number, (typeof graphData.nodes)[number]>()
+    if (!graphData?.nodes) return new Map<number, GraphData['nodes'][number]>()
     return new Map(graphData.nodes.map(n => [n.id, n]))
   }, [graphData?.nodes])
 
@@ -90,7 +90,7 @@ export function GraphAnalysisPanel({
       return [...neighborIds]
         .map(id => nodeMap.get(id))
         .filter(Boolean)
-        .map(n => ({ id: n!.id, note_key: n!.note_key, label: n!.label, notebook: n!.notebook }))
+        .map(n => ({ id: n!.id, label: n!.label, notebook: n!.notebook }))
     },
     [adjacencyMap, nodeMap]
   )
@@ -240,7 +240,7 @@ export function GraphAnalysisPanel({
                           neighbors.map(n => (
                             <button
                               key={n.id}
-                              onClick={() => navigate(`/notes/${n.note_key}`)}
+                              onClick={() => navigate(`/notes/${n.id}`)}
                               className="w-full text-left px-1.5 py-1 rounded hover:bg-accent text-xs truncate text-muted-foreground hover:text-foreground flex items-center gap-1"
                             >
                               <span className="truncate">{n.label}</span>

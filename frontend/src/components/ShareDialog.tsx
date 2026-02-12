@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   X,
   Link as LinkIcon,
@@ -19,6 +20,29 @@ interface ShareDialogProps {
   onClose: () => void
 }
 
+function getLinkTypeOptions(t: (key: string) => string) {
+  return [
+    {
+      value: 'public',
+      label: t('sharing.linkTypePublic'),
+      description: t('sharing.publicDesc'),
+      icon: Globe,
+    },
+    {
+      value: 'email_required',
+      label: t('sharing.linkTypeEmail'),
+      description: t('sharing.emailDesc'),
+      icon: Mail,
+    },
+    {
+      value: 'time_limited',
+      label: t('sharing.linkTypeTimeLimited'),
+      description: t('sharing.timeLimitedDesc'),
+      icon: Clock,
+    },
+  ] as const
+}
+
 function formatDate(dateString: string): string {
   return new Date(dateString).toLocaleDateString('ko-KR', {
     year: 'numeric',
@@ -36,6 +60,7 @@ function LinkRow({
   onRevoke: (id: number) => void
   isRevoking: boolean
 }) {
+  const { t } = useTranslation()
   const [copied, setCopied] = useState(false)
   const shareUrl = `${window.location.origin}/shared/${link.token}`
 
@@ -57,7 +82,7 @@ function LinkRow({
     }
   }
 
-  const typeOption = LINK_TYPE_OPTIONS.find(opt => opt.value === link.link_type)
+  const typeOption = getLinkTypeOptions(t).find(opt => opt.value === link.link_type)
   const Icon = typeOption?.icon ?? LinkIcon
 
   return (
@@ -108,6 +133,7 @@ function LinkRow({
 }
 
 export function ShareDialog({ notebookId, isOpen, onClose }: ShareDialogProps) {
+  const { t } = useTranslation()
   const {
     links,
     isLoading,
@@ -208,7 +234,7 @@ export function ShareDialog({ notebookId, isOpen, onClose }: ShareDialogProps) {
                 </label>
 
                 <div className="space-y-2 mb-4">
-                  {LINK_TYPE_OPTIONS.map(option => (
+                  {getLinkTypeOptions(t).map(option => (
                     <label
                       key={option.value}
                       className={cn(

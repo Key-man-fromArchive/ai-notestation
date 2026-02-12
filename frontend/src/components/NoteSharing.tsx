@@ -94,6 +94,7 @@ function AccessRow({
 }
 
 export function NoteSharing({ noteId, isOpen, onClose }: NoteSharingProps) {
+  const { t } = useTranslation()
   const {
     accesses,
     canManage,
@@ -203,7 +204,7 @@ export function NoteSharing({ noteId, isOpen, onClose }: NoteSharingProps) {
                       onChange={e => setPermission(e.target.value)}
                       className="px-3 py-2 border border-input rounded-lg text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
-                      {PERMISSION_OPTIONS.map(opt => (
+                      {getPermissionOptions(t).map(opt => (
                         <option key={opt.value} value={opt.value}>
                           {opt.label}
                         </option>

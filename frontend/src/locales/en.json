@@ -474,7 +474,13 @@
     "sharedBy": "Shared by",
     "sharePassword": "Password protection",
     "enterPassword": "Enter password",
-    "accessDenied": "Access denied"
+    "accessDenied": "Access denied",
+    "linkTypePublic": "Public Link",
+    "publicDesc": "Anyone can access",
+    "linkTypeEmail": "Email Required",
+    "emailDesc": "Only specific email can access",
+    "linkTypeTimeLimited": "Time Limited",
+    "timeLimitedDesc": "Valid only for specified period"
   },
   "librarian": {
     "title": "AI Librarian",
