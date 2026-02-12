@@ -214,7 +214,20 @@ const markdownComponents: Components = {
  * - NoteStation 이미지 플레이스홀더 카드 렌더링
  * - 코드 블록, 테이블, 리스트 스타일링
  */
+/**
+ * Strip outer code fence when the entire content is wrapped in a single
+ * ```markdown or ``` block. AI models sometimes wrap their markdown output
+ * this way, causing ReactMarkdown to render it as a code block.
+ */
+function stripOuterCodeFence(text: string): string {
+  const trimmed = text.trim()
+  const match = trimmed.match(/^```(?:markdown|md)?\s*\n([\s\S]*?)\n```\s*$/)
+  return match ? match[1] : text
+}
+
 export function MarkdownRenderer({ content, className }: MarkdownRendererProps) {
+  const processed = React.useMemo(() => stripOuterCodeFence(content), [content])
+
   return (
     <div
       className={cn(
@@ -237,7 +250,7 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
         rehypePlugins={[rehypeRaw, [rehypeSanitize, sanitizeSchema]]}
         components={markdownComponents}
       >
-        {content}
+        {processed}
       </ReactMarkdown>
     </div>
   )

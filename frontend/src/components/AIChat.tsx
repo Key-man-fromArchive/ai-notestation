@@ -20,12 +20,22 @@ interface AIChatProps {
  * - aria-live="polite" for streaming response
  * - AbortController로 스트림 정리
  */
+const TEMPLATE_TYPES = [
+  { id: 'experiment_log', label: '실험 기록' },
+  { id: 'lab_report', label: '실험 보고서' },
+  { id: 'meeting_notes', label: '회의록' },
+  { id: 'paper_review', label: '논문 리뷰' },
+  { id: 'research_proposal', label: '연구 제안서' },
+] as const
+
 export function AIChat({ feature, model, className }: AIChatProps) {
   const { content, isStreaming, error, matchedNotes, startStream, stopStream, reset } =
     useAIStream()
   const [copied, setCopied] = useState(false)
+  const [templateType, setTemplateType] = useState(TEMPLATE_TYPES[0].id)
 
   const isSearchMode = feature === 'insight'
+  const isTemplateMode = feature === 'template'
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(content)
@@ -36,7 +46,17 @@ export function AIChat({ feature, model, className }: AIChatProps) {
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     const formData = new FormData(e.currentTarget)
-    const message = formData.get('message') as string
+    const message = (formData.get('message') as string) ?? ''
+
+    if (isTemplateMode) {
+      await startStream({
+        message: templateType,
+        feature,
+        model,
+        options: message.trim() ? { custom_instructions: message.trim() } : {},
+      })
+      return
+    }
 
     if (!message.trim()) return
 
@@ -52,10 +72,36 @@ export function AIChat({ feature, model, className }: AIChatProps) {
     <div className={cn('flex flex-col gap-4', className)}>
       {/* 입력 폼 */}
       <form onSubmit={handleSubmit} className="flex gap-2">
+        {isTemplateMode && (
+          <select
+            value={templateType}
+            onChange={(e) => setTemplateType(e.target.value)}
+            disabled={isStreaming}
+            className={cn(
+              'px-3 py-2 border border-input rounded-md',
+              'bg-background text-foreground text-sm',
+              'focus:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              'disabled:opacity-50 disabled:cursor-not-allowed'
+            )}
+            aria-label="템플릿 유형 선택"
+          >
+            {TEMPLATE_TYPES.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.label}
+              </option>
+            ))}
+          </select>
+        )}
         <input
           type="text"
           name="message"
-          placeholder={isSearchMode ? '검색어를 입력하세요 (예: asg pcr)...' : '메시지를 입력하세요...'}
+          placeholder={
+            isTemplateMode
+              ? '추가 요청사항 (선택)...'
+              : isSearchMode
+                ? '검색어를 입력하세요 (예: asg pcr)...'
+                : '메시지를 입력하세요...'
+          }
           disabled={isStreaming}
           className={cn(
             'flex-1 px-4 py-2 border border-input rounded-md',
@@ -66,7 +112,7 @@ export function AIChat({ feature, model, className }: AIChatProps) {
             'transition-all duration-200',
             'motion-reduce:transition-none'
           )}
-          aria-label="AI 메시지 입력"
+          aria-label={isTemplateMode ? '추가 요청사항 입력' : 'AI 메시지 입력'}
         />
         {isStreaming ? (
           <button
@@ -173,9 +219,11 @@ export function AIChat({ feature, model, className }: AIChatProps) {
             <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
               <Send className="h-8 w-8 mb-3 opacity-30" />
               <p className="text-sm">
-                {isSearchMode
-                  ? '검색어를 입력하면 관련 노트를 찾아 인사이트를 도출합니다'
-                  : '메시지를 입력하고 전송을 눌러 시작하세요'}
+                {isTemplateMode
+                  ? '템플릿 유형을 선택하고 전송을 눌러 생성하세요'
+                  : isSearchMode
+                    ? '검색어를 입력하면 관련 노트를 찾아 인사이트를 도출합니다'
+                    : '메시지를 입력하고 전송을 눌러 시작하세요'}
               </p>
             </div>
           )}
