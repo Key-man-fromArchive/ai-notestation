@@ -2,6 +2,7 @@
 // @SPEC docs/plans/2026-01-29-labnote-ai-design.md#동기화-훅
 // @TEST src/__tests__/useSync.test.ts
 
+import { useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/lib/api'
 
@@ -10,7 +11,6 @@ interface SyncStatus {
   last_sync_at: string | null
   notes_synced: number | null
   error_message: string | null
-  notes_missing_images: number | null
 }
 
 /**
@@ -18,9 +18,11 @@ interface SyncStatus {
  * - 동기화 상태 조회
  * - 동기화 트리거
  * - 폴링으로 실시간 상태 업데이트
+ * - 동기화 완료 시 노트/노트북 쿼리 자동 무효화
  */
 export function useSync() {
   const queryClient = useQueryClient()
+  const prevStatusRef = useRef<string>('idle')
 
   const { data, isLoading } = useQuery<SyncStatus>({
     queryKey: ['sync', 'status'],
@@ -32,6 +34,14 @@ export function useSync() {
     },
   })
 
+  // 동기화 완료 감지 → 노트/노트북 쿼리 무효화
+  const currentStatus = data?.status || 'idle'
+  if (prevStatusRef.current === 'syncing' && currentStatus !== 'syncing') {
+    queryClient.invalidateQueries({ queryKey: ['notes'] })
+    queryClient.invalidateQueries({ queryKey: ['notebooks'] })
+  }
+  prevStatusRef.current = currentStatus
+
   const triggerMutation = useMutation({
     mutationFn: () => apiClient.post('/sync/trigger', {}),
     onSuccess: () => {
@@ -41,11 +51,10 @@ export function useSync() {
   })
 
   return {
-    status: data?.status || 'idle',
+    status: currentStatus,
     lastSync: data?.last_sync_at,
     notesSynced: data?.notes_synced,
     error: data?.error_message,
-    notesMissingImages: data?.notes_missing_images ?? 0,
     isLoading,
     triggerSync: triggerMutation.mutateAsync,
     isSyncing: triggerMutation.isPending,
