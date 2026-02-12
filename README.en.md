@@ -40,6 +40,27 @@ LabNote AI imports your NoteStation notes and adds **AI-powered search**, **insi
 
 ---
 
+## What's New in v1.2.0
+
+### Always-Editable Notes with Auto-Save
+Notes now feel like a real notebook, not a bulletin board. No more clicking "Edit" — just open and start writing.
+
+- **Always editable**: Editor is active the moment you open a note
+- **Auto-save**: Saves automatically 3 seconds after you stop typing
+- **Periodic save**: Saves every 30 seconds during continuous editing
+- **Save on navigate**: Auto-saves when leaving the page
+- **Ctrl+S**: Manual save still works
+- **Status indicator**: Subtle "Saved" / "Saving..." / "Save failed" in the footer
+
+### Note Editor UX Improvements
+- Real-time word/character count updates
+- Toolbar active state reflects current formatting
+- New "Create Note" UI with notebook selection
+- Local-only notes can now be synced to NAS
+- Login page language selector
+
+---
+
 ## What's New in v1.1.0
 
 ### Internationalization (i18n)
