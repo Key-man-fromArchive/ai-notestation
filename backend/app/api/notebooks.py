@@ -56,10 +56,10 @@ class NotebooksListResponse(BaseModel):
 @router.get("")
 async def list_notebooks(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[dict, Depends(get_current_user)],
 ) -> NotebooksListResponse:
     """List all notebooks accessible to the current user with note counts."""
-    accessible_notebook_ids = await get_accessible_notebooks(db, current_user.id)
+    accessible_notebook_ids = await get_accessible_notebooks(db, current_user["user_id"])
 
     if not accessible_notebook_ids:
         return NotebooksListResponse(items=[], total=0)
@@ -95,7 +95,7 @@ async def list_notebooks(
 async def create_notebook(
     notebook: NotebookCreate,
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[dict, Depends(get_current_user)],
 ) -> NotebookResponse:
     """Create a new notebook and grant ADMIN permission to creator."""
     new_notebook = Notebook(
@@ -110,17 +110,17 @@ async def create_notebook(
     await grant_notebook_access(
         db=db,
         notebook_id=new_notebook.id,
-        user_id=current_user.id,
+        user_id=current_user["user_id"],
         org_id=None,
         permission=NotePermission.ADMIN,
-        granted_by=current_user.id,
+        granted_by=current_user["user_id"],
     )
 
     await db.commit()
     await log_activity(
         "notebook", "completed",
         message=f"노트북 생성: {notebook.name}",
-        triggered_by=current_user.email,
+        triggered_by=current_user["email"],
     )
     await db.refresh(new_notebook)
 
@@ -143,10 +143,10 @@ async def create_notebook(
 async def get_notebook(
     notebook_id: int,
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[dict, Depends(get_current_user)],
 ) -> NotebookResponse:
     """Get notebook details by ID (requires READ permission)."""
-    has_access = await check_notebook_access(db, current_user.id, notebook_id, NotePermission.READ)
+    has_access = await check_notebook_access(db, current_user["user_id"], notebook_id, NotePermission.READ)
     if not has_access:
         raise HTTPException(status_code=403, detail="Insufficient permission to access this notebook")
 
@@ -177,10 +177,10 @@ async def update_notebook(
     notebook_id: int,
     notebook: NotebookUpdate,
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[dict, Depends(get_current_user)],
 ) -> NotebookResponse:
     """Update notebook (requires WRITE permission)."""
-    has_access = await check_notebook_access(db, current_user.id, notebook_id, NotePermission.WRITE)
+    has_access = await check_notebook_access(db, current_user["user_id"], notebook_id, NotePermission.WRITE)
     if not has_access:
         raise HTTPException(status_code=403, detail="Insufficient permission to update this notebook")
 
@@ -200,7 +200,7 @@ async def update_notebook(
     await log_activity(
         "notebook", "completed",
         message=f"노트북 수정: {existing_notebook.name}",
-        triggered_by=current_user.email,
+        triggered_by=current_user["email"],
     )
     await db.refresh(existing_notebook)
 
@@ -223,10 +223,10 @@ async def update_notebook(
 async def delete_notebook(
     notebook_id: int,
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[dict, Depends(get_current_user)],
 ) -> dict:
     """Delete notebook (requires ADMIN permission, fails if notebook has notes)."""
-    has_access = await check_notebook_access(db, current_user.id, notebook_id, NotePermission.ADMIN)
+    has_access = await check_notebook_access(db, current_user["user_id"], notebook_id, NotePermission.ADMIN)
     if not has_access:
         raise HTTPException(status_code=403, detail="Insufficient permission to delete this notebook")
 
@@ -251,7 +251,7 @@ async def delete_notebook(
     await log_activity(
         "notebook", "completed",
         message=f"노트북 삭제: {notebook.name}",
-        triggered_by=current_user.email,
+        triggered_by=current_user["email"],
     )
 
     return {"success": True}
@@ -284,9 +284,9 @@ class AccessListResponse(BaseModel):
 async def list_notebook_access(
     notebook_id: int,
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[dict, Depends(get_current_user)],
 ) -> AccessListResponse:
-    if not await can_manage_notebook_access(db, notebook_id, current_user.id):
+    if not await can_manage_notebook_access(db, notebook_id, current_user["user_id"]):
         raise HTTPException(status_code=403, detail="No permission to manage access")
 
     access_list = await get_notebook_access_list(db, notebook_id)
@@ -327,9 +327,9 @@ async def grant_notebook_access_endpoint(
     notebook_id: int,
     request: AccessGrantRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[dict, Depends(get_current_user)],
 ) -> AccessResponse:
-    if not await can_manage_notebook_access(db, notebook_id, current_user.id):
+    if not await can_manage_notebook_access(db, notebook_id, current_user["user_id"]):
         raise HTTPException(status_code=403, detail="No permission to manage access")
 
     stmt = select(User).where(User.email == request.email)
@@ -345,7 +345,7 @@ async def grant_notebook_access_endpoint(
     permission = permission_map[request.permission]
 
     new_access = await grant_notebook_access(
-        db, notebook_id=notebook_id, user_id=user.id, permission=permission, granted_by=current_user.id
+        db, notebook_id=notebook_id, user_id=user.id, permission=permission, granted_by=current_user["user_id"]
     )
 
     permission_str = "read"
@@ -358,7 +358,7 @@ async def grant_notebook_access_endpoint(
         "access", "completed",
         message=f"노트북 접근 권한 부여: {request.email} ({request.permission})",
         details={"notebook_id": notebook_id},
-        triggered_by=current_user.email,
+        triggered_by=current_user["email"],
     )
 
     return AccessResponse(
@@ -378,9 +378,9 @@ async def update_notebook_access(
     access_id: int,
     request: AccessUpdateRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[dict, Depends(get_current_user)],
 ) -> AccessResponse:
-    if not await can_manage_notebook_access(db, notebook_id, current_user.id):
+    if not await can_manage_notebook_access(db, notebook_id, current_user["user_id"]):
         raise HTTPException(status_code=403, detail="No permission to manage access")
 
     from app.models import NotebookAccess
@@ -408,7 +408,7 @@ async def update_notebook_access(
         notebook_id=notebook_id,
         user_id=existing_access.user_id,
         permission=new_permission,
-        granted_by=current_user.id,
+        granted_by=current_user["user_id"],
     )
 
     permission_str = "read"
@@ -429,7 +429,7 @@ async def update_notebook_access(
         "access", "completed",
         message=f"노트북 접근 권한 변경: {request.permission}",
         details={"notebook_id": notebook_id, "access_id": access_id},
-        triggered_by=current_user.email,
+        triggered_by=current_user["email"],
     )
 
     return AccessResponse(
@@ -448,9 +448,9 @@ async def revoke_notebook_access_endpoint(
     notebook_id: int,
     access_id: int,
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[dict, Depends(get_current_user)],
 ) -> dict:
-    if not await can_manage_notebook_access(db, notebook_id, current_user.id):
+    if not await can_manage_notebook_access(db, notebook_id, current_user["user_id"]):
         raise HTTPException(status_code=403, detail="No permission to manage access")
 
     from app.models import NotebookAccess
@@ -472,7 +472,7 @@ async def revoke_notebook_access_endpoint(
         "access", "completed",
         message="노트북 접근 권한 회수",
         details={"notebook_id": notebook_id, "access_id": access_id},
-        triggered_by=current_user.email,
+        triggered_by=current_user["email"],
     )
 
     return {"success": True}

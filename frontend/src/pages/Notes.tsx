@@ -3,21 +3,144 @@
 // @TEST frontend/src/__tests__/Notes.test.tsx
 
 import { useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
-import { FileText, AlertCircle, FolderOpen, Folder, BookOpen, Search, X } from 'lucide-react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { FileText, AlertCircle, FolderOpen, Folder, BookOpen, Search, X, Plus } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { useNotes } from '@/hooks/useNotes'
+import { useNotes, useCreateNote } from '@/hooks/useNotes'
 import { useNotebooks } from '@/hooks/useNotebooks'
 import { NoteList } from '@/components/NoteList'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
 import { EmptyState } from '@/components/EmptyState'
 import { cn } from '@/lib/utils'
 
+function CreateNoteModal({
+  isOpen,
+  onClose,
+  defaultNotebook,
+}: {
+  isOpen: boolean
+  onClose: () => void
+  defaultNotebook?: string
+}) {
+  const { t } = useTranslation()
+  const navigate = useNavigate()
+  const createNote = useCreateNote()
+  const { data: notebooksData } = useNotebooks()
+  const [title, setTitle] = useState('')
+  const [notebook, setNotebook] = useState(defaultNotebook || '')
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!title.trim()) return
+
+    try {
+      const result = await createNote.mutateAsync({
+        title: title.trim(),
+        content: '',
+        notebook: notebook || undefined,
+      })
+      setTitle('')
+      setNotebook('')
+      onClose()
+      navigate(`/notes/${result.note_id}`)
+    } catch {
+      // mutation error handled by TanStack Query
+    }
+  }
+
+  if (!isOpen) return null
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative bg-card rounded-lg border border-border shadow-lg w-full max-w-md mx-4">
+        <div className="flex items-center justify-between p-4 border-b border-border">
+          <h2 className="text-lg font-semibold">{t('notes.createModalTitle')}</h2>
+          <button
+            onClick={onClose}
+            className="p-1 rounded hover:bg-muted transition-colors"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <form onSubmit={handleSubmit} className="p-4 space-y-4">
+          <div>
+            <label htmlFor="note-title" className="block text-sm font-medium mb-1">
+              {t('notes.titleLabel')}
+            </label>
+            <input
+              id="note-title"
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder={t('notes.titlePlaceholder')}
+              className={cn(
+                'flex h-9 w-full rounded-md border border-input bg-background px-3 py-2',
+                'text-sm placeholder:text-muted-foreground',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              )}
+              autoFocus
+              required
+            />
+          </div>
+          <div>
+            <label htmlFor="note-notebook" className="block text-sm font-medium mb-1">
+              {t('notes.notebookLabel')}
+            </label>
+            <select
+              id="note-notebook"
+              value={notebook}
+              onChange={(e) => setNotebook(e.target.value)}
+              className={cn(
+                'flex h-9 w-full rounded-md border border-input bg-background px-3 py-2',
+                'text-sm',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              )}
+            >
+              <option value="">{t('notes.noNotebookOption')}</option>
+              {notebooksData?.items.map((nb) => (
+                <option key={nb.id} value={nb.name}>
+                  {nb.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className={cn(
+                'px-4 py-2 text-sm rounded-md border border-input',
+                'hover:bg-muted transition-colors',
+              )}
+            >
+              {t('common.cancel')}
+            </button>
+            <button
+              type="submit"
+              disabled={!title.trim() || createNote.isPending}
+              className={cn(
+                'px-4 py-2 text-sm rounded-md',
+                'bg-primary text-primary-foreground',
+                'hover:bg-primary/90 transition-colors',
+                'disabled:opacity-50 disabled:cursor-not-allowed',
+              )}
+            >
+              {createNote.isPending ? t('common.creating') : t('common.create')}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 export default function Notes() {
   const { t, i18n } = useTranslation()
   const [searchParams, setSearchParams] = useSearchParams()
   const selectedNotebook = searchParams.get('notebook') || undefined
   const [filterText, setFilterText] = useState('')
+  const [isCreateOpen, setIsCreateOpen] = useState(false)
 
   // 노트 목록 데이터
   const {
@@ -97,11 +220,21 @@ export default function Notes() {
   // 빈 상태
   if (allNotes.length === 0 && !selectedNotebook) {
     return (
-      <EmptyState
-        icon={FileText}
-        title={t('notes.noNotes')}
-        description={t('notes.noNotesDesc')}
-      />
+      <>
+        <EmptyState
+          icon={FileText}
+          title={t('notes.noNotes')}
+          description={t('notes.noNotesDesc')}
+          action={{
+            label: t('notes.newNote'),
+            onClick: () => setIsCreateOpen(true),
+          }}
+        />
+        <CreateNoteModal
+          isOpen={isCreateOpen}
+          onClose={() => setIsCreateOpen(false)}
+        />
+      </>
     )
   }
 
@@ -226,6 +359,17 @@ export default function Notes() {
                 {filterText ? `${filteredNotes.length} / ${t('common.count_items', { count: totalNotes })}` : t('common.count_items', { count: totalNotes })}
               </span>
             </div>
+            <button
+              onClick={() => setIsCreateOpen(true)}
+              className={cn(
+                'flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md',
+                'bg-primary text-primary-foreground',
+                'hover:bg-primary/90 transition-colors',
+              )}
+            >
+              <Plus className="h-4 w-4" />
+              {t('notes.newNote')}
+            </button>
           </div>
 
           {/* 빠른 필터 */}
@@ -284,6 +428,12 @@ export default function Notes() {
           )}
         </div>
       </main>
+
+      <CreateNoteModal
+        isOpen={isCreateOpen}
+        onClose={() => setIsCreateOpen(false)}
+        defaultNotebook={selectedNotebook}
+      />
     </div>
   )
 }

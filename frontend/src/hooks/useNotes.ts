@@ -2,9 +2,16 @@
 // @SPEC docs/plans/2026-01-29-labnote-ai-design.md#데이터-페칭
 // @TEST frontend/src/__tests__/Notes.test.tsx
 
-import { useInfiniteQuery } from '@tanstack/react-query'
-import { apiClient } from '@/lib/api'
-import type { NotesResponse } from '@/types/note'
+import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { apiClient, ApiError } from '@/lib/api'
+import type { Note, NotesResponse } from '@/types/note'
+
+interface NoteCreateRequest {
+  title: string
+  content: string
+  notebook?: string
+  tags?: string[]
+}
 
 interface UseNotesOptions {
   notebook?: string
@@ -37,5 +44,16 @@ export function useNotes({ notebook, limit = 20 }: UseNotesOptions = {}) {
       return nextOffset < lastPage.total ? nextOffset : undefined
     },
     initialPageParam: 0,
+  })
+}
+
+export function useCreateNote() {
+  const queryClient = useQueryClient()
+
+  return useMutation<Note, ApiError, NoteCreateRequest>({
+    mutationFn: request => apiClient.post<Note>('/notes', request),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notes'] })
+    },
   })
 }
