@@ -294,6 +294,17 @@ async def _run_sync_background(state: SyncState) -> None:
                     state.notes_indexed = 0
 
             state.notes_pending_index = await _count_notes_pending_index()
+
+            # Refresh graph materialized view after indexing
+            try:
+                from app.services.graph_service import refresh_avg_embeddings
+                from app.database import async_session_factory
+
+                async with async_session_factory() as mv_session:
+                    await refresh_avg_embeddings(mv_session)
+            except Exception:
+                logger.warning("Failed to refresh graph materialized view after sync", exc_info=True)
+
             state.status = "completed"
             state.error_message = None
             await log_activity(

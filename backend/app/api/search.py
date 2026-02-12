@@ -454,6 +454,16 @@ async def _run_index_background(state: IndexState) -> None:
 
             await asyncio.sleep(0.5)
 
+        # Refresh graph materialized view after indexing
+        try:
+            from app.services.graph_service import refresh_avg_embeddings
+            from app.database import async_session_factory
+
+            async with async_session_factory() as mv_session:
+                await refresh_avg_embeddings(mv_session)
+        except Exception:
+            logger.warning("Failed to refresh graph materialized view after indexing", exc_info=True)
+
         state.status = "completed"
         await log_activity(
             "embedding",
