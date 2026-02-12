@@ -2,6 +2,7 @@
   <h1 align="center">LabNote AI</h1>
   <p align="center">
     <strong>An AI research platform that brings your Synology NAS notes to life</strong>
+    AI-powered note-taking for Synology Note Station, Synology NAS, Note Station, LLM integration synology, note-station, nas, llm, ai-notes, note-taking, obsidian-like
   </p>
   <p align="center">
     <a href="#quickstart">Quick Start</a> · <a href="#features">Features</a> · <a href="#architecture">Architecture</a> · <a href="#api">API Docs</a> · <a href="README.md">한국어</a>
