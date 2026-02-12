@@ -14,7 +14,7 @@ import TableRow from '@tiptap/extension-table-row'
 import TableCell from '@tiptap/extension-table-cell'
 import TableHeader from '@tiptap/extension-table-header'
 import Placeholder from '@tiptap/extension-placeholder'
-import CharacterCount from '@tiptap/extension-character-count'
+// CharacterCount extension removed — word/char counts computed manually for reliability
 import { useTranslation } from 'react-i18next'
 import { apiClient } from '@/lib/api'
 import { cn } from '@/lib/utils'
@@ -125,6 +125,9 @@ function ToolbarSep() {
 export function NoteEditor({ noteId, initialContent, onSave, onCancel }: NoteEditorProps) {
   const { t } = useTranslation()
   const [isSaving, setIsSaving] = useState(false)
+  const [wordCount, setWordCount] = useState(0)
+  const [charCount, setCharCount] = useState(0)
+  const [, setRenderKey] = useState(0)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   const token = apiClient.getToken()
@@ -145,7 +148,6 @@ export function NoteEditor({ noteId, initialContent, onSave, onCancel }: NoteEdi
       Placeholder.configure({
         placeholder: t('notes.editorPlaceholder', 'Start writing...'),
       }),
-      CharacterCount,
     ],
     [t]
   )
@@ -165,10 +167,34 @@ export function NoteEditor({ noteId, initialContent, onSave, onCancel }: NoteEdi
     },
   })
 
+  // Sync content when initialContent changes
   useEffect(() => {
     if (!editor) return
     editor.commands.setContent(addNasImageTokens(initialContent || '', token))
   }, [editor, initialContent, token])
+
+  // Update word/char count and force re-render for toolbar active states
+  useEffect(() => {
+    if (!editor) return
+
+    const updateCounts = () => {
+      const text = editor.getText({ blockSeparator: '\n' })
+      setCharCount(text.length)
+      const trimmed = text.trim()
+      setWordCount(trimmed ? trimmed.split(/\s+/).length : 0)
+    }
+
+    updateCounts()
+    const forceRender = () => setRenderKey(k => k + 1)
+
+    editor.on('update', updateCounts)
+    editor.on('selectionUpdate', forceRender)
+
+    return () => {
+      editor.off('update', updateCounts)
+      editor.off('selectionUpdate', forceRender)
+    }
+  }, [editor])
 
   const handleSave = useCallback(async () => {
     if (!editor || isSaving) return
@@ -236,9 +262,6 @@ export function NoteEditor({ noteId, initialContent, onSave, onCancel }: NoteEdi
 
     event.target.value = ''
   }
-
-  const charCount = editor?.storage.characterCount?.characters() ?? 0
-  const wordCount = editor?.storage.characterCount?.words() ?? 0
 
   const iconSize = 'h-4 w-4'
 
