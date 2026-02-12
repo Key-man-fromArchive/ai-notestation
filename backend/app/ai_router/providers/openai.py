@@ -339,7 +339,7 @@ class OpenAIProvider(AIProvider):
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _convert_messages(messages: list[Message]) -> list[dict[str, str]]:
+    def _convert_messages(messages: list[Message]) -> list[dict[str, Any]]:
         """Convert internal Message objects to OpenAI API format.
 
         Args:
@@ -347,5 +347,18 @@ class OpenAIProvider(AIProvider):
 
         Returns:
             List of dicts with ``role`` and ``content`` keys.
+            When images are present, content becomes a list of content parts.
         """
-        return [{"role": m.role, "content": m.content} for m in messages]
+        result: list[dict[str, Any]] = []
+        for m in messages:
+            if m.images:
+                content: list[dict[str, Any]] = [{"type": "text", "text": m.content}]
+                for img in m.images:
+                    content.append({
+                        "type": "image_url",
+                        "image_url": {"url": f"data:{img.mime_type};base64,{img.data}"},
+                    })
+                result.append({"role": m.role, "content": content})
+            else:
+                result.append({"role": m.role, "content": m.content})
+        return result

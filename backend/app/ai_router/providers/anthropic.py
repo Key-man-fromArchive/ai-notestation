@@ -72,21 +72,35 @@ class AnthropicProvider(AIProvider):
     @staticmethod
     def _separate_system_messages(
         messages: list[Message],
-    ) -> tuple[str | anthropic.NotGiven, list[dict[str, str]]]:
+    ) -> tuple[str | anthropic.NotGiven, list[dict[str, Any]]]:
         """Extract system messages and return them separately.
 
         Anthropic requires ``system`` to be passed as a top-level parameter
         rather than inside the ``messages`` list.
 
+        When images are present, content becomes a list of content blocks.
+
         Returns:
             A tuple of (system_text_or_NOT_GIVEN, non_system_messages).
         """
         system_parts: list[str] = []
-        api_messages: list[dict[str, str]] = []
+        api_messages: list[dict[str, Any]] = []
 
         for msg in messages:
             if msg.role == "system":
                 system_parts.append(msg.content)
+            elif msg.images:
+                content: list[dict[str, Any]] = [{"type": "text", "text": msg.content}]
+                for img in msg.images:
+                    content.append({
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": img.mime_type,
+                            "data": img.data,
+                        },
+                    })
+                api_messages.append({"role": msg.role, "content": content})
             else:
                 api_messages.append({"role": msg.role, "content": msg.content})
 

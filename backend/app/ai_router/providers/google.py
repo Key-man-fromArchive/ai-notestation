@@ -120,6 +120,7 @@ def _convert_messages(
     Separates system messages into a system_instruction string and
     converts the remaining messages to Gemini's content format.
     Role "assistant" is mapped to "model".
+    When images are present, inline_data parts are added.
 
     Returns:
         A tuple of (contents, system_instruction).
@@ -132,12 +133,16 @@ def _convert_messages(
             system_parts.append(msg.content)
         else:
             role = "model" if msg.role == "assistant" else msg.role
-            contents.append(
-                {
-                    "role": role,
-                    "parts": [{"text": msg.content}],
-                }
-            )
+            parts: list[dict[str, Any]] = [{"text": msg.content}]
+            if msg.images:
+                for img in msg.images:
+                    parts.append({
+                        "inline_data": {
+                            "mime_type": img.mime_type,
+                            "data": img.data,
+                        }
+                    })
+            contents.append({"role": role, "parts": parts})
 
     system_instruction = "\n".join(system_parts) if system_parts else None
     return contents, system_instruction

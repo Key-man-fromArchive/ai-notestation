@@ -108,6 +108,7 @@ export default function NoteDetail() {
       const res = await apiClient.post<{ content: string }>('/ai/chat', {
         feature: 'summarize',
         content: note.content || note.title,
+        note_id: note.note_id,
       })
       const parsed = JSON.parse(res.content)
       setSuggestedTitle(parsed.title || '')

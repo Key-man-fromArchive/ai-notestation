@@ -22,12 +22,12 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
-
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai_router.image_utils import extract_note_images
 from app.ai_router.prompts import insight, search_qa, spellcheck, summarize, template, writing
 from app.ai_router.router import AIRouter
-from app.ai_router.schemas import AIRequest, AIResponse, ModelInfo, ProviderError
+from app.ai_router.schemas import AIRequest, AIResponse, Message, ModelInfo, ProviderError
 from app.database import get_db
 from app.models import Note
 from app.search.engine import FullTextSearchEngine
@@ -203,12 +203,14 @@ class AIChatRequest(BaseModel):
         content: Primary content or question text.
         model: Optional model identifier. None means auto-select.
         options: Optional feature-specific parameters.
+        note_id: Optional note ID for multimodal image extraction.
     """
 
     feature: FeatureType
     content: str = Field(..., min_length=1)
     model: str | None = None
     options: dict | None = None
+    note_id: str | None = None
 
 
 class AIChatResponse(BaseModel):
@@ -245,6 +247,9 @@ class ProviderListResponse(BaseModel):
 
 
 _SEARCH_CONTENT_MAX_CHARS = 12_000
+
+# Features that support multimodal (image) analysis
+_MULTIMODAL_FEATURES: set[str] = {"insight", "summarize"}
 
 
 async def _search_and_fetch_notes(
@@ -420,6 +425,17 @@ async def ai_chat(
             detail=str(exc),
         ) from None
 
+    # Inject images from note for multimodal features
+    if request.note_id and request.feature in _MULTIMODAL_FEATURES:
+        images = await extract_note_images(request.note_id, db)
+        if images:
+            for i in range(len(messages) - 1, -1, -1):
+                if messages[i].role == "user":
+                    messages[i] = Message(
+                        role="user", content=messages[i].content, images=images
+                    )
+                    break
+
     # Inject OAuth token if user has one for the target provider
     effective_router = await _inject_oauth_if_available(
         ai_router, request.model, current_user["username"], db, oauth_service,
@@ -522,6 +538,17 @@ async def ai_stream(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(exc),
         ) from None
+
+    # Inject images from note for multimodal features
+    if request.note_id and request.feature in _MULTIMODAL_FEATURES:
+        images = await extract_note_images(request.note_id, db)
+        if images:
+            for i in range(len(messages) - 1, -1, -1):
+                if messages[i].role == "user":
+                    messages[i] = Message(
+                        role="user", content=messages[i].content, images=images
+                    )
+                    break
 
     # Inject OAuth token if user has one for the target provider
     effective_router = await _inject_oauth_if_available(

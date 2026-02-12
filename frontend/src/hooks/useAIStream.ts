@@ -9,6 +9,7 @@ interface StreamOptions {
   message: string
   feature: 'insight' | 'search_qa' | 'writing' | 'spellcheck' | 'template'
   model?: string
+  noteId?: string
   note_ids?: string[]
   options?: Record<string, unknown>
 }
@@ -67,6 +68,7 @@ export function useAIStream() {
           feature: options.feature,
           content: options.message,
           model: options.model || undefined,
+          note_id: options.noteId || undefined,
           options: {
             ...(options.note_ids ? { note_ids: options.note_ids } : {}),
             ...(options.options || {}),

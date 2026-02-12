@@ -63,6 +63,7 @@ export function NoteAIPanel({ noteId, noteContent, noteTitle }: NoteAIPanelProps
       message: truncated,
       feature: action,
       model: selectedModel || undefined,
+      noteId,
     })
   }
 

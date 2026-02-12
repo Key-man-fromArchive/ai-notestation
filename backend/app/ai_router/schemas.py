@@ -18,16 +18,25 @@ from typing import Literal
 from pydantic import BaseModel
 
 
+class ImageContent(BaseModel):
+    """Base64-encoded image data for multimodal AI requests."""
+
+    data: str  # base64 encoded bytes
+    mime_type: str  # e.g. "image/png"
+
+
 class Message(BaseModel):
     """A single chat message.
 
     Attributes:
         role: The role of the message sender (system, user, or assistant).
         content: The text content of the message.
+        images: Optional list of base64-encoded images for multimodal analysis.
     """
 
     role: Literal["system", "user", "assistant"]
     content: str
+    images: list[ImageContent] | None = None
 
 
 class ModelInfo(BaseModel):
