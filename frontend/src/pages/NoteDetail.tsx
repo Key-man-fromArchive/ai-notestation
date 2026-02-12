@@ -4,7 +4,7 @@
 
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Notebook, Tag, Paperclip, Image, File, AlertCircle, Calendar, Pencil, Share2, AlertTriangle, CloudOff, CloudUpload, CloudDownload, Loader2, Check } from 'lucide-react'
+import { ArrowLeft, Notebook, Tag, Paperclip, Image, File, AlertCircle, Calendar, Pencil, Share2, AlertTriangle, CloudOff, CloudUpload, CloudDownload, Loader2, Check, Sparkles, X } from 'lucide-react'
 import { apiClient } from '@/lib/api'
 import { useNote } from '@/hooks/useNote'
 import { useQueryClient } from '@tanstack/react-query'
@@ -32,6 +32,10 @@ export default function NoteDetail() {
   const [pullMessage, setPullMessage] = useState('')
   const { conflicts } = useConflicts()
   const timezone = useTimezone()
+  const [summarizeState, setSummarizeState] = useState<'idle' | 'loading' | 'preview'>('idle')
+  const [suggestedTitle, setSuggestedTitle] = useState('')
+  const [suggestedTags, setSuggestedTags] = useState<string[]>([])
+  const [isApplying, setIsApplying] = useState(false)
 
   const handlePushSync = async (force = false) => {
     if (!id || syncState === 'syncing') return
@@ -95,6 +99,47 @@ export default function NoteDetail() {
       setPullMessage('가져오기 실패')
       setTimeout(() => setPullState('idle'), 3000)
     }
+  }
+
+  const handleSummarize = async () => {
+    if (!note || summarizeState === 'loading') return
+    setSummarizeState('loading')
+    try {
+      const res = await apiClient.post<{ content: string }>('/ai/chat', {
+        feature: 'summarize',
+        content: note.content || note.title,
+      })
+      const parsed = JSON.parse(res.content)
+      setSuggestedTitle(parsed.title || '')
+      setSuggestedTags(parsed.tags || [])
+      setSummarizeState('preview')
+    } catch {
+      setSummarizeState('idle')
+    }
+  }
+
+  const handleApplySummary = async () => {
+    if (!note || isApplying) return
+    setIsApplying(true)
+    try {
+      await apiClient.put(`/notes/${note.note_id}`, {
+        title: suggestedTitle,
+        tags: suggestedTags,
+      })
+      queryClient.invalidateQueries({ queryKey: ['note', note.note_id] })
+      queryClient.invalidateQueries({ queryKey: ['notes'] })
+      setSummarizeState('idle')
+    } catch {
+      // keep preview open on error
+    } finally {
+      setIsApplying(false)
+    }
+  }
+
+  const handleCancelSummary = () => {
+    setSummarizeState('idle')
+    setSuggestedTitle('')
+    setSuggestedTags([])
   }
 
   // 로딩 상태
@@ -272,6 +317,18 @@ export default function NoteDetail() {
               </button>
             )}
             <button
+              onClick={handleSummarize}
+              disabled={summarizeState === 'loading'}
+              className="inline-flex items-center gap-2 text-xs px-2.5 py-1.5 rounded border border-input text-muted-foreground hover:text-foreground hover:border-violet-400/50 hover:text-violet-600"
+            >
+              {summarizeState === 'loading' ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Sparkles className="h-3.5 w-3.5" />
+              )}
+              {summarizeState === 'loading' ? '생성 중...' : '제목 생성'}
+            </button>
+            <button
               onClick={() => setIsSharingOpen(true)}
               className="inline-flex items-center gap-2 text-xs px-2.5 py-1.5 rounded border border-input text-muted-foreground hover:text-foreground hover:border-primary/30"
             >
@@ -287,6 +344,62 @@ export default function NoteDetail() {
             </button>
           </div>
         </div>
+
+        {/* AI 제목/태그 제안 미리보기 */}
+        {summarizeState === 'preview' && (
+          <div className="mb-4 rounded-lg border border-violet-200 bg-violet-50/50 p-4">
+            <div className="flex items-center gap-2 mb-3 text-sm font-medium text-violet-700">
+              <Sparkles className="h-4 w-4" />
+              AI 제안
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">제목</label>
+                <input
+                  type="text"
+                  value={suggestedTitle}
+                  onChange={(e) => setSuggestedTitle(e.target.value)}
+                  className="w-full px-3 py-1.5 text-sm rounded border border-violet-200 bg-white focus:outline-none focus:ring-2 focus:ring-violet-300"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">태그</label>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {suggestedTags.map((tag, i) => (
+                    <span
+                      key={i}
+                      className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-violet-100 text-violet-700"
+                    >
+                      {tag}
+                      <button
+                        onClick={() => setSuggestedTags(suggestedTags.filter((_, j) => j !== i))}
+                        className="hover:text-violet-900"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button
+                  onClick={handleCancelSummary}
+                  className="text-xs px-3 py-1.5 rounded border border-input text-muted-foreground hover:text-foreground"
+                >
+                  취소
+                </button>
+                <button
+                  onClick={handleApplySummary}
+                  disabled={isApplying}
+                  className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50"
+                >
+                  {isApplying && <Loader2 className="h-3 w-3 animate-spin" />}
+                  적용
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* 메타정보 */}
         <div className="flex flex-col gap-3 mb-6 pb-6 border-b border-border">

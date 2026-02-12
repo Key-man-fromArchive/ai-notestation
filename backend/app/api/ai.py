@@ -25,7 +25,7 @@ from pydantic import BaseModel, Field
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.ai_router.prompts import insight, search_qa, spellcheck, template, writing
+from app.ai_router.prompts import insight, search_qa, spellcheck, summarize, template, writing
 from app.ai_router.router import AIRouter
 from app.ai_router.schemas import AIRequest, AIResponse, ModelInfo, ProviderError
 from app.database import get_db
@@ -192,7 +192,7 @@ async def _inject_oauth_if_available(
 # ---------------------------------------------------------------------------
 
 
-FeatureType = Literal["insight", "search_qa", "writing", "spellcheck", "template"]
+FeatureType = Literal["insight", "search_qa", "writing", "spellcheck", "template", "summarize"]
 
 
 class AIChatRequest(BaseModel):
@@ -356,6 +356,8 @@ def _build_messages_for_feature(
             template_type=content,
             custom_instructions=opts.get("custom_instructions"),
         )
+    elif feature == "summarize":
+        return summarize.build_messages(note_content=content)
     else:
         # This should never happen due to Literal type validation
         raise ValueError(f"Unknown feature: {feature}")
