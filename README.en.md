@@ -2,7 +2,7 @@
   <h1 align="center">LabNote AI</h1>
   <p align="center">
     <strong>An AI research platform that brings your Synology NAS notes to life</strong>
-    
+
   AI-powered note-taking for Synology Note Station, Synology NAS, Note Station, LLM integration synology, note-station, nas, llm, ai-notes, note-taking, obsidian-like
   </p>
   <p align="center">
@@ -11,6 +11,7 @@
 </p>
 
 <p align="center">
+  <img src="https://img.shields.io/badge/version-1.1.0-blue?style=for-the-badge" alt="v1.1.0" />
   <img src="https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI" />
   <img src="https://img.shields.io/badge/React_19-61DAFB?style=for-the-badge&logo=react&logoColor=black" alt="React 19" />
   <img src="https://img.shields.io/badge/PostgreSQL_16-4169E1?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL" />
@@ -35,6 +36,26 @@ LabNote AI imports your NoteStation notes and adds **AI-powered search**, **insi
 
 ---
 
+## What's New in v1.1.0
+
+### Internationalization (i18n)
+- **Korean / English** UI switching — full frontend + backend i18n via react-i18next
+- 15+ files, ~150 translation keys applied
+
+### Search Parameter Tuning UI
+- **12 search algorithm parameters** adjustable directly from the UI (weights, thresholds, RRF k, etc.)
+- Search parameter help modal — visual guide for each parameter's role and recommended values
+
+### NAS Image Sync Stabilization
+- Editor display + push round-trip stabilization
+- Automatic extraction fix for large data URI images (365KB+)
+
+### Other Fixes
+- i18n TypeScript build error fixes
+- Settings.tsx missing useEffect import fix
+
+---
+
 <h2 id="features">Features</h2>
 
 ### 1. Search — Keyword Search & AI Semantic Search
@@ -46,6 +67,8 @@ LabNote AI imports your NoteStation notes and adds **AI-powered search**, **insi
 | **Semantic Search** | pgvector + OpenAI Embeddings | Finds notes with similar meaning and context (AI Librarian) |
 
 The main search merges FTS + Trigram results using RRF (Reciprocal Rank Fusion) for fast, accurate keyword search. Semantic search is available on the AI Librarian page for natural language queries.
+
+**New in v1.1.0**: 12-parameter search algorithm tuning UI with a help modal. Adjust weights, thresholds, and RRF k values directly to optimize search quality.
 
 <p align="center">
   <img src="docs/screenshots/search.png" alt="Search" width="800" />
@@ -69,6 +92,8 @@ Register a single API key and start using AI instantly. Register multiple provid
 | **Proofreading** | Spelling and grammar correction |
 | **Templates** | Generate note templates for specific purposes |
 
+Also supports multimodal image analysis and automatic title/tag generation.
+
 <p align="center">
   <img src="docs/screenshots/note-ai-panel.png" alt="Note AI Analysis Panel" width="800" />
 </p>
@@ -90,8 +115,9 @@ The AI Librarian uses semantic search to find relevant notes and displays result
 A **force-directed graph** visually reveals similarity between notes. Connection lines are computed using pgvector-based cosine similarity, letting you see your knowledge network at a glance.
 
 - **Global Graph**: A map of all note relationships (Obsidian-style)
-- **Discovery**: AI clustering by notebook — automatically groups similar notes
+- **Discovery**: AI clustering by notebook — automatically groups similar notes, with AI cluster insights
 - Adjustable similarity threshold (30%–95%) and note count (50–500)
+- Auto-refresh after indexing completes
 
 <p align="center">
   <img src="docs/screenshots/graph.png" alt="Knowledge Graph" width="800" />
@@ -99,8 +125,8 @@ A **force-directed graph** visually reveals similarity between notes. Connection
 
 ### 5. Full Synology NAS Integration
 
-- **Bidirectional Sync**: Import note/notebook structure directly from NoteStation
-- **Image Sync**: Extract and display attached images from FileStation
+- **Bidirectional Sync**: Import note/notebook structure directly from NoteStation (Pull & Push)
+- **Image Sync**: Extract and display attached images from FileStation, with stabilized NAS image round-trip
 - **NSX Import**: Directly import NoteStation export files (.nsx)
 - Sync status tracking with detailed change logging (added/modified/deleted)
 
@@ -139,6 +165,12 @@ No separate API keys needed — leverage **subscriptions you're already paying f
 - Role-based permission separation (settings changes require Admin or above)
 - Signup approval and account activation/deactivation
 
+### 10. Internationalization (i18n)
+
+- **Korean / English** UI switching — automatic browser language detection
+- react-i18next-based frontend + backend message internationalization
+- Language can be changed from the settings page
+
 ---
 
 ## Tech Stack
@@ -153,6 +185,7 @@ No separate API keys needed — leverage **subscriptions you're already paying f
 | **Search** | tsvector + pgvector + RRF | Keyword and semantic search in a single database |
 | **Infra** | Docker Compose (3 containers) | Full stack deployment with a single command |
 | **Visualization** | react-force-graph-2d | Interactive knowledge graph |
+| **i18n** | react-i18next | Frontend multilingual support |
 
 ---
 
@@ -285,7 +318,8 @@ labnote-ai/
 │   │   ├── pages/              # Pages (with code splitting)
 │   │   ├── components/         # shadcn/ui + custom components
 │   │   ├── hooks/              # TanStack Query, SSE, OAuth hooks
-│   │   └── lib/                # API client, utilities
+│   │   ├── lib/                # API client, utilities
+│   │   └── i18n/               # Translation resources (ko, en)
 │   └── e2e/                    # Playwright E2E tests
 │
 └── docs/
@@ -350,10 +384,13 @@ After launching the backend, access the auto-generated API documentation:
 ## Roadmap
 
 - [x] Anthropic OAuth integration (leverage Claude Pro/Max subscriptions) — 8 models supported
+- [x] Multilingual UI (Korean / English) — react-i18next-based full frontend + backend i18n
+- [x] Search algorithm parameter tuning UI — 12 parameters adjustable
+- [x] NAS image sync stabilization — editor display + push round-trip
 - [ ] Note version history
 - [ ] Mobile-optimized PWA
-- [ ] Multilingual UI (English / Japanese)
 - [ ] Plugin system
+- [ ] Note export (Markdown / PDF)
 
 ---
 
