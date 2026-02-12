@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { X, TrendingUp, AlertCircle, BarChart3, Layers, Sparkles, Loader2, Square, ChevronDown, ChevronRight, ExternalLink } from 'lucide-react'
 import type { GraphAnalysis, GraphData } from '@/hooks/useGlobalGraph'
 import { ModelSelector } from '@/components/ModelSelector'
+import { MarkdownRenderer } from '@/components/MarkdownRenderer'
 
 interface GraphAnalysisPanelProps {
   analysis: GraphAnalysis
@@ -322,11 +323,9 @@ export function GraphAnalysisPanel({
                 </div>
               )}
 
-              {/* AI Content (rendered as markdown-ish) */}
+              {/* AI Content */}
               {clusterInsight?.content && (
-                <div className="prose prose-sm prose-invert max-w-none text-sm leading-relaxed whitespace-pre-wrap">
-                  {clusterInsight.content}
-                </div>
+                <MarkdownRenderer content={clusterInsight.content} className="text-sm" />
               )}
 
               {/* Reset button */}

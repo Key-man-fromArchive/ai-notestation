@@ -126,45 +126,73 @@ async def get_global_graph(
     edge_cap = max_edges if max_edges > 0 else min(len(node_ids) * 3, 10000)
 
     # LATERAL JOIN: top-K neighbors per note using IVFFlat index
-    similarity_query = text("""
-        SELECT DISTINCT ON (LEAST(a.note_id, b.note_id), GREATEST(a.note_id, b.note_id))
-            a.note_id AS source,
-            b.note_id AS target,
-            1 - (a.avg_embedding <=> b.avg_embedding) AS similarity
-        FROM note_avg_embeddings a
-        CROSS JOIN LATERAL (
-            SELECT note_id, avg_embedding
-            FROM note_avg_embeddings
-            WHERE note_id != a.note_id
-              AND note_id = ANY(:node_ids)
-            ORDER BY avg_embedding <=> a.avg_embedding
-            LIMIT :k
-        ) b
-        WHERE a.note_id = ANY(:node_ids)
-          AND 1 - (a.avg_embedding <=> b.avg_embedding) > :threshold
-        ORDER BY LEAST(a.note_id, b.note_id),
-                 GREATEST(a.note_id, b.note_id),
-                 similarity DESC
-        LIMIT :max_edges
-    """)
+    # When limit=0, node_ids == entire note_avg_embeddings table, so the
+    # ANY(:node_ids) filter is redundant and prevents IVFFlat index usage.
+    # Removing it drops query time from ~34s to ~0.6s for 2300+ notes.
+    if limit == 0:
+        similarity_query = text("""
+            SELECT DISTINCT ON (LEAST(a.note_id, b.note_id), GREATEST(a.note_id, b.note_id))
+                a.note_id AS source,
+                b.note_id AS target,
+                1 - (a.avg_embedding <=> b.avg_embedding) AS similarity
+            FROM note_avg_embeddings a
+            CROSS JOIN LATERAL (
+                SELECT note_id, avg_embedding
+                FROM note_avg_embeddings
+                WHERE note_id != a.note_id
+                ORDER BY avg_embedding <=> a.avg_embedding
+                LIMIT :k
+            ) b
+            WHERE 1 - (a.avg_embedding <=> b.avg_embedding) > :threshold
+            ORDER BY LEAST(a.note_id, b.note_id),
+                     GREATEST(a.note_id, b.note_id),
+                     similarity DESC
+            LIMIT :max_edges
+        """)
+        query_params = {
+            "threshold": similarity_threshold,
+            "k": neighbors_per_note,
+            "max_edges": edge_cap,
+        }
+    else:
+        similarity_query = text("""
+            SELECT DISTINCT ON (LEAST(a.note_id, b.note_id), GREATEST(a.note_id, b.note_id))
+                a.note_id AS source,
+                b.note_id AS target,
+                1 - (a.avg_embedding <=> b.avg_embedding) AS similarity
+            FROM note_avg_embeddings a
+            CROSS JOIN LATERAL (
+                SELECT note_id, avg_embedding
+                FROM note_avg_embeddings
+                WHERE note_id != a.note_id
+                  AND note_id = ANY(:node_ids)
+                ORDER BY avg_embedding <=> a.avg_embedding
+                LIMIT :k
+            ) b
+            WHERE a.note_id = ANY(:node_ids)
+              AND 1 - (a.avg_embedding <=> b.avg_embedding) > :threshold
+            ORDER BY LEAST(a.note_id, b.note_id),
+                     GREATEST(a.note_id, b.note_id),
+                     similarity DESC
+            LIMIT :max_edges
+        """)
+        query_params = {
+            "node_ids": node_ids,
+            "threshold": similarity_threshold,
+            "k": neighbors_per_note,
+            "max_edges": edge_cap,
+        }
 
     try:
         logger.info(
-            "Graph query: %d nodes, threshold=%.2f, K=%d, max_edges=%d",
+            "Graph query: %d nodes, threshold=%.2f, K=%d, max_edges=%d, mode=%s",
             len(node_ids),
             similarity_threshold,
             neighbors_per_note,
             edge_cap,
+            "all" if limit == 0 else "filtered",
         )
-        sim_result = await db.execute(
-            similarity_query,
-            {
-                "node_ids": node_ids,
-                "threshold": similarity_threshold,
-                "k": neighbors_per_note,
-                "max_edges": edge_cap,
-            },
-        )
+        sim_result = await db.execute(similarity_query, query_params)
         similarities = sim_result.all()
         logger.info("Found %d similarity links", len(similarities))
 
