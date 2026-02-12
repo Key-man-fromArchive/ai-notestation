@@ -27,6 +27,7 @@ import {
   Database,
   Image,
   Globe,
+  Sparkles,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -148,6 +149,8 @@ export default function Settings() {
         isPending={updateMutation.isPending}
         onSave={(tz) => updateMutation.mutate({ key: 'timezone', value: tz })}
       />
+
+      <AiModelSection />
 
       <SearchIndexSection />
 
@@ -724,6 +727,216 @@ function SearchIndexSection() {
   )
 }
 
+
+interface AiModel {
+  id: string
+  name: string
+  provider: string
+}
+
+interface AiModelsResponse {
+  models: AiModel[]
+}
+
+interface SettingResponse {
+  key: string
+  value: unknown
+  description: string
+}
+
+function AiModelSection() {
+  const queryClient = useQueryClient()
+  const [localEnabled, setLocalEnabled] = useState<string[]>([])
+  const [localDefault, setLocalDefault] = useState('')
+  const [initialized, setInitialized] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  const { data: modelsData } = useQuery<AiModelsResponse>({
+    queryKey: ['ai', 'models'],
+    queryFn: () => apiClient.get('/ai/models'),
+  })
+
+  const { data: enabledSetting } = useQuery<SettingResponse>({
+    queryKey: ['settings', 'enabled_models'],
+    queryFn: () => apiClient.get('/settings/enabled_models'),
+  })
+
+  const { data: defaultSetting } = useQuery<SettingResponse>({
+    queryKey: ['settings', 'default_ai_model'],
+    queryFn: () => apiClient.get('/settings/default_ai_model'),
+  })
+
+  // Initialize local state from fetched settings
+  useEffect(() => {
+    if (!modelsData?.models.length || initialized) return
+
+    const enabledList = enabledSetting?.value
+    if (Array.isArray(enabledList) && enabledList.length > 0) {
+      setLocalEnabled(enabledList)
+    } else {
+      setLocalEnabled(modelsData.models.map((m) => m.id))
+    }
+
+    const defaultModel = typeof defaultSetting?.value === 'string'
+      ? defaultSetting.value
+      : ''
+    setLocalDefault(defaultModel || modelsData.models[0]?.id || '')
+    setInitialized(true)
+  }, [modelsData, enabledSetting, defaultSetting, initialized])
+
+  const allModels = modelsData?.models || []
+
+  const toggleModel = (modelId: string) => {
+    setLocalEnabled((prev) => {
+      if (prev.includes(modelId)) {
+        // Don't allow disabling all models
+        if (prev.length <= 1) return prev
+        const next = prev.filter((id) => id !== modelId)
+        // If we're disabling the current default, change default to first remaining
+        if (modelId === localDefault) {
+          setLocalDefault(next[0])
+        }
+        return next
+      }
+      return [...prev, modelId]
+    })
+  }
+
+  const selectAll = () => setLocalEnabled(allModels.map((m) => m.id))
+  const selectNone = () => {
+    // Keep at least the default model
+    if (localDefault) {
+      setLocalEnabled([localDefault])
+    }
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
+    setSaved(false)
+    try {
+      // If all models are enabled, save empty array (= show all)
+      const enabledValue = localEnabled.length === allModels.length ? [] : localEnabled
+      await Promise.all([
+        apiClient.put('/settings/enabled_models', { value: enabledValue }),
+        apiClient.put('/settings/default_ai_model', { value: localDefault }),
+      ])
+      queryClient.invalidateQueries({ queryKey: ['settings'] })
+      queryClient.invalidateQueries({ queryKey: ['settings', 'enabled_models'] })
+      queryClient.invalidateQueries({ queryKey: ['settings', 'default_ai_model'] })
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Models available for default selection (only enabled ones)
+  const enabledModels = allModels.filter((m) => localEnabled.includes(m.id))
+
+  return (
+    <div className="p-4 border border-input rounded-md">
+      <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
+        <Sparkles className="h-5 w-5" aria-hidden="true" />
+        AI 모델 설정
+      </h3>
+      <p className="text-sm text-muted-foreground mb-4">
+        기본 모델과 선택기에 표시할 모델을 설정합니다.
+      </p>
+
+      {!allModels.length ? (
+        <p className="text-sm text-muted-foreground">사용 가능한 모델이 없습니다. API 키를 먼저 설정하세요.</p>
+      ) : (
+        <>
+          <div className="mb-4">
+            <label className="text-sm font-medium mb-1 block">기본 모델</label>
+            <select
+              value={localDefault}
+              onChange={(e) => setLocalDefault(e.target.value)}
+              className={cn(
+                'w-full px-3 py-2 text-sm rounded-md',
+                'border border-input bg-background',
+                'focus:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              )}
+            >
+              {enabledModels.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name} ({m.provider})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="mb-4">
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-medium">표시할 모델</label>
+              <div className="flex gap-2">
+                <button
+                  onClick={selectAll}
+                  className="text-xs px-2 py-1 rounded border border-input hover:bg-muted transition-colors"
+                >
+                  모두 선택
+                </button>
+                <button
+                  onClick={selectNone}
+                  className="text-xs px-2 py-1 rounded border border-input hover:bg-muted transition-colors"
+                >
+                  모두 해제
+                </button>
+              </div>
+            </div>
+            <div className="space-y-1">
+              {allModels.map((model) => (
+                <label
+                  key={model.id}
+                  className={cn(
+                    'flex items-center gap-2 px-3 py-2 rounded-md cursor-pointer',
+                    'hover:bg-muted/50 transition-colors',
+                  )}
+                >
+                  <input
+                    type="checkbox"
+                    checked={localEnabled.includes(model.id)}
+                    onChange={() => toggleModel(model.id)}
+                    className="rounded border-input"
+                  />
+                  <span className="text-sm">
+                    {model.name} ({model.provider})
+                  </span>
+                  {model.id === localDefault && (
+                    <span className="text-xs text-muted-foreground ml-auto">기본</span>
+                  )}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className={cn(
+                'flex items-center gap-2 px-4 py-2 rounded-md',
+                'bg-primary text-primary-foreground',
+                'hover:bg-primary/90 transition-colors',
+                'disabled:opacity-50 disabled:cursor-not-allowed',
+              )}
+            >
+              <Save className="h-4 w-4" aria-hidden="true" />
+              {saving ? '저장 중...' : '저장'}
+            </button>
+            {saved && (
+              <div className="flex items-center gap-2 text-green-600">
+                <CheckCircle className="h-4 w-4" aria-hidden="true" />
+                <span className="text-sm">저장되었습니다</span>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
 
 const TIMEZONE_OPTIONS = [
   { value: 'Asia/Seoul', label: '한국 (KST, UTC+9)' },

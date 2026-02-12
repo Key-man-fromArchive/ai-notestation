@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import { Network, SlidersHorizontal, BarChart3 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
@@ -6,6 +6,11 @@ import { ObsidianGraph } from '@/components/ObsidianGraph'
 import { GraphAnalysisPanel } from '@/components/GraphAnalysisPanel'
 import { useGlobalGraph } from '@/hooks/useGlobalGraph'
 import { useClusterInsight } from '@/hooks/useClusterInsight'
+import { ModelSelector } from '@/components/ModelSelector'
+
+const MIN_PANEL_WIDTH = 280
+const MAX_PANEL_WIDTH = 700
+const DEFAULT_PANEL_WIDTH = 420
 
 export default function Graph() {
   const [showSettings, setShowSettings] = useState(false)
@@ -27,6 +32,44 @@ export default function Graph() {
   const clusterInsight = useClusterInsight()
   const [insightHubLabel, setInsightHubLabel] = useState<string | null>(null)
   const [selectedModel, setSelectedModel] = useState('')
+  const [pendingAnalysis, setPendingAnalysis] = useState<{ noteIds: number[]; hubLabel: string } | null>(null)
+
+  // Resizable analysis panel
+  const [panelWidth, setPanelWidth] = useState(DEFAULT_PANEL_WIDTH)
+  const isDragging = useRef(false)
+  const startX = useRef(0)
+  const startWidth = useRef(DEFAULT_PANEL_WIDTH)
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDragging.current) return
+      const delta = startX.current - e.clientX
+      const newWidth = Math.min(MAX_PANEL_WIDTH, Math.max(MIN_PANEL_WIDTH, startWidth.current + delta))
+      setPanelWidth(newWidth)
+    }
+    const handleMouseUp = () => {
+      if (isDragging.current) {
+        isDragging.current = false
+        document.body.style.cursor = ''
+        document.body.style.userSelect = ''
+      }
+    }
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [])
+
+  const handleDragStart = useCallback((e: React.MouseEvent) => {
+    isDragging.current = true
+    startX.current = e.clientX
+    startWidth.current = panelWidth
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+    e.preventDefault()
+  }, [panelWidth])
 
   // Build adjacency map from graph links for hub→cluster resolution
   const adjacencyMap = useMemo(() => {
@@ -47,10 +90,10 @@ export default function Graph() {
   const handleAnalyzeCluster = useCallback(
     (noteIds: number[], hubLabel: string) => {
       setInsightHubLabel(hubLabel)
+      setPendingAnalysis({ noteIds, hubLabel })
       if (!showAnalysis) setShowAnalysis(true)
-      clusterInsight.analyze(noteIds, undefined, selectedModel || undefined)
     },
-    [showAnalysis, clusterInsight, selectedModel]
+    [showAnalysis]
   )
 
   // Handle hub analysis from the analysis panel sparkle buttons
@@ -59,14 +102,22 @@ export default function Graph() {
       const neighbors = adjacencyMap.get(noteId)
       const noteIds = [noteId, ...(neighbors ? [...neighbors].slice(0, 19) : [])]
       setInsightHubLabel(label)
-      clusterInsight.analyze(noteIds, undefined, selectedModel || undefined)
+      setPendingAnalysis({ noteIds, hubLabel: label })
     },
-    [adjacencyMap, clusterInsight, selectedModel]
+    [adjacencyMap]
   )
 
+  // Actually start analysis when user clicks the "분석 시작" button
+  const handleStartAnalysis = useCallback(() => {
+    if (pendingAnalysis) {
+      clusterInsight.analyze(pendingAnalysis.noteIds, undefined, selectedModel || undefined)
+      setPendingAnalysis(null)
+    }
+  }, [pendingAnalysis, clusterInsight, selectedModel])
+
   return (
-    <div className="h-[calc(100vh-6rem)] flex flex-col">
-      <div className="flex items-center justify-between mb-4">
+    <div className="h-[calc(100vh-4.5rem)] flex flex-col -mx-6">
+      <div className="flex items-center justify-between mb-4 px-6">
         <div className="flex items-center gap-3">
           <Network className="h-6 w-6 text-primary" />
           <div>
@@ -78,6 +129,11 @@ export default function Graph() {
         </div>
 
         <div className="flex items-center gap-2">
+          <ModelSelector
+            value={selectedModel}
+            onChange={setSelectedModel}
+            className="text-xs py-1.5 px-2"
+          />
           <button
             onClick={() => {
               setShowAnalysis(!showAnalysis)
@@ -104,7 +160,7 @@ export default function Graph() {
       </div>
 
       {showSettings && (
-        <div className="mb-4 p-4 border border-border rounded-lg bg-card">
+        <div className="mb-4 mx-6 p-4 border border-border rounded-lg bg-card">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
             <div className="flex items-center gap-3 col-span-2 lg:col-span-1">
               <label className="flex items-center gap-2 cursor-pointer">
@@ -185,7 +241,7 @@ export default function Graph() {
         </div>
       )}
 
-      <div className="flex-1 flex overflow-hidden border border-border rounded-lg">
+      <div className="flex-1 flex overflow-hidden border-y border-border">
         <div className="flex-1 overflow-hidden">
           <ObsidianGraph
             data={data}
@@ -197,26 +253,37 @@ export default function Graph() {
         </div>
 
         {showAnalysis && data?.analysis && (
-          <GraphAnalysisPanel
-            analysis={data.analysis}
-            onClose={() => setShowAnalysis(false)}
-            graphData={data}
-            clusterInsight={{
-              content: clusterInsight.content,
-              isStreaming: clusterInsight.isStreaming,
-              error: clusterInsight.error,
-              notes: clusterInsight.notes,
-              hubLabel: insightHubLabel,
-            }}
-            onAnalyzeHub={handleAnalyzeHub}
-            onStopInsight={clusterInsight.stop}
-            onResetInsight={() => {
-              clusterInsight.reset()
-              setInsightHubLabel(null)
-            }}
-            selectedModel={selectedModel}
-            onModelChange={setSelectedModel}
-          />
+          <>
+            {/* Resize handle */}
+            <div
+              onMouseDown={handleDragStart}
+              className="w-1.5 flex-shrink-0 cursor-col-resize bg-border hover:bg-primary/40 active:bg-primary/60 transition-colors"
+              title="드래그하여 패널 크기 조절"
+            />
+            <GraphAnalysisPanel
+              analysis={data.analysis}
+              onClose={() => setShowAnalysis(false)}
+              graphData={data}
+              clusterInsight={{
+                content: clusterInsight.content,
+                isStreaming: clusterInsight.isStreaming,
+                error: clusterInsight.error,
+                notes: clusterInsight.notes,
+                hubLabel: insightHubLabel,
+              }}
+              onAnalyzeHub={handleAnalyzeHub}
+              onStopInsight={clusterInsight.stop}
+              onResetInsight={() => {
+                clusterInsight.reset()
+                setInsightHubLabel(null)
+                setPendingAnalysis(null)
+              }}
+              pendingAnalysis={pendingAnalysis}
+              onStartAnalysis={handleStartAnalysis}
+              selectedModel={selectedModel}
+              width={panelWidth}
+            />
+          </>
         )}
       </div>
     </div>
