@@ -1,6 +1,6 @@
 // Rich text editor for note editing (TipTap)
 
-import { type ChangeEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { EditorContent, useEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Underline from '@tiptap/extension-underline'
@@ -13,6 +13,8 @@ import Table from '@tiptap/extension-table'
 import TableRow from '@tiptap/extension-table-row'
 import TableCell from '@tiptap/extension-table-cell'
 import TableHeader from '@tiptap/extension-table-header'
+import Placeholder from '@tiptap/extension-placeholder'
+import CharacterCount from '@tiptap/extension-character-count'
 import { useTranslation } from 'react-i18next'
 import { apiClient } from '@/lib/api'
 import { cn } from '@/lib/utils'
@@ -20,6 +22,7 @@ import {
   Bold,
   Italic,
   Underline as UnderlineIcon,
+  Strikethrough,
   List,
   ListOrdered,
   Link as LinkIcon,
@@ -28,6 +31,16 @@ import {
   Save,
   X,
   Highlighter,
+  Heading1,
+  Heading2,
+  Heading3,
+  Quote,
+  Code,
+  Minus,
+  Undo2,
+  Redo2,
+  Loader2,
+  Palette,
 } from 'lucide-react'
 
 interface NoteEditorProps {
@@ -36,9 +49,6 @@ interface NoteEditorProps {
   onSave: (html: string, json: object) => Promise<void>
   onCancel: () => void
 }
-
-const toolbarButton =
-  'inline-flex items-center gap-1 rounded border border-input px-2 py-1 text-xs text-muted-foreground hover:text-foreground hover:border-primary/40 hover:bg-primary/5'
 
 // Custom Image extension that accepts <img> tags without src (NAS placeholders)
 // and preserves width/height attributes for NoteStation images
@@ -80,6 +90,38 @@ function stripNasImageTokens(html: string): string {
   )
 }
 
+// Toolbar button component with active state and tooltip
+function ToolbarBtn({
+  onClick,
+  active,
+  title,
+  children,
+}: {
+  onClick: () => void
+  active?: boolean
+  title: string
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={onClick}
+      className={cn(
+        'inline-flex items-center justify-center rounded p-1.5 text-muted-foreground transition-colors',
+        'hover:text-foreground hover:bg-accent',
+        active && 'bg-accent text-foreground shadow-sm'
+      )}
+    >
+      {children}
+    </button>
+  )
+}
+
+function ToolbarSep() {
+  return <div className="w-px h-5 bg-border mx-0.5" />
+}
+
 export function NoteEditor({ noteId, initialContent, onSave, onCancel }: NoteEditorProps) {
   const { t } = useTranslation()
   const [isSaving, setIsSaving] = useState(false)
@@ -95,13 +137,17 @@ export function NoteEditor({ noteId, initialContent, onSave, onCancel }: NoteEdi
       NoteStationImage,
       TextStyle,
       Color,
-      Highlight,
+      Highlight.configure({ multicolor: true }),
       Table.configure({ resizable: true }),
       TableRow,
       TableCell,
       TableHeader,
+      Placeholder.configure({
+        placeholder: t('notes.editorPlaceholder', 'Start writing...'),
+      }),
+      CharacterCount,
     ],
-    []
+    [t]
   )
 
   const editorContent = useMemo(
@@ -112,6 +158,11 @@ export function NoteEditor({ noteId, initialContent, onSave, onCancel }: NoteEdi
   const editor = useEditor({
     extensions,
     content: editorContent,
+    editorProps: {
+      attributes: {
+        class: 'outline-none min-h-[50vh] px-6 py-4',
+      },
+    },
   })
 
   useEffect(() => {
@@ -119,18 +170,38 @@ export function NoteEditor({ noteId, initialContent, onSave, onCancel }: NoteEdi
     editor.commands.setContent(addNasImageTokens(initialContent || '', token))
   }, [editor, initialContent, token])
 
-  const handleSave = async () => {
+  const handleSave = useCallback(async () => {
     if (!editor || isSaving) return
     setIsSaving(true)
-    const html = stripNasImageTokens(editor.getHTML())
-    await onSave(html, editor.getJSON())
-    setIsSaving(false)
-  }
+    try {
+      const html = stripNasImageTokens(editor.getHTML())
+      await onSave(html, editor.getJSON())
+    } finally {
+      setIsSaving(false)
+    }
+  }, [editor, isSaving, onSave])
+
+  // Ctrl+S to save
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault()
+        handleSave()
+      }
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [handleSave])
 
   const handleInsertLink = () => {
     if (!editor) return
-    const href = window.prompt(t('notes.editNote'))
-    if (!href) return
+    const existing = editor.getAttributes('link').href
+    const href = window.prompt('URL', existing || 'https://')
+    if (href === null) return
+    if (href === '') {
+      editor.chain().focus().extendMarkRange('link').unsetLink().run()
+      return
+    }
     editor.chain().focus().extendMarkRange('link').setLink({ href }).run()
   }
 
@@ -166,64 +237,149 @@ export function NoteEditor({ noteId, initialContent, onSave, onCancel }: NoteEdi
     event.target.value = ''
   }
 
+  const charCount = editor?.storage.characterCount?.characters() ?? 0
+  const wordCount = editor?.storage.characterCount?.words() ?? 0
+
+  const iconSize = 'h-4 w-4'
+
   return (
-    <div className="border border-border rounded-lg overflow-hidden">
-      <div className="flex flex-wrap gap-2 px-3 py-2 bg-muted/30 border-b border-border">
-        <button
-          type="button"
-          className={toolbarButton}
+    <div className="border border-border rounded-lg overflow-hidden flex flex-col">
+      {/* Sticky toolbar */}
+      <div className="sticky top-0 z-10 flex flex-wrap items-center gap-0.5 px-2 py-1.5 bg-muted/50 border-b border-border backdrop-blur-sm">
+        {/* Undo / Redo */}
+        <ToolbarBtn
+          onClick={() => editor?.chain().focus().undo().run()}
+          title="Undo (Ctrl+Z)"
+        >
+          <Undo2 className={iconSize} />
+        </ToolbarBtn>
+        <ToolbarBtn
+          onClick={() => editor?.chain().focus().redo().run()}
+          title="Redo (Ctrl+Shift+Z)"
+        >
+          <Redo2 className={iconSize} />
+        </ToolbarBtn>
+
+        <ToolbarSep />
+
+        {/* Headings */}
+        <ToolbarBtn
+          onClick={() => editor?.chain().focus().toggleHeading({ level: 1 }).run()}
+          active={editor?.isActive('heading', { level: 1 })}
+          title="Heading 1 (Ctrl+Alt+1)"
+        >
+          <Heading1 className={iconSize} />
+        </ToolbarBtn>
+        <ToolbarBtn
+          onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}
+          active={editor?.isActive('heading', { level: 2 })}
+          title="Heading 2 (Ctrl+Alt+2)"
+        >
+          <Heading2 className={iconSize} />
+        </ToolbarBtn>
+        <ToolbarBtn
+          onClick={() => editor?.chain().focus().toggleHeading({ level: 3 }).run()}
+          active={editor?.isActive('heading', { level: 3 })}
+          title="Heading 3 (Ctrl+Alt+3)"
+        >
+          <Heading3 className={iconSize} />
+        </ToolbarBtn>
+
+        <ToolbarSep />
+
+        {/* Inline formatting */}
+        <ToolbarBtn
           onClick={() => editor?.chain().focus().toggleBold().run()}
+          active={editor?.isActive('bold')}
+          title="Bold (Ctrl+B)"
         >
-          <Bold className="h-3.5 w-3.5" />
-          Bold
-        </button>
-        <button
-          type="button"
-          className={toolbarButton}
+          <Bold className={iconSize} />
+        </ToolbarBtn>
+        <ToolbarBtn
           onClick={() => editor?.chain().focus().toggleItalic().run()}
+          active={editor?.isActive('italic')}
+          title="Italic (Ctrl+I)"
         >
-          <Italic className="h-3.5 w-3.5" />
-          Italic
-        </button>
-        <button
-          type="button"
-          className={toolbarButton}
+          <Italic className={iconSize} />
+        </ToolbarBtn>
+        <ToolbarBtn
           onClick={() => editor?.chain().focus().toggleUnderline().run()}
+          active={editor?.isActive('underline')}
+          title="Underline (Ctrl+U)"
         >
-          <UnderlineIcon className="h-3.5 w-3.5" />
-          Underline
-        </button>
-        <button
-          type="button"
-          className={toolbarButton}
-          onClick={() => editor?.chain().focus().toggleBulletList().run()}
+          <UnderlineIcon className={iconSize} />
+        </ToolbarBtn>
+        <ToolbarBtn
+          onClick={() => editor?.chain().focus().toggleStrike().run()}
+          active={editor?.isActive('strike')}
+          title="Strikethrough (Ctrl+Shift+S)"
         >
-          <List className="h-3.5 w-3.5" />
-          List
-        </button>
-        <button
-          type="button"
-          className={toolbarButton}
-          onClick={() => editor?.chain().focus().toggleOrderedList().run()}
-        >
-          <ListOrdered className="h-3.5 w-3.5" />
-          Ordered
-        </button>
-        <button type="button" className={toolbarButton} onClick={handleInsertLink}>
-          <LinkIcon className="h-3.5 w-3.5" />
-          Link
-        </button>
-        <button
-          type="button"
-          className={toolbarButton}
+          <Strikethrough className={iconSize} />
+        </ToolbarBtn>
+        <ToolbarBtn
           onClick={() => editor?.chain().focus().toggleHighlight().run()}
+          active={editor?.isActive('highlight')}
+          title="Highlight"
         >
-          <Highlighter className="h-3.5 w-3.5" />
-          Highlight
-        </button>
-        <label className={cn(toolbarButton, 'cursor-pointer')}>
-          <ImageIcon className="h-3.5 w-3.5" />
-          File/Image
+          <Highlighter className={iconSize} />
+        </ToolbarBtn>
+        <ToolbarBtn
+          onClick={() => editor?.chain().focus().toggleCode().run()}
+          active={editor?.isActive('code')}
+          title="Inline Code (Ctrl+E)"
+        >
+          <Code className={iconSize} />
+        </ToolbarBtn>
+
+        <ToolbarSep />
+
+        {/* Block elements */}
+        <ToolbarBtn
+          onClick={() => editor?.chain().focus().toggleBulletList().run()}
+          active={editor?.isActive('bulletList')}
+          title="Bullet List"
+        >
+          <List className={iconSize} />
+        </ToolbarBtn>
+        <ToolbarBtn
+          onClick={() => editor?.chain().focus().toggleOrderedList().run()}
+          active={editor?.isActive('orderedList')}
+          title="Ordered List"
+        >
+          <ListOrdered className={iconSize} />
+        </ToolbarBtn>
+        <ToolbarBtn
+          onClick={() => editor?.chain().focus().toggleBlockquote().run()}
+          active={editor?.isActive('blockquote')}
+          title="Blockquote"
+        >
+          <Quote className={iconSize} />
+        </ToolbarBtn>
+        <ToolbarBtn
+          onClick={() => editor?.chain().focus().setHorizontalRule().run()}
+          title="Horizontal Rule"
+        >
+          <Minus className={iconSize} />
+        </ToolbarBtn>
+
+        <ToolbarSep />
+
+        {/* Insert items */}
+        <ToolbarBtn
+          onClick={handleInsertLink}
+          active={editor?.isActive('link')}
+          title="Insert Link (Ctrl+K)"
+        >
+          <LinkIcon className={iconSize} />
+        </ToolbarBtn>
+        <label
+          title="Upload Image/File"
+          className={cn(
+            'inline-flex items-center justify-center rounded p-1.5 text-muted-foreground transition-colors cursor-pointer',
+            'hover:text-foreground hover:bg-accent'
+          )}
+        >
+          <ImageIcon className={iconSize} />
           <input
             ref={fileInputRef}
             type="file"
@@ -231,53 +387,88 @@ export function NoteEditor({ noteId, initialContent, onSave, onCancel }: NoteEdi
             onChange={handleInsertFile}
           />
         </label>
-        <button
-          type="button"
-          className={toolbarButton}
+        <ToolbarBtn
           onClick={() =>
             editor?.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()
           }
+          title="Insert Table"
         >
-          <TableIcon className="h-3.5 w-3.5" />
-          Table
-        </button>
-        <label className={cn(toolbarButton, 'cursor-pointer')}>
-          Color
+          <TableIcon className={iconSize} />
+        </ToolbarBtn>
+
+        <ToolbarSep />
+
+        {/* Color picker */}
+        <label
+          title="Text Color"
+          className={cn(
+            'inline-flex items-center justify-center rounded p-1.5 text-muted-foreground transition-colors cursor-pointer',
+            'hover:text-foreground hover:bg-accent'
+          )}
+        >
+          <Palette className={iconSize} />
           <input
             type="color"
-            className="ml-2 h-5 w-5 cursor-pointer"
+            className="sr-only"
             onChange={event => editor?.chain().focus().setColor(event.target.value).run()}
           />
         </label>
       </div>
 
-      <EditorContent editor={editor} className="prose prose-sm max-w-none p-4" />
+      {/* Editor content area */}
+      <EditorContent
+        editor={editor}
+        className={cn(
+          'prose max-w-none flex-1',
+          'prose-headings:font-semibold prose-headings:text-foreground',
+          'prose-p:text-foreground prose-p:leading-7',
+          'prose-a:text-primary hover:prose-a:text-primary/80',
+          'prose-strong:text-foreground',
+          'prose-code:text-foreground prose-code:bg-muted prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm',
+          'prose-pre:bg-muted prose-pre:border prose-pre:border-border',
+          'prose-blockquote:border-l-primary prose-blockquote:text-muted-foreground',
+          'prose-ul:text-foreground prose-ol:text-foreground',
+          'prose-li:text-foreground prose-li:marker:text-muted-foreground',
+          'prose-img:rounded-lg prose-img:border prose-img:border-border',
+          '[&_.tiptap_p.is-editor-empty:first-child::before]:text-muted-foreground/50',
+          '[&_.tiptap_p.is-editor-empty:first-child::before]:content-[attr(data-placeholder)]',
+          '[&_.tiptap_p.is-editor-empty:first-child::before]:float-left',
+          '[&_.tiptap_p.is-editor-empty:first-child::before]:h-0',
+          '[&_.tiptap_p.is-editor-empty:first-child::before]:pointer-events-none',
+        )}
+      />
 
-      <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-border bg-muted/20">
-        <button
-          type="button"
-          className="px-3 py-1.5 text-xs rounded border border-input text-muted-foreground hover:text-foreground"
-          onClick={onCancel}
-        >
-          <span className="flex items-center gap-1">
+      {/* Footer with word count and actions */}
+      <div className="flex items-center justify-between px-4 py-2.5 border-t border-border bg-muted/20">
+        <span className="text-xs text-muted-foreground">
+          {wordCount} {t('notes.words', 'words')} · {charCount} {t('notes.chars', 'chars')}
+        </span>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border border-input text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            onClick={onCancel}
+          >
             <X className="h-3.5 w-3.5" />
             {t('notes.cancelEdit')}
-          </span>
-        </button>
-        <button
-          type="button"
-          className={cn(
-            'px-3 py-1.5 text-xs rounded border border-primary/30 text-primary hover:bg-primary/10',
-            isSaving && 'opacity-50 cursor-not-allowed'
-          )}
-          onClick={handleSave}
-          disabled={isSaving}
-        >
-          <span className="flex items-center gap-1">
-            <Save className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            className={cn(
+              'inline-flex items-center gap-1.5 px-4 py-1.5 text-xs rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors',
+              isSaving && 'opacity-50 cursor-not-allowed'
+            )}
+            onClick={handleSave}
+            disabled={isSaving}
+          >
+            {isSaving ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Save className="h-3.5 w-3.5" />
+            )}
             {isSaving ? t('common.saving') : t('notes.saveChanges')}
-          </span>
-        </button>
+          </button>
+        </div>
       </div>
     </div>
   )
