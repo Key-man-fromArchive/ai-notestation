@@ -410,6 +410,7 @@ class NoteSyncResponse(BaseModel):
 
     status: str  # "success" | "error" | "skipped" | "conflict"
     message: str
+    new_note_id: str | None = None  # Set when note ID changes (e.g. local → NAS)
 
 
 # Keep alias for backward compatibility in type hints
@@ -589,9 +590,12 @@ async def push_note(
             triggered_by=username,
         )
 
+        # Include new_note_id if the ID changed (local → NAS)
+        changed_id = note.synology_note_id if note.synology_note_id != note_id else None
         return NoteSyncResponse(
             status="success",
             message=msg("sync.push_success_detail", lang, title=note.title),
+            new_note_id=changed_id,
         )
 
     except Exception as exc:

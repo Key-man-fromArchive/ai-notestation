@@ -45,10 +45,16 @@ export default function NoteDetail() {
     setSyncMessage('')
     try {
       const url = force ? `/sync/push/${id}?force=true` : `/sync/push/${id}`
-      const res = await apiClient.post(url, {}) as { status: string; message: string }
+      const res = await apiClient.post(url, {}) as { status: string; message: string; new_note_id?: string }
       if (res.status === 'success') {
         setSyncState('success')
         setSyncMessage(res.message)
+        if (res.new_note_id) {
+          // Note ID changed (local → NAS), navigate to new URL
+          queryClient.invalidateQueries({ queryKey: ['notes'] })
+          navigate(`/notes/${res.new_note_id}`, { replace: true })
+          return
+        }
         queryClient.invalidateQueries({ queryKey: ['note', id] })
         queryClient.invalidateQueries({ queryKey: ['notes'] })
         setTimeout(() => setSyncState('idle'), 3000)
