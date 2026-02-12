@@ -16,12 +16,12 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-const EXAMPLE_QUERIES = [
-  'PCR 실험 프로토콜',
-  '바이러스 검출 방법',
-  '시퀀싱 데이터 분석',
-  'DNA 추출 과정',
-]
+const EXAMPLE_QUERY_KEYS = [
+  'exampleQuery1',
+  'exampleQuery2',
+  'exampleQuery3',
+  'exampleQuery4',
+] as const
 
 export default function Librarian() {
   const { t } = useTranslation()
@@ -171,18 +171,18 @@ export default function Librarian() {
         {/* Example chips */}
         {!query && (
           <div className="flex flex-wrap gap-2 mt-3 justify-center">
-            {EXAMPLE_QUERIES.map((example) => (
+            {EXAMPLE_QUERY_KEYS.map((key) => (
               <button
-                key={example}
+                key={key}
                 type="button"
-                onClick={() => setQuery(example)}
+                onClick={() => setQuery(t(`librarian.${key}`))}
                 className={cn(
                   'px-3 py-1.5 rounded-full text-xs',
                   'border border-border bg-card text-muted-foreground',
                   'hover:border-primary/30 hover:text-foreground transition-colors',
                 )}
               >
-                {example}
+                {t(`librarian.${key}`)}
               </button>
             ))}
           </div>

@@ -111,10 +111,10 @@ export function NsxImportSection() {
           {(importStatus.notes_processed !== null || importStatus.images_extracted !== null) && (
             <div className="flex gap-4 text-xs text-muted-foreground">
               {importStatus.notes_processed !== null && (
-                <span>노트: {importStatus.notes_processed}개</span>
+                <span>{t('settings.nsxNotesCount', { count: importStatus.notes_processed })}</span>
               )}
               {importStatus.images_extracted !== null && (
-                <span>이미지: {importStatus.images_extracted}개</span>
+                <span>{t('settings.nsxImagesCount', { count: importStatus.images_extracted })}</span>
               )}
               {importStatus.last_import_at && (
                 <span>{t('common.completed', 'Completed')}: {new Date(importStatus.last_import_at).toLocaleString(i18n.language === 'ko' ? 'ko-KR' : 'en-US')}</span>
@@ -129,7 +129,7 @@ export function NsxImportSection() {
           {importErrors.length > 0 && (
             <details className="mt-2">
               <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">
-                경고 {importErrors.length}건 보기
+                {t('settings.nsxShowWarnings', { count: importErrors.length })}
               </summary>
               <ul className="mt-1 text-xs text-muted-foreground list-disc list-inside">
                 {importErrors.map((err, i) => (
@@ -198,7 +198,7 @@ export function NsxImportSection() {
             <span className="text-sm text-destructive">
               {importMutation.error instanceof Error
                 ? importMutation.error.message
-                : '업로드에 실패했습니다'}
+                : t('settings.nsxUploadFailed')}
             </span>
           </div>
         )}

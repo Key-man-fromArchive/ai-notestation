@@ -223,14 +223,14 @@ export function OAuthSection({ provider, label }: OAuthSectionProps) {
           )}
         >
           <Link2 className="h-4 w-4" aria-hidden="true" />
-          {isConnecting ? '링크 생성 중...' : `${label}로 연결`}
+          {isConnecting ? t('settings.oauthLinkGenerating') : t('settings.oauthConnectWith', { label })}
         </button>
 
         {authUrl && (
           <div className="p-3 bg-muted/50 border border-input rounded-md space-y-3">
             <div>
               <p className="text-xs text-muted-foreground mb-2">
-                1. 아래 링크를 열어 인증을 완료하세요:
+                {t('settings.oauthStep1')}
               </p>
               <div className="flex gap-1.5">
                 <input
@@ -261,21 +261,21 @@ export function OAuthSection({ provider, label }: OAuthSectionProps) {
                   className="flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-md shrink-0 border border-input hover:bg-muted transition-colors"
                 >
                   <ExternalLink className="h-3.5 w-3.5" />
-                  열기
+                  {t('settings.oauthOpen')}
                 </a>
               </div>
             </div>
 
             <div>
               <p className="text-xs text-muted-foreground mb-2">
-                2. 인증 후 표시되는 코드를 붙여넣으세요:
+                {t('settings.oauthStep2')}
               </p>
               <div className="flex gap-1.5">
                 <input
                   type="text"
                   value={pastedCode}
                   onChange={e => setPastedCode(e.target.value)}
-                  placeholder="인증 코드 붙여넣기"
+                  placeholder={t('settings.oauthCodePlaceholder')}
                   className="flex-1 px-2 py-1.5 text-sm font-mono bg-background border border-input rounded-md"
                   onKeyDown={e => e.key === 'Enter' && handleCodePasteSubmit()}
                 />
@@ -294,7 +294,7 @@ export function OAuthSection({ provider, label }: OAuthSectionProps) {
                   ) : (
                     <Check className="h-3.5 w-3.5" />
                   )}
-                  확인
+                  {t('common.confirm')}
                 </button>
               </div>
             </div>
@@ -303,7 +303,7 @@ export function OAuthSection({ provider, label }: OAuthSectionProps) {
               <div className="flex items-center gap-2 p-2 bg-green-500/10 border border-green-500/20 rounded-md">
                 <CheckCircle className="h-3.5 w-3.5 text-green-600" />
                 <span className="text-xs text-green-700">
-                  인증이 완료되었습니다!
+                  {t('settings.oauthAuthComplete')}
                 </span>
               </div>
             )}
@@ -312,7 +312,7 @@ export function OAuthSection({ provider, label }: OAuthSectionProps) {
               <div className="flex items-center gap-2 p-2 bg-destructive/10 border border-destructive/20 rounded-md">
                 <AlertCircle className="h-3.5 w-3.5 text-destructive" />
                 <span className="text-xs text-destructive">
-                  코드 교환에 실패했습니다. 올바른 코드인지 확인하세요.
+                  {t('settings.oauthCodeExchangeFailed')}
                 </span>
               </div>
             )}
@@ -323,7 +323,7 @@ export function OAuthSection({ provider, label }: OAuthSectionProps) {
           <div className="flex items-center gap-2 p-2 bg-destructive/10 border border-destructive/20 rounded-md">
             <AlertCircle className="h-3.5 w-3.5 text-destructive shrink-0" />
             <span className="text-xs text-destructive">
-              연결에 실패했습니다. 서버 설정을 확인하세요.
+              {t('settings.oauthConnectionFailed')}
             </span>
           </div>
         )}
@@ -344,7 +344,7 @@ export function OAuthSection({ provider, label }: OAuthSectionProps) {
           )}
         >
           <Link2 className="h-3.5 w-3.5 inline mr-1.5" aria-hidden="true" />
-          브라우저 인증
+          {t('settings.oauthBrowserAuth')}
         </button>
         <button
           onClick={() => setUiMode('device')}
@@ -356,7 +356,7 @@ export function OAuthSection({ provider, label }: OAuthSectionProps) {
           )}
         >
           <Smartphone className="h-3.5 w-3.5 inline mr-1.5" aria-hidden="true" />
-          기기 코드 인증
+          {t('settings.oauthDeviceAuth')}
         </button>
       </div>
 
@@ -373,13 +373,13 @@ export function OAuthSection({ provider, label }: OAuthSectionProps) {
             )}
           >
             <Link2 className="h-4 w-4" aria-hidden="true" />
-            {isConnecting ? '링크 생성 중...' : `${label}로 연결`}
+            {isConnecting ? t('settings.oauthLinkGenerating') : t('settings.oauthConnectWith', { label })}
           </button>
 
           {authUrl && (
             <div className="p-3 bg-muted/50 border border-input rounded-md space-y-2">
               <p className="text-xs text-muted-foreground">
-                아래 링크를 복사하여 브라우저에서 열어주세요:
+                {t('settings.oauthBrowserInstructions')}
               </p>
               <div className="flex gap-1.5">
                 <input
@@ -396,24 +396,24 @@ export function OAuthSection({ provider, label }: OAuthSectionProps) {
                     'border border-input hover:bg-muted transition-colors',
                     copied && 'text-green-600 border-green-500/30',
                   )}
-                  title="복사"
+                  title={t('common.copy')}
                 >
                   {copied ? (
                     <Check className="h-3.5 w-3.5" />
                   ) : (
                     <Copy className="h-3.5 w-3.5" />
                   )}
-                  {copied ? '복사됨' : '복사'}
+                  {copied ? t('common.copied') : t('common.copy')}
                 </button>
                 <a
                   href={authUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-md shrink-0 border border-input hover:bg-muted transition-colors"
-                  title="새 탭에서 열기"
+                  title={t('settings.oauthOpen')}
                 >
                   <ExternalLink className="h-3.5 w-3.5" />
-                  열기
+                  {t('settings.oauthOpen')}
                 </a>
               </div>
             </div>
@@ -429,7 +429,7 @@ export function OAuthSection({ provider, label }: OAuthSectionProps) {
                 aria-hidden="true"
               />
               <span className="text-xs text-destructive">
-                연결에 실패했습니다. 서버 설정을 확인하세요.
+                {t('settings.oauthConnectionFailed')}
               </span>
             </div>
           )}
@@ -447,14 +447,14 @@ export function OAuthSection({ provider, label }: OAuthSectionProps) {
             )}
           >
             <Smartphone className="h-4 w-4" aria-hidden="true" />
-            {isStartingDeviceFlow ? '코드 생성 중...' : '기기 코드 발급'}
+            {isStartingDeviceFlow ? t('settings.oauthDeviceGenerating') : t('settings.oauthDeviceIssue')}
           </button>
 
           {deviceFlowData && !deviceStatus && (
             <div className="p-4 bg-muted/50 border border-input rounded-md space-y-3">
               <div className="text-center">
                 <p className="text-xs text-muted-foreground mb-2">
-                  아래 URL에서 코드를 입력하세요:
+                  {t('settings.oauthDeviceInstructions')}
                 </p>
                 <a
                   href={
@@ -470,14 +470,14 @@ export function OAuthSection({ provider, label }: OAuthSectionProps) {
                 </a>
               </div>
               <div className="text-center">
-                <p className="text-xs text-muted-foreground mb-1">인증 코드:</p>
+                <p className="text-xs text-muted-foreground mb-1">{t('settings.oauthAuthCode')}</p>
                 <code className="text-2xl font-bold tracking-widest text-primary">
                   {deviceFlowData.user_code}
                 </code>
                 <button
                   onClick={() => handleCopy(deviceFlowData.user_code)}
                   className="ml-2 p-1.5 rounded hover:bg-muted transition-colors"
-                  title="코드 복사"
+                  title={t('settings.oauthCopyCode')}
                 >
                   {copied ? (
                     <Check className="h-4 w-4 text-green-600" />
@@ -488,7 +488,7 @@ export function OAuthSection({ provider, label }: OAuthSectionProps) {
               </div>
               <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                인증 대기 중...
+                {t('settings.oauthWaitingAuth')}
               </div>
             </div>
           )}
@@ -500,7 +500,7 @@ export function OAuthSection({ provider, label }: OAuthSectionProps) {
                 aria-hidden="true"
               />
               <span className="text-xs text-green-700">
-                인증이 완료되었습니다!
+                {t('settings.oauthAuthComplete')}
               </span>
             </div>
           )}
@@ -516,8 +516,8 @@ export function OAuthSection({ provider, label }: OAuthSectionProps) {
               />
               <span className="text-xs text-destructive">
                 {deviceStatus === 'expired'
-                  ? '인증 코드가 만료되었습니다. 다시 시도해주세요.'
-                  : '인증이 거부되었습니다.'}
+                  ? t('settings.oauthCodeExpired')
+                  : t('settings.oauthAuthDenied')}
               </span>
             </div>
           )}
@@ -532,7 +532,7 @@ export function OAuthSection({ provider, label }: OAuthSectionProps) {
                 aria-hidden="true"
               />
               <span className="text-xs text-destructive">
-                기기 인증에 실패했습니다. 다시 시도해주세요.
+                {t('settings.oauthDeviceFailed')}
               </span>
             </div>
           )}

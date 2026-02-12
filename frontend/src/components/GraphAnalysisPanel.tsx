@@ -180,12 +180,12 @@ export function GraphAnalysisPanel({
               {t('graph.networkStats')}
             </h4>
             <div className="grid grid-cols-2 gap-3">
-              <StatCard label="{t('graph.nodes')}" value={network_stats.nodes.toLocaleString()} />
-              <StatCard label="{t('graph.edges')}" value={network_stats.edges.toLocaleString()} />
-              <StatCard label="{t('graph.avgConnections')}" value={network_stats.avg_degree.toFixed(1)} />
-              <StatCard label="{t('graph.density')}" value={(network_stats.density * 100).toFixed(2) + '%'} />
-              <StatCard label="{t('graph.components')}" value={String(network_stats.components)} />
-              <StatCard label="{t('graph.orphanNotes')}" value={String(orphan_count)} highlight={orphan_count > 0} />
+              <StatCard label={t('graph.nodes')} value={network_stats.nodes.toLocaleString()} />
+              <StatCard label={t('graph.edges')} value={network_stats.edges.toLocaleString()} />
+              <StatCard label={t('graph.avgConnections')} value={network_stats.avg_degree.toFixed(1)} />
+              <StatCard label={t('graph.density')} value={(network_stats.density * 100).toFixed(2) + '%'} />
+              <StatCard label={t('graph.components')} value={String(network_stats.components)} />
+              <StatCard label={t('graph.orphanNotes')} value={String(orphan_count)} highlight={orphan_count > 0} />
             </div>
           </div>
 
@@ -193,7 +193,7 @@ export function GraphAnalysisPanel({
           <div className="p-4 border-b border-border">
             <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-1.5">
               <TrendingUp className="h-3.5 w-3.5" />
-              허브 노트 (상위 10)
+              {t('graph.hubNotes')}
             </h4>
             <div className="space-y-0.5">
               {hub_notes.map(note => {
@@ -218,7 +218,7 @@ export function GraphAnalysisPanel({
                       <button
                         onClick={() => navigate(`/notes/${note.note_key}`)}
                         className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground flex-shrink-0"
-                        title="노트 보기"
+                        title={t('graph.viewNote')}
                       >
                         <ExternalLink className="h-3 w-3" />
                       </button>
@@ -226,7 +226,7 @@ export function GraphAnalysisPanel({
                         <button
                           onClick={() => onAnalyzeHub(note.id, note.label)}
                           className="p-1 rounded hover:bg-amber-500/20 text-muted-foreground hover:text-amber-400 flex-shrink-0"
-                          title="이 클러스터 AI 분석"
+                          title={t('graph.analyzeCluster')}
                         >
                           <Sparkles className="h-3.5 w-3.5" />
                         </button>
@@ -235,7 +235,7 @@ export function GraphAnalysisPanel({
                     {isExpanded && (
                       <div className="ml-6 mt-0.5 mb-1 space-y-0.5 border-l-2 border-border pl-2">
                         {neighbors.length === 0 ? (
-                          <p className="text-xs text-muted-foreground py-1">연결된 노트 없음</p>
+                          <p className="text-xs text-muted-foreground py-1">{t('graph.noConnectedNotes')}</p>
                         ) : (
                           neighbors.map(n => (
                             <button
@@ -265,7 +265,7 @@ export function GraphAnalysisPanel({
             <div className="p-4 border-b border-border">
               <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-1.5">
                 <AlertCircle className="h-3.5 w-3.5" />
-                {t('graph.orphanNotes')} ({orphan_count}개)
+                {t('graph.orphanNotes')} ({t('graph.orphanNotesCount', { count: orphan_count })})
               </h4>
               <div className="space-y-1 max-h-48 overflow-y-auto">
                 {orphan_notes.slice(0, 50).map(note => (
@@ -279,7 +279,7 @@ export function GraphAnalysisPanel({
                 ))}
                 {orphan_notes.length > 50 && (
                   <p className="text-xs text-muted-foreground px-2 py-1">
-                    +{orphan_notes.length - 50}개 더...
+                    {t('graph.moreCount', { count: orphan_notes.length - 50 })}
                   </p>
                 )}
               </div>
@@ -290,7 +290,7 @@ export function GraphAnalysisPanel({
           <div className="p-4">
             <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-1.5">
               <Layers className="h-3.5 w-3.5" />
-              노트북별 요약
+              {t('graph.notebookSummary')}
             </h4>
             <div className="space-y-2">
               {cluster_summary.map(cluster => (
@@ -300,10 +300,10 @@ export function GraphAnalysisPanel({
                 >
                   <div className="font-medium truncate">{cluster.notebook}</div>
                   <div className="flex gap-3 text-xs text-muted-foreground mt-1">
-                    <span>{cluster.note_count}개 노트</span>
-                    <span>{cluster.edge_count}개 연결</span>
+                    <span>{t('graph.noteCount', { count: cluster.note_count })}</span>
+                    <span>{t('graph.edgeCount', { count: cluster.edge_count })}</span>
                     {cluster.avg_similarity > 0 && (
-                      <span>유사도 {(cluster.avg_similarity * 100).toFixed(0)}%</span>
+                      <span>{t('graph.similarityPercent', { percent: (cluster.avg_similarity * 100).toFixed(0) })}</span>
                     )}
                   </div>
                 </div>
@@ -319,11 +319,11 @@ export function GraphAnalysisPanel({
             <div className="text-center py-8">
               <Sparkles className="h-8 w-8 text-muted-foreground/50 mx-auto mb-3" />
               <p className="text-sm text-muted-foreground mb-2">
-                클러스터를 선택하여 AI 인사이트를 생성하세요
+                {t('graph.selectClusterPrompt')}
               </p>
               <p className="text-xs text-muted-foreground">
-                허브 노트 옆의 <Sparkles className="h-3 w-3 inline" /> 아이콘을 클릭하거나,<br />
-                그래프에서 노트를 우클릭하세요
+                {t('graph.clickSparkleIcon')} <Sparkles className="h-3 w-3 inline" /> {t('graph.clickSparkleIconSuffix')}<br />
+                {t('graph.rightClickNode')}
               </p>
             </div>
           ) : pendingAnalysis && !clusterInsight?.content && !clusterInsight?.isStreaming ? (
@@ -331,10 +331,10 @@ export function GraphAnalysisPanel({
             <div className="text-center py-8">
               <Sparkles className="h-8 w-8 text-amber-400 mx-auto mb-3" />
               <div className="mb-4">
-                <div className="text-xs text-muted-foreground">분석 중심</div>
+                <div className="text-xs text-muted-foreground">{t('graph.analysisFocus')}</div>
                 <div className="font-medium text-sm">{pendingAnalysis.hubLabel}</div>
                 <div className="text-xs text-muted-foreground mt-1">
-                  {pendingAnalysis.noteIds.length}개 노트 선택됨
+                  {t('graph.notesSelected', { count: pendingAnalysis.noteIds.length })}
                 </div>
               </div>
               <button
@@ -342,7 +342,7 @@ export function GraphAnalysisPanel({
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 text-sm font-medium"
               >
                 <Play className="h-4 w-4" />
-                분석 시작
+                {t('graph.startAnalysis')}
               </button>
             </div>
           ) : (
@@ -351,11 +351,11 @@ export function GraphAnalysisPanel({
               {/* Cluster info header */}
               {clusterInsight?.hubLabel && (
                 <div className="mb-3 pb-3 border-b border-border">
-                  <div className="text-xs text-muted-foreground">분석 중심:</div>
+                  <div className="text-xs text-muted-foreground">{t('graph.analysisFocusLabel')}</div>
                   <div className="font-medium text-sm truncate">{clusterInsight.hubLabel}</div>
                   {clusterInsight.notes.length > 0 && (
                     <div className="text-xs text-muted-foreground mt-1">
-                      {clusterInsight.notes.length}개 노트 분석
+                      {t('graph.notesAnalyzed', { count: clusterInsight.notes.length })}
                     </div>
                   )}
                 </div>
@@ -365,11 +365,11 @@ export function GraphAnalysisPanel({
               {clusterInsight?.isStreaming && (
                 <div className="mb-3 flex items-center gap-2">
                   <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-                  <span className="text-xs text-muted-foreground">AI 분석 중...</span>
+                  <span className="text-xs text-muted-foreground">{t('graph.aiAnalyzing')}</span>
                   <button
                     onClick={onStopInsight}
                     className="ml-auto p-1 rounded hover:bg-accent text-muted-foreground"
-                    title="중단"
+                    title={t('graph.stopAnalysis')}
                   >
                     <Square className="h-3 w-3" />
                   </button>
@@ -397,9 +397,9 @@ export function GraphAnalysisPanel({
                       {chatMessages.map((msg, i) => (
                         <div key={i}>
                           {msg.role === 'user' ? (
-                            <div className="text-xs font-medium text-primary mb-1">질문:</div>
+                            <div className="text-xs font-medium text-primary mb-1">{t('graph.question')}</div>
                           ) : (
-                            <div className="text-xs font-medium text-muted-foreground mb-1">답변:</div>
+                            <div className="text-xs font-medium text-muted-foreground mb-1">{t('graph.answer')}</div>
                           )}
                           <MarkdownRenderer content={msg.content} className="text-sm" />
                         </div>
@@ -412,7 +412,7 @@ export function GraphAnalysisPanel({
                     <div className="mb-3">
                       <div className="flex items-center gap-2 mb-1">
                         <Loader2 className="h-3 w-3 animate-spin text-primary" />
-                        <span className="text-xs text-muted-foreground">답변 생성 중...</span>
+                        <span className="text-xs text-muted-foreground">{t('graph.generating')}</span>
                       </div>
                       {followUpStream.content && (
                         <MarkdownRenderer content={followUpStream.content} className="text-sm" />
@@ -440,7 +440,7 @@ export function GraphAnalysisPanel({
                           handleSendFollowUp()
                         }
                       }}
-                      placeholder="후속 질문을 입력하세요..."
+                      placeholder={t('graph.followUpPlaceholder')}
                       disabled={followUpStream.isStreaming}
                       className="flex-1 px-3 py-2 border border-input rounded-md text-xs bg-background placeholder:text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
                     />
@@ -448,7 +448,7 @@ export function GraphAnalysisPanel({
                       onClick={handleSendFollowUp}
                       disabled={!chatInput.trim() || followUpStream.isStreaming}
                       className="p-2 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
-                      title="전송"
+                      title={t('graph.send')}
                     >
                       <Send className="h-3.5 w-3.5" />
                     </button>
@@ -467,7 +467,7 @@ export function GraphAnalysisPanel({
                   }}
                   className="mt-4 w-full px-3 py-2 rounded border border-border text-xs text-muted-foreground hover:bg-accent"
                 >
-                  분석 초기화
+                  {t('graph.resetAnalysis')}
                 </button>
               )}
             </>

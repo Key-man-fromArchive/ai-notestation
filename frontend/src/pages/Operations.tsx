@@ -198,32 +198,32 @@ export default function Operations() {
             </div>
             {/* 시스템 */}
             <div className="flex gap-1 items-center">
-              <span className="text-xs text-muted-foreground mr-1">시스템</span>
-              <FilterButton label="동기화" value="sync" current={filter} onClick={setFilter} />
-              <FilterButton label="임베딩" value="embedding" current={filter} onClick={setFilter} />
-              <FilterButton label="이미지" value="image_sync" current={filter} onClick={setFilter} />
+              <span className="text-xs text-muted-foreground mr-1">{t('operations.categorySystem')}</span>
+              <FilterButton label={t('operations.categorySync')} value="sync" current={filter} onClick={setFilter} />
+              <FilterButton label={t('operations.categoryEmbedding')} value="embedding" current={filter} onClick={setFilter} />
+              <FilterButton label={t('operations.categoryImage')} value="image_sync" current={filter} onClick={setFilter} />
               <FilterButton label="NSX" value="nsx" current={filter} onClick={setFilter} />
             </div>
             {/* 사용자 */}
             <div className="flex gap-1 items-center">
-              <span className="text-xs text-muted-foreground mr-1">사용자</span>
-              <FilterButton label="인증" value="auth" current={filter} onClick={setFilter} />
-              <FilterButton label="멤버" value="member" current={filter} onClick={setFilter} />
+              <span className="text-xs text-muted-foreground mr-1">{t('operations.categoryUser')}</span>
+              <FilterButton label={t('operations.categoryAuth')} value="auth" current={filter} onClick={setFilter} />
+              <FilterButton label={t('operations.categoryMember')} value="member" current={filter} onClick={setFilter} />
               <FilterButton label="OAuth" value="oauth" current={filter} onClick={setFilter} />
             </div>
             {/* 콘텐츠 */}
             <div className="flex gap-1 items-center">
-              <span className="text-xs text-muted-foreground mr-1">콘텐츠</span>
-              <FilterButton label="노트" value="note" current={filter} onClick={setFilter} />
-              <FilterButton label="노트북" value="notebook" current={filter} onClick={setFilter} />
-              <FilterButton label="권한" value="access" current={filter} onClick={setFilter} />
-              <FilterButton label="공유링크" value="share_link" current={filter} onClick={setFilter} />
+              <span className="text-xs text-muted-foreground mr-1">{t('operations.categoryContent')}</span>
+              <FilterButton label={t('operations.categoryNote')} value="note" current={filter} onClick={setFilter} />
+              <FilterButton label={t('operations.categoryNotebook')} value="notebook" current={filter} onClick={setFilter} />
+              <FilterButton label={t('operations.categoryAccess')} value="access" current={filter} onClick={setFilter} />
+              <FilterButton label={t('operations.categoryShareLink')} value="share_link" current={filter} onClick={setFilter} />
             </div>
             {/* 관리 */}
             <div className="flex gap-1 items-center">
-              <span className="text-xs text-muted-foreground mr-1">관리</span>
-              <FilterButton label="설정" value="settings" current={filter} onClick={setFilter} />
-              <FilterButton label="관리" value="admin" current={filter} onClick={setFilter} />
+              <span className="text-xs text-muted-foreground mr-1">{t('operations.categoryManagement')}</span>
+              <FilterButton label={t('operations.categorySettings')} value="settings" current={filter} onClick={setFilter} />
+              <FilterButton label={t('admin.title')} value="admin" current={filter} onClick={setFilter} />
             </div>
           </div>
         </div>
@@ -260,9 +260,9 @@ export default function Operations() {
                     {item.details && item.status === 'completed' && (
                       <span className="text-foreground/60">
                         {item.operation === 'sync' && `+${(item.details as Record<string, number>).added ?? 0} / ~${(item.details as Record<string, number>).updated ?? 0} / -${(item.details as Record<string, number>).deleted ?? 0}`}
-                        {item.operation === 'embedding' && `${(item.details as Record<string, number>).indexed ?? 0}개 인덱싱`}
-                        {item.operation === 'nsx' && `${(item.details as Record<string, number>).notes ?? 0}개 노트`}
-                        {item.operation === 'image_sync' && `${(item.details as Record<string, number>).images ?? 0}개 이미지`}
+                        {item.operation === 'embedding' && t('operations.indexedCount', { count: (item.details as Record<string, number>).indexed ?? 0 })}
+                        {item.operation === 'nsx' && t('operations.notesCount', { count: (item.details as Record<string, number>).notes ?? 0 })}
+                        {item.operation === 'image_sync' && t('operations.imagesCount', { count: (item.details as Record<string, number>).images ?? 0 })}
                       </span>
                     )}
                   </div>

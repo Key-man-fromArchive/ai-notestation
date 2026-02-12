@@ -262,21 +262,21 @@ function OverviewTab() {
         <div className="p-4 border border-border rounded-lg bg-card">
           <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
             <Database className="h-5 w-5" />
-            데이터 요약
+            {t('admin.dataSummary')}
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
             <div>
-              <p className="text-muted-foreground">노트 텍스트</p>
+              <p className="text-muted-foreground">{t('admin.noteText')}</p>
               <p className="font-medium">{usage.notes.text_size}</p>
             </div>
             <div>
-              <p className="text-muted-foreground">노트북</p>
-              <p className="font-medium">{usage.notebooks.count}개</p>
+              <p className="text-muted-foreground">{t('admin.notebook')}</p>
+              <p className="font-medium">{t('common.count_items', {count: usage.notebooks.count})}</p>
             </div>
             <div>
-              <p className="text-muted-foreground">인덱싱된 노트</p>
+              <p className="text-muted-foreground">{t('admin.indexedNotes')}</p>
               <p className="font-medium">
-                {usage.embeddings.indexed_notes} / {usage.notes.count}개
+                {usage.embeddings.indexed_notes} / {t('common.count_items', {count: usage.notes.count})}
               </p>
             </div>
           </div>
@@ -291,6 +291,7 @@ function OverviewTab() {
 // ---------------------------------------------------------------------------
 
 function DatabaseTab() {
+  const { t } = useTranslation()
   const { data, isLoading } = useQuery({
     queryKey: ['admin', 'db-stats'],
     queryFn: () => apiClient.get<DbStatsData>('/admin/db/stats'),
@@ -304,15 +305,15 @@ function DatabaseTab() {
       {/* DB Overview */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="p-4 border border-border rounded-lg bg-card">
-          <p className="text-sm text-muted-foreground">데이터베이스 크기</p>
+          <p className="text-sm text-muted-foreground">{t('admin.databaseSize')}</p>
           <p className="text-2xl font-bold">{data?.database_size}</p>
         </div>
         <div className="p-4 border border-border rounded-lg bg-card">
-          <p className="text-sm text-muted-foreground">활성 연결</p>
+          <p className="text-sm text-muted-foreground">{t('admin.activeConnections')}</p>
           <p className="text-2xl font-bold">{data?.active_connections}</p>
         </div>
         <div className="p-4 border border-border rounded-lg bg-card">
-          <p className="text-sm text-muted-foreground">전체 연결</p>
+          <p className="text-sm text-muted-foreground">{t('admin.totalConnections')}</p>
           <p className="text-2xl font-bold">{data?.total_connections}</p>
         </div>
       </div>
@@ -320,17 +321,17 @@ function DatabaseTab() {
       {/* Table Stats */}
       <div className="border border-border rounded-lg overflow-hidden">
         <div className="px-4 py-3 bg-muted/50 border-b border-border">
-          <h3 className="font-semibold">테이블별 통계</h3>
+          <h3 className="font-semibold">{t('admin.tableStats')}</h3>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/30">
-                <th className="text-left px-4 py-2 font-medium">테이블</th>
-                <th className="text-right px-4 py-2 font-medium">행 수</th>
-                <th className="text-right px-4 py-2 font-medium">전체 크기</th>
-                <th className="text-right px-4 py-2 font-medium">데이터</th>
-                <th className="text-right px-4 py-2 font-medium">인덱스</th>
+                <th className="text-left px-4 py-2 font-medium">{t('admin.table')}</th>
+                <th className="text-right px-4 py-2 font-medium">{t('admin.rowCount')}</th>
+                <th className="text-right px-4 py-2 font-medium">{t('admin.totalSize')}</th>
+                <th className="text-right px-4 py-2 font-medium">{t('admin.dataSize')}</th>
+                <th className="text-right px-4 py-2 font-medium">{t('admin.indexSize')}</th>
               </tr>
             </thead>
             <tbody>
@@ -356,6 +357,7 @@ function DatabaseTab() {
 // ---------------------------------------------------------------------------
 
 function UsersTab() {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
 
   const { data, isLoading } = useQuery({
@@ -373,19 +375,19 @@ function UsersTab() {
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">전체 {data?.total ?? 0}명의 사용자</p>
+      <p className="text-sm text-muted-foreground">{t('admin.totalUsers', { count: data?.total ?? 0 })}</p>
 
       <div className="border border-border rounded-lg overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/30">
-                <th className="text-left px-4 py-2 font-medium">사용자</th>
-                <th className="text-left px-4 py-2 font-medium">역할</th>
-                <th className="text-left px-4 py-2 font-medium">조직</th>
-                <th className="text-left px-4 py-2 font-medium">상태</th>
-                <th className="text-left px-4 py-2 font-medium">가입일</th>
-                <th className="text-right px-4 py-2 font-medium">작업</th>
+                <th className="text-left px-4 py-2 font-medium">{t('admin.userColumn')}</th>
+                <th className="text-left px-4 py-2 font-medium">{t('admin.role')}</th>
+                <th className="text-left px-4 py-2 font-medium">{t('admin.organization')}</th>
+                <th className="text-left px-4 py-2 font-medium">{t('admin.status')}</th>
+                <th className="text-left px-4 py-2 font-medium">{t('admin.joinedAt')}</th>
+                <th className="text-right px-4 py-2 font-medium">{t('admin.actions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -396,7 +398,7 @@ function UsersTab() {
                   <tr key={u.id} className="border-b border-border last:border-0 hover:bg-muted/20">
                     <td className="px-4 py-3">
                       <div>
-                        <p className="font-medium">{u.name || '(이름 없음)'}</p>
+                        <p className="font-medium">{u.name || t('admin.noName')}</p>
                         <p className="text-xs text-muted-foreground">{u.email}</p>
                       </div>
                     </td>
@@ -415,11 +417,11 @@ function UsersTab() {
                     <td className="px-4 py-3">
                       {u.is_active ? (
                         <span className="inline-flex items-center gap-1 text-xs text-green-600">
-                          <UserCheck className="h-3 w-3" /> 활성
+                          <UserCheck className="h-3 w-3" /> {t('admin.active')}
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 text-xs text-red-600">
-                          <UserX className="h-3 w-3" /> 비활성
+                          <UserX className="h-3 w-3" /> {t('admin.inactive')}
                         </span>
                       )}
                     </td>
@@ -441,9 +443,9 @@ function UsersTab() {
                           {toggleActive.isPending ? (
                             <Loader2 className="h-3 w-3 animate-spin" />
                           ) : u.is_active ? (
-                            '비활성화'
+                            t('admin.deactivate')
                           ) : (
-                            '활성화'
+                            t('admin.activate')
                           )}
                         </button>
                       )}
@@ -464,6 +466,7 @@ function UsersTab() {
 // ---------------------------------------------------------------------------
 
 function NasTab() {
+  const { t } = useTranslation()
   const { data, isLoading } = useQuery({
     queryKey: ['admin', 'nas-status'],
     queryFn: () => apiClient.get<NasStatusData>('/admin/nas/status'),
@@ -485,9 +488,9 @@ function NasTab() {
             </div>
           )}
           <div>
-            <h3 className="text-lg font-semibold">{data?.configured ? 'NAS 연결됨' : 'NAS 미설정'}</h3>
+            <h3 className="text-lg font-semibold">{data?.configured ? t('admin.nasConnected') : t('admin.nasNotConfigured')}</h3>
             <p className="text-sm text-muted-foreground">
-              {data?.nas_url || '설정 페이지에서 NAS를 설정하세요'}
+              {data?.nas_url || t('admin.nasSetupPrompt')}
             </p>
           </div>
         </div>
@@ -499,13 +502,13 @@ function NasTab() {
               <p className="font-medium font-mono text-sm">{data.nas_url}</p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">동기화된 노트</p>
-              <p className="font-medium">{data.synced_notes.toLocaleString()}개</p>
+              <p className="text-sm text-muted-foreground">{t('admin.syncedNotes')}</p>
+              <p className="font-medium">{t('common.count_items', {count: data.synced_notes})}</p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">마지막 동기화</p>
+              <p className="text-sm text-muted-foreground">{t('admin.lastSync')}</p>
               <p className="font-medium">
-                {data.last_sync ? new Date(data.last_sync).toLocaleString('ko-KR') : '없음'}
+                {data.last_sync ? new Date(data.last_sync).toLocaleString('ko-KR') : t('admin.none')}
               </p>
             </div>
           </div>
@@ -520,6 +523,7 @@ function NasTab() {
 // ---------------------------------------------------------------------------
 
 function ProvidersTab() {
+  const { t } = useTranslation()
   const { data, isLoading } = useQuery({
     queryKey: ['admin', 'providers'],
     queryFn: () => apiClient.get<ProvidersResponse>('/admin/providers'),
@@ -532,11 +536,11 @@ function ProvidersTab() {
       {/* Summary */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="p-4 border border-border rounded-lg bg-card">
-          <p className="text-sm text-muted-foreground">활성 프로바이더</p>
+          <p className="text-sm text-muted-foreground">{t('admin.activeProviders')}</p>
           <p className="text-2xl font-bold">{data?.providers.length ?? 0}</p>
         </div>
         <div className="p-4 border border-border rounded-lg bg-card">
-          <p className="text-sm text-muted-foreground">사용 가능 모델</p>
+          <p className="text-sm text-muted-foreground">{t('admin.availableModels')}</p>
           <p className="text-2xl font-bold">{data?.total_models ?? 0}</p>
         </div>
       </div>
@@ -550,15 +554,15 @@ function ProvidersTab() {
                 <h3 className="font-semibold capitalize">{provider.name}</h3>
                 {provider.status === 'active' ? (
                   <span className="inline-flex items-center gap-1 text-xs text-green-600">
-                    <CheckCircle2 className="h-3 w-3" /> 활성
+                    <CheckCircle2 className="h-3 w-3" /> {t('admin.active')}
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-1 text-xs text-red-600">
-                    <XCircle className="h-3 w-3" /> 오류
+                    <XCircle className="h-3 w-3" /> {t('admin.error')}
                   </span>
                 )}
               </div>
-              <span className="text-sm text-muted-foreground">{provider.model_count}개 모델</span>
+              <span className="text-sm text-muted-foreground">{t('admin.modelCount', {count: provider.model_count})}</span>
             </div>
 
             {provider.error && (
@@ -588,8 +592,8 @@ function ProvidersTab() {
         {data?.providers.length === 0 && (
           <div className="text-center py-12 text-muted-foreground">
             <Brain className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p>등록된 LLM 프로바이더가 없습니다.</p>
-            <p className="text-sm">설정 페이지에서 API 키를 추가하세요.</p>
+            <p>{t('admin.noProviders')}</p>
+            <p className="text-sm">{t('admin.addApiKey')}</p>
           </div>
         )}
       </div>

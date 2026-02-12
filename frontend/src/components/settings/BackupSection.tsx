@@ -42,9 +42,9 @@ export function BackupSection() {
       link.remove()
       window.URL.revokeObjectURL(url)
 
-      setSuccessMessage('백업 파일을 생성했습니다.')
+      setSuccessMessage(t('settings.backupExportSuccess'))
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : '백업 내보내기 실패')
+      setErrorMessage(error instanceof Error ? error.message : t('settings.backupExportFailed'))
     } finally {
       setIsExporting(false)
     }
@@ -73,9 +73,9 @@ export function BackupSection() {
       }
 
       setSelectedFile(null)
-      setSuccessMessage('백업을 성공적으로 가져왔습니다.')
+      setSuccessMessage(t('settings.backupImportSuccess'))
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : '백업 가져오기 실패')
+      setErrorMessage(error instanceof Error ? error.message : t('settings.backupImportFailed'))
     } finally {
       setIsImporting(false)
     }

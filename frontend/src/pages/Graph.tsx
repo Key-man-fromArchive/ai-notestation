@@ -209,8 +209,8 @@ export default function Graph() {
                 className="w-full"
               />
               <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                <span>30% (더 많은 연결)</span>
-                <span>95% (강한 연결만)</span>
+                <span>30% ({t('graph.moreConnections')})</span>
+                <span>95% ({t('graph.strongConnectionsOnly')})</span>
               </div>
             </div>
 
@@ -228,8 +228,8 @@ export default function Graph() {
                 className="w-full"
               />
               <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                <span>1 (간결)</span>
-                <span>20 (밀집)</span>
+                <span>1 ({t('graph.concise')})</span>
+                <span>20 ({t('graph.dense')})</span>
               </div>
             </div>
           </div>

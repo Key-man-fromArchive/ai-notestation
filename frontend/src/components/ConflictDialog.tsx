@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { X, AlertTriangle, Clock } from 'lucide-react'
 import { useConflicts } from '@/hooks/useConflicts'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
@@ -17,12 +18,13 @@ type TabType = 'local' | 'remote'
 export function ConflictDialog({ conflict, isOpen, onClose }: ConflictDialogProps) {
   const [activeTab, setActiveTab] = useState<TabType>('local')
   const { resolveConflict, isResolving } = useConflicts()
+  const { t, i18n } = useTranslation()
 
   if (!isOpen) return null
 
   const formatDate = (iso: string | null) => {
-    if (!iso) return '알 수 없음'
-    return new Date(iso).toLocaleString('ko-KR', {
+    if (!iso) return t('notes.unknown')
+    return new Date(iso).toLocaleString(i18n.language === 'ko' ? 'ko-KR' : 'en-US', {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
@@ -44,7 +46,7 @@ export function ConflictDialog({ conflict, isOpen, onClose }: ConflictDialogProp
         <div className="flex items-center justify-between p-4 border-b">
           <div className="flex items-center gap-2 text-amber-600">
             <AlertTriangle className="h-5 w-5" />
-            <h2 className="text-lg font-semibold">동기화 충돌 — {conflict.title}</h2>
+            <h2 className="text-lg font-semibold">{t('notes.conflictDialogTitle', { title: conflict.title })}</h2>
           </div>
           <button
             onClick={onClose}
@@ -65,7 +67,7 @@ export function ConflictDialog({ conflict, isOpen, onClose }: ConflictDialogProp
                 : 'text-muted-foreground hover:text-foreground',
             )}
           >
-            내 수정 (로컬)
+            {t('notes.myChangesLocal')}
             <div className="flex items-center justify-center gap-1 mt-1 text-xs text-muted-foreground">
               <Clock className="h-3 w-3" />
               {formatDate(conflict.local_updated_at)}
@@ -80,7 +82,7 @@ export function ConflictDialog({ conflict, isOpen, onClose }: ConflictDialogProp
                 : 'text-muted-foreground hover:text-foreground',
             )}
           >
-            NoteStation (원격)
+            {t('notes.noteStationRemote')}
             <div className="flex items-center justify-center gap-1 mt-1 text-xs text-muted-foreground">
               <Clock className="h-3 w-3" />
               {formatDate(conflict.remote_updated_at)}
@@ -99,7 +101,7 @@ export function ConflictDialog({ conflict, isOpen, onClose }: ConflictDialogProp
             <div className="prose prose-sm max-w-none">
               {conflict.remote_title !== conflict.title && (
                 <div className="mb-3 p-2 rounded bg-orange-50 text-sm text-orange-700">
-                  원격 제목: <strong>{conflict.remote_title}</strong>
+                  {t('notes.remoteTitle')}: <strong>{conflict.remote_title}</strong>
                 </div>
               )}
               <MarkdownRenderer content={conflict.remote_content} />
@@ -115,14 +117,14 @@ export function ConflictDialog({ conflict, isOpen, onClose }: ConflictDialogProp
             disabled={isResolving}
             className="px-4 py-2 text-sm font-medium rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
           >
-            내 수정 유지
+            {t('notes.keepLocalChanges')}
           </button>
           <button
             onClick={() => handleResolve('keep_remote')}
             disabled={isResolving}
             className="px-4 py-2 text-sm font-medium rounded bg-orange-600 text-white hover:bg-orange-700 disabled:opacity-50"
           >
-            NoteStation 유지
+            {t('notes.keepNoteStation')}
           </button>
         </div>
       </div>

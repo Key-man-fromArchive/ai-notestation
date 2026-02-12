@@ -65,7 +65,7 @@ export function NoteList({
       ref={parentRef}
       className="h-full overflow-auto"
       role="list"
-      aria-label="노트 목록"
+      aria-label={t('notes.noteList')}
     >
       <div
         style={{

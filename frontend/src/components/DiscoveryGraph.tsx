@@ -2,6 +2,7 @@
 // @SPEC docs/plans/2026-01-29-labnote-ai-design.md#discovery-library
 
 import { useRef, useState, useEffect, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import ForceGraph2D, {
   type ForceGraphMethods,
   type NodeObject,
@@ -58,6 +59,7 @@ export function DiscoveryGraph({
   onNodeClick,
   className,
 }: DiscoveryGraphProps) {
+  const { t } = useTranslation()
   const containerRef = useRef<HTMLDivElement>(null)
   type GraphMethods = ForceGraphMethods<NodeObject<GraphNodeObject>, LinkObject<GraphNodeObject, GraphLinkObject>>
   const graphRef = useRef<GraphMethods | undefined>(undefined)
@@ -123,7 +125,7 @@ export function DiscoveryGraph({
         )}
         style={{ minHeight: 400 }}
       >
-        <p>그래프를 불러오는 중 오류가 발생했습니다.</p>
+        <p>{t('graph.loadError')}</p>
       </div>
     )
   }
@@ -137,9 +139,9 @@ export function DiscoveryGraph({
         )}
         style={{ minHeight: 400 }}
       >
-        <p className="text-lg font-medium">노트가 없습니다</p>
+        <p className="text-lg font-medium">{t('graph.noNotes')}</p>
         <p className="text-sm mt-1">
-          노트북에 노트를 추가하면 그래프가 표시됩니다.
+          {t('graph.noNotesDesc')}
         </p>
       </div>
     )
@@ -165,7 +167,7 @@ export function DiscoveryGraph({
   return (
     <div ref={containerRef} className={cn('relative', className)}>
       <div className="absolute top-2 right-2 z-10 bg-background/80 backdrop-blur-sm px-2 py-1 rounded text-xs text-muted-foreground">
-        {nodes.length} / {totalNotes} 노트
+        {t('graph.noteCountDisplay', { count: nodes.length, total: totalNotes })}
       </div>
       <ForceGraph2D
         ref={graphRef}

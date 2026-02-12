@@ -96,9 +96,9 @@ function LinkRow({
             {typeOption?.label ?? link.link_type}
           </p>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span>접근 {link.access_count}회</span>
+            <span>{t('sharing.accessCount', { count: link.access_count })}</span>
             {link.expires_at && (
-              <span>• 만료: {formatDate(link.expires_at)}</span>
+              <span>• {t('sharing.expires')}: {formatDate(link.expires_at)}</span>
             )}
             {link.email_restriction && (
               <span>• {link.email_restriction}</span>
@@ -115,7 +115,7 @@ function LinkRow({
               ? 'bg-green-100 text-green-600'
               : 'hover:bg-accent text-muted-foreground hover:text-foreground',
           )}
-          title={copied ? '복사됨!' : '링크 복사'}
+          title={copied ? t('sharing.copiedTooltip') : t('sharing.copyLinkTooltip')}
         >
           {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
         </button>
@@ -123,7 +123,7 @@ function LinkRow({
           onClick={() => onRevoke(link.id)}
           disabled={isRevoking}
           className="p-2 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50"
-          title="링크 삭제"
+          title={t('sharing.deleteLinkTooltip')}
         >
           <Trash2 className="h-4 w-4" />
         </button>
@@ -158,7 +158,7 @@ export function ShareDialog({ notebookId, isOpen, onClose }: ShareDialogProps) {
 
     if (linkType === 'email_required') {
       if (!emailRestriction.trim()) {
-        setError('이메일 주소를 입력해주세요')
+        setError(t('sharing.emailRequired'))
         return
       }
       request.email_restriction = emailRestriction.trim()
@@ -167,7 +167,7 @@ export function ShareDialog({ notebookId, isOpen, onClose }: ShareDialogProps) {
     if (linkType === 'time_limited') {
       const days = parseInt(expiresInDays, 10)
       if (isNaN(days) || days < 1 || days > 90) {
-        setError('유효 기간은 1-90일 사이여야 합니다')
+        setError(t('sharing.expiryRangeError'))
         return
       }
       request.expires_in_days = days
@@ -184,12 +184,12 @@ export function ShareDialog({ notebookId, isOpen, onClose }: ShareDialogProps) {
           const body = (err as { body?: string }).body
           if (body) {
             const parsed = JSON.parse(body)
-            setError(parsed.detail || '링크 생성에 실패했습니다')
+            setError(parsed.detail || t('sharing.createLinkError'))
           } else {
-            setError('링크 생성에 실패했습니다')
+            setError(t('sharing.createLinkError'))
           }
         } catch {
-          setError('링크 생성에 실패했습니다')
+          setError(t('sharing.createLinkError'))
         }
       }
     }
@@ -200,7 +200,7 @@ export function ShareDialog({ notebookId, isOpen, onClose }: ShareDialogProps) {
     try {
       await revokeLink(linkId)
     } catch {
-      setError('링크 삭제에 실패했습니다')
+      setError(t('sharing.deleteLinkError'))
     }
   }
 
@@ -211,7 +211,7 @@ export function ShareDialog({ notebookId, isOpen, onClose }: ShareDialogProps) {
         <div className="flex items-center justify-between p-4 border-b">
           <div className="flex items-center gap-2">
             <LinkIcon className="h-5 w-5 text-primary" />
-            <h2 className="text-lg font-semibold">공유 링크</h2>
+            <h2 className="text-lg font-semibold">{t('sharing.shareDialogTitle')}</h2>
           </div>
           <button
             onClick={onClose}
@@ -230,7 +230,7 @@ export function ShareDialog({ notebookId, isOpen, onClose }: ShareDialogProps) {
             <>
               <form onSubmit={handleCreate} className="mb-6">
                 <label className="block text-sm font-medium mb-3">
-                  새 링크 생성
+                  {t('sharing.createNewLink')}
                 </label>
 
                 <div className="space-y-2 mb-4">
@@ -268,7 +268,7 @@ export function ShareDialog({ notebookId, isOpen, onClose }: ShareDialogProps) {
                 {linkType === 'email_required' && (
                   <div className="mb-4">
                     <label htmlFor="emailRestriction" className="block text-sm font-medium mb-1">
-                      허용 이메일
+                      {t('sharing.allowedEmail')}
                     </label>
                     <input
                       id="emailRestriction"
@@ -284,7 +284,7 @@ export function ShareDialog({ notebookId, isOpen, onClose }: ShareDialogProps) {
                 {linkType === 'time_limited' && (
                   <div className="mb-4">
                     <label htmlFor="expiresInDays" className="block text-sm font-medium mb-1">
-                      유효 기간 (일)
+                      {t('sharing.expiresInDays')}
                     </label>
                     <input
                       id="expiresInDays"
@@ -296,7 +296,7 @@ export function ShareDialog({ notebookId, isOpen, onClose }: ShareDialogProps) {
                       className="w-full px-3 py-2 border border-input rounded-lg text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     />
                     <p className="text-xs text-muted-foreground mt-1">
-                      최대 90일까지 설정 가능합니다
+                      {t('sharing.maxDaysHint')}
                     </p>
                   </div>
                 )}
@@ -316,17 +316,17 @@ export function ShareDialog({ notebookId, isOpen, onClose }: ShareDialogProps) {
                     'hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed',
                   )}
                 >
-                  {isCreating ? '생성 중...' : '링크 생성'}
+                  {isCreating ? t('common.creating') : t('sharing.createLink')}
                 </button>
               </form>
 
               <div>
                 <h3 className="text-sm font-medium mb-3">
-                  활성 링크 ({links.length})
+                  {t('sharing.activeLinks', { count: links.length })}
                 </h3>
                 {links.length === 0 ? (
                   <p className="text-sm text-muted-foreground text-center py-4">
-                    생성된 공유 링크가 없습니다
+                    {t('sharing.noLinks')}
                   </p>
                 ) : (
                   <div className="space-y-2">

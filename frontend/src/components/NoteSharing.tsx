@@ -11,7 +11,7 @@ interface NoteSharingProps {
   onClose: () => void
 }
 
-function getPermissionOptions(t: any) {
+function getPermissionOptions(t: (key: string) => string) {
   return [
     { value: 'read', label: t('notebooks.permRead'), icon: Eye },
     { value: 'write', label: t('notebooks.permWrite'), icon: Edit },
@@ -51,6 +51,7 @@ function AccessRow({
   onRevoke: (id: number) => void
   isRevoking: boolean
 }) {
+  const { t } = useTranslation()
   return (
     <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/30">
       <div className="flex items-center gap-3">
@@ -65,7 +66,7 @@ function AccessRow({
         )}
         <div>
           {access.is_org_wide ? (
-            <p className="text-sm font-medium">전체 조직</p>
+            <p className="text-sm font-medium">{t('sharing.wholeOrganization')}</p>
           ) : (
             <>
               <p className="text-sm font-medium">{access.user_name || access.user_email}</p>
@@ -83,7 +84,7 @@ function AccessRow({
             onClick={() => onRevoke(access.id)}
             disabled={isRevoking}
             className="p-1 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
-            title="접근 권한 제거"
+            title={t('sharing.revokeAccessTitle')}
           >
             <Trash2 className="h-4 w-4" />
           </button>
@@ -118,7 +119,7 @@ export function NoteSharing({ noteId, isOpen, onClose }: NoteSharingProps) {
     setError(null)
 
     if (!email.trim()) {
-      setError('이메일을 입력해주세요')
+      setError(t('sharing.enterEmail'))
       return
     }
 
@@ -131,9 +132,9 @@ export function NoteSharing({ noteId, isOpen, onClose }: NoteSharingProps) {
         if (body) {
           try {
             const parsed = JSON.parse(body)
-            setError(parsed.detail || '권한 부여에 실패했습니다')
+            setError(parsed.detail || t('sharing.grantFailed'))
           } catch {
-            setError('권한 부여에 실패했습니다')
+            setError(t('sharing.grantFailed'))
           }
         } else {
           setError(err.message)
@@ -148,7 +149,7 @@ export function NoteSharing({ noteId, isOpen, onClose }: NoteSharingProps) {
       await grantOrgAccess(permission)
     } catch (err) {
       if (err instanceof Error) {
-        setError('조직 전체 권한 부여에 실패했습니다')
+        setError(t('sharing.grantOrgFailed'))
       }
     }
   }
@@ -158,7 +159,7 @@ export function NoteSharing({ noteId, isOpen, onClose }: NoteSharingProps) {
     try {
       await revokeAccess(accessId)
     } catch {
-      setError('권한 제거에 실패했습니다')
+      setError(t('sharing.revokeFailed'))
     }
   }
 
@@ -169,7 +170,7 @@ export function NoteSharing({ noteId, isOpen, onClose }: NoteSharingProps) {
         <div className="flex items-center justify-between p-4 border-b">
           <div className="flex items-center gap-2">
             <Users className="h-5 w-5 text-primary" />
-            <h2 className="text-lg font-semibold">노트 공유</h2>
+            <h2 className="text-lg font-semibold">{t('sharing.shareNote')}</h2>
           </div>
           <button
             onClick={onClose}
@@ -189,14 +190,14 @@ export function NoteSharing({ noteId, isOpen, onClose }: NoteSharingProps) {
               {canManage && (
                 <form onSubmit={handleGrantAccess} className="mb-6">
                   <label className="block text-sm font-medium mb-2">
-                    사용자 추가
+                    {t('sharing.addUser')}
                   </label>
                   <div className="flex gap-2">
                     <input
                       type="email"
                       value={email}
                       onChange={e => setEmail(e.target.value)}
-                      placeholder="이메일 주소"
+                      placeholder={t('sharing.emailPlaceholder')}
                       className="flex-1 px-3 py-2 border border-input rounded-lg text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     />
                     <select
@@ -218,17 +219,17 @@ export function NoteSharing({ noteId, isOpen, onClose }: NoteSharingProps) {
                       className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <UserPlus className="h-4 w-4" />
-                      {isGranting ? '추가 중...' : '사용자 추가'}
+                      {isGranting ? t('sharing.adding') : t('sharing.addUser')}
                     </button>
                     <button
                       type="button"
                       onClick={handleGrantOrgAccess}
                       disabled={isGrantingOrg}
                       className="inline-flex items-center justify-center gap-2 px-4 py-2 border rounded-lg text-sm font-medium hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
-                      title="조직 전체에 권한 부여"
+                      title={t('sharing.orgWideGrantTitle')}
                     >
                       <Building2 className="h-4 w-4" />
-                      {isGrantingOrg ? '...' : '조직 전체'}
+                      {isGrantingOrg ? t('sharing.orgWideGranting') : t('sharing.orgWide')}
                     </button>
                   </div>
                 </form>
@@ -242,11 +243,11 @@ export function NoteSharing({ noteId, isOpen, onClose }: NoteSharingProps) {
 
               <div>
                 <h3 className="text-sm font-medium mb-3">
-                  접근 권한 ({accesses.length})
+                  {t('sharing.accessList', { count: accesses.length })}
                 </h3>
                 {accesses.length === 0 ? (
                   <p className="text-sm text-muted-foreground text-center py-4">
-                    아직 공유된 사용자가 없습니다
+                    {t('sharing.noSharedUsers')}
                   </p>
                 ) : (
                   <div className="space-y-2">
