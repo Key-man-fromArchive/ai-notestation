@@ -98,11 +98,14 @@ _SETTING_DESCRIPTIONS: dict[str, str] = {
     "embedding_model": "Embedding model for semantic search",
     "max_search_results": "Maximum number of search results returned",
     "timezone": "Display timezone (e.g. Asia/Seoul, UTC)",
+    "search_params": "검색 알고리즘 파라미터 (RRF 가중치, 제목 부스트, 유사도 임계값)",
 }
 
 
 def _get_default_settings() -> dict[str, Any]:
     """Return default settings from environment variables."""
+    from app.search.params import DEFAULT_SEARCH_PARAMS
+
     env = get_settings()
     return {
         "nas_url": env.SYNOLOGY_URL,
@@ -118,6 +121,7 @@ def _get_default_settings() -> dict[str, Any]:
         "embedding_model": "text-embedding-3-small",
         "max_search_results": 20,
         "timezone": "Asia/Seoul",
+        "search_params": dict(DEFAULT_SEARCH_PARAMS),
     }
 
 
@@ -319,6 +323,26 @@ async def update_setting(
         value=_mask_value(key, body.value),
         updated=True,
     )
+
+
+@router.put("/search_params/reset", response_model=SettingUpdateResponse)
+async def reset_search_params(
+    _current_user: dict = Depends(get_current_user),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> SettingUpdateResponse:
+    """Reset search parameters to their defaults."""
+    from app.search.params import DEFAULT_SEARCH_PARAMS
+
+    defaults = dict(DEFAULT_SEARCH_PARAMS)
+    await _save_to_db(db, "search_params", defaults)
+    logger.info("Search params reset to defaults by user")
+    await log_activity(
+        "settings", "completed",
+        message="검색 파라미터 초기화",
+        details={"key": "search_params"},
+        triggered_by=get_trigger_name(_current_user),
+    )
+    return SettingUpdateResponse(key="search_params", value=defaults, updated=True)
 
 
 # ---------------------------------------------------------------------------

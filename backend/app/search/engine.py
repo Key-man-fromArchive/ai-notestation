@@ -29,6 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Note, NoteEmbedding
 from app.search.embeddings import EmbeddingError, EmbeddingService
+from app.search.params import get_search_params
 from app.search.query_preprocessor import QueryAnalysis, analyze_query
 
 logger = logging.getLogger(__name__)
@@ -98,12 +99,14 @@ class FullTextSearchEngine:
         if not analysis.tsquery_expr:
             return SearchPage(results=[], total=0)
 
+        params = get_search_params()
+
         # Build tsquery using to_tsquery with OR-joined morphemes
         tsquery = func.to_tsquery(literal_column("'simple'"), analysis.tsquery_expr)
 
         # BM25-approximated scoring with field boosting:
-        # - Title (weight A): 3x boost
-        # - Content (weight B): 1x, with document length normalization (flag=1)
+        # - Title (weight A): configurable boost (default 3x)
+        # - Content (weight B): configurable weight (default 1x), with document length normalization (flag=1)
         title_rank = func.ts_rank(
             func.setweight(func.to_tsvector(literal_column("'simple'"), func.coalesce(Note.title, "")), literal_column("'A'")),
             tsquery,
@@ -113,7 +116,7 @@ class FullTextSearchEngine:
             tsquery,
             1,  # normalization: divide by document length
         )
-        score = (3.0 * title_rank + 1.0 * content_rank).label("score")
+        score = (params["title_weight"] * title_rank + params["content_weight"] * content_rank).label("score")
 
         # ts_headline generates a highlighted snippet from content_text
         headline = func.ts_headline(
@@ -215,10 +218,11 @@ class TrigramSearchEngine:
         """Get language-appropriate similarity threshold."""
         if self._threshold_override is not None:
             return self._threshold_override
+        params = get_search_params()
         language = analyze_query(query).language
         if language in ("ko", "mixed"):
-            return 0.15
-        return 0.1
+            return params["trigram_threshold_ko"]
+        return params["trigram_threshold_en"]
 
     async def search(
         self,
@@ -252,12 +256,13 @@ class TrigramSearchEngine:
         date_from: datetime | None = None,
         date_to: datetime | None = None,
     ) -> SearchPage:
-        """Trigram similarity search using pg_trgm with 3x title boost."""
+        """Trigram similarity search using pg_trgm with configurable title boost."""
         threshold = self._get_threshold(query)
+        params = get_search_params()
 
         title_sim = func.similarity(Note.title, query).label("title_sim")
         content_sim = func.similarity(Note.content_text, query).label("content_sim")
-        combined_score = (title_sim * 3.0 + content_sim).label("score")
+        combined_score = (title_sim * params["trigram_title_weight"] + content_sim).label("score")
         total_count = func.count().over().label("total_count")
 
         stmt = (
@@ -586,25 +591,23 @@ class HybridSearchEngine:
     def _compute_rrf_params(analysis: QueryAnalysis) -> tuple[int, float, float]:
         """Compute dynamic RRF parameters based on query analysis.
 
+        Uses configurable base weights from search params. Korean queries
+        use dedicated Korean weights; other languages use default weights.
+
         Args:
             analysis: QueryAnalysis from the query preprocessor.
 
         Returns:
             Tuple of (k, fts_weight, semantic_weight).
         """
+        params = get_search_params()
+        k = int(params["rrf_k"])
         lang = analysis.language
-        single = analysis.is_single_term
 
-        if lang == "ko" and single:
-            return 40, 0.70, 0.30
-        if lang == "ko":
-            return 60, 0.55, 0.45
-        if lang == "en" and single:
-            return 50, 0.65, 0.35
-        if lang == "mixed":
-            return 60, 0.50, 0.50
-        # Default (English multi-word, etc.)
-        return 60, 0.60, 0.40
+        if lang in ("ko", "mixed"):
+            return k, params["fts_weight_korean"], params["semantic_weight_korean"]
+        # English / default
+        return k, params["fts_weight"], params["semantic_weight"]
 
     @staticmethod
     def rrf_merge(
@@ -757,7 +760,14 @@ class UnifiedSearchEngine:
 
         fts_page, trigram_page = await asyncio.gather(fts_task, trigram_task)
 
-        merged = self._rrf_merge(fts_page.results, trigram_page.results, k=60, fts_weight=0.65, trigram_weight=0.35, limit=limit)
+        params = get_search_params()
+        merged = self._rrf_merge(
+            fts_page.results, trigram_page.results,
+            k=int(params["rrf_k"]),
+            fts_weight=params["unified_fts_weight"],
+            trigram_weight=params["unified_trigram_weight"],
+            limit=limit,
+        )
         # Use max of both totals as conservative estimate (there's overlap)
         total = max(fts_page.total, trigram_page.total)
         return SearchPage(results=merged, total=total)
