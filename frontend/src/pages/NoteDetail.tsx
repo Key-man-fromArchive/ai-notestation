@@ -2,14 +2,13 @@
 // @SPEC docs/plans/2026-01-29-labnote-ai-design.md#노트-상세
 // @TEST frontend/src/__tests__/NoteDetail.test.tsx
 
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Notebook, Tag, Paperclip, Image, File, AlertCircle, Calendar, Pencil, Share2, AlertTriangle, CloudOff, CloudUpload, CloudDownload, Loader2, Check, Sparkles, X } from 'lucide-react'
+import { ArrowLeft, Notebook, Tag, Paperclip, Image, File, AlertCircle, Calendar, Share2, AlertTriangle, CloudOff, CloudUpload, CloudDownload, Loader2, Check, Sparkles, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { apiClient } from '@/lib/api'
 import { useNote } from '@/hooks/useNote'
 import { useQueryClient } from '@tanstack/react-query'
-import { MarkdownRenderer } from '@/components/MarkdownRenderer'
 import { NoteAIPanel } from '@/components/NoteAIPanel'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
 import { EmptyState } from '@/components/EmptyState'
@@ -25,7 +24,6 @@ export default function NoteDetail() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { data: note, error, isLoading } = useNote(id)
-  const [isEditing, setIsEditing] = useState(false)
   const [isSharingOpen, setIsSharingOpen] = useState(false)
   const [isConflictOpen, setIsConflictOpen] = useState(false)
   const [syncState, setSyncState] = useState<'idle' | 'syncing' | 'success' | 'error' | 'skipped' | 'conflict'>('idle')
@@ -150,6 +148,12 @@ export default function NoteDetail() {
     setSuggestedTitle('')
     setSuggestedTags([])
   }
+
+  const handleAutoSave = useCallback(async (html: string, json: object) => {
+    if (!note) return
+    await apiClient.put(`/notes/${note.note_id}`, { content: html, content_json: json })
+    queryClient.invalidateQueries({ queryKey: ['notes'] })
+  }, [note, queryClient])
 
   // 로딩 상태
   if (isLoading) {
@@ -344,13 +348,6 @@ export default function NoteDetail() {
               <Share2 className="h-3.5 w-3.5" />
               {t('notes.share')}
             </button>
-            <button
-              onClick={() => setIsEditing(true)}
-              className="inline-flex items-center gap-2 text-xs px-2.5 py-1.5 rounded border border-input text-muted-foreground hover:text-foreground hover:border-primary/30"
-            >
-              <Pencil className="h-3.5 w-3.5" />
-              {t('notes.editNote')}
-            </button>
           </div>
         </div>
 
@@ -458,23 +455,13 @@ export default function NoteDetail() {
           <NoteAIPanel noteId={note.note_id} noteContent={note.content} noteTitle={note.title} />
         </div>
 
-        {/* 마크다운 콘텐츠 */}
+        {/* 에디터 (항상 편집 가능) */}
         <article className="mb-8">
-          {isEditing ? (
-            <NoteEditor
-              noteId={note.note_id}
-              initialContent={note.content}
-              onCancel={() => setIsEditing(false)}
-              onSave={async (html, json) => {
-                await apiClient.put(`/notes/${note.note_id}`, { content: html, content_json: json })
-                setIsEditing(false)
-                queryClient.invalidateQueries({ queryKey: ['note', note.note_id] })
-                queryClient.invalidateQueries({ queryKey: ['notes'] })
-              }}
-            />
-          ) : (
-            <MarkdownRenderer content={note.content} />
-          )}
+          <NoteEditor
+            noteId={note.note_id}
+            initialContent={note.content}
+            onAutoSave={handleAutoSave}
+          />
         </article>
 
         {/* 첨부파일 */}

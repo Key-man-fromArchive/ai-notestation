@@ -1,4 +1,4 @@
-// Rich text editor for note editing (TipTap)
+// Rich text editor for note editing (TipTap) with auto-save
 
 import { type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { EditorContent, useEditor } from '@tiptap/react'
@@ -18,6 +18,7 @@ import Placeholder from '@tiptap/extension-placeholder'
 import { useTranslation } from 'react-i18next'
 import { apiClient } from '@/lib/api'
 import { cn } from '@/lib/utils'
+import { useAutoSave, type SaveStatus } from '@/hooks/useAutoSave'
 import {
   Bold,
   Italic,
@@ -28,8 +29,6 @@ import {
   Link as LinkIcon,
   Image as ImageIcon,
   Table as TableIcon,
-  Save,
-  X,
   Highlighter,
   Heading1,
   Heading2,
@@ -41,13 +40,14 @@ import {
   Redo2,
   Loader2,
   Palette,
+  Check,
+  AlertCircle,
 } from 'lucide-react'
 
 interface NoteEditorProps {
   noteId: string
   initialContent: string
-  onSave: (html: string, json: object) => Promise<void>
-  onCancel: () => void
+  onAutoSave: (html: string, json: object) => Promise<void>
 }
 
 // Custom Image extension that accepts <img> tags without src (NAS placeholders)
@@ -122,13 +122,42 @@ function ToolbarSep() {
   return <div className="w-px h-5 bg-border mx-0.5" />
 }
 
-export function NoteEditor({ noteId, initialContent, onSave, onCancel }: NoteEditorProps) {
+function SaveStatusIndicator({ status }: { status: SaveStatus }) {
   const { t } = useTranslation()
-  const [isSaving, setIsSaving] = useState(false)
+  if (status === 'saving') {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+        <Loader2 className="h-3 w-3 animate-spin" />
+        {t('notes.autoSaving')}
+      </span>
+    )
+  }
+  if (status === 'saved') {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-xs text-green-600">
+        <Check className="h-3 w-3" />
+        {t('notes.autoSaved')}
+      </span>
+    )
+  }
+  if (status === 'error') {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-xs text-red-500">
+        <AlertCircle className="h-3 w-3" />
+        {t('notes.saveFailed')}
+      </span>
+    )
+  }
+  return null
+}
+
+export function NoteEditor({ noteId, initialContent, onAutoSave }: NoteEditorProps) {
+  const { t } = useTranslation()
   const [wordCount, setWordCount] = useState(0)
   const [charCount, setCharCount] = useState(0)
   const [, setRenderKey] = useState(0)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const editorRef = useRef<ReturnType<typeof useEditor>>(null)
 
   const token = apiClient.getToken()
 
@@ -167,13 +196,34 @@ export function NoteEditor({ noteId, initialContent, onSave, onCancel }: NoteEdi
     },
   })
 
-  // Sync content when initialContent changes
+  editorRef.current = editor
+
+  // Auto-save integration
+  const handleAutoSave = useCallback(async () => {
+    const ed = editorRef.current
+    if (!ed) return
+    const html = stripNasImageTokens(ed.getHTML())
+    await onAutoSave(html, ed.getJSON())
+  }, [onAutoSave])
+
+  const { status: saveStatus, markDirty, save } = useAutoSave({
+    debounceMs: 3000,
+    maxIntervalMs: 30000,
+    onSave: handleAutoSave,
+  })
+
+  // Sync content when initialContent changes (e.g. after pull sync)
   useEffect(() => {
     if (!editor) return
-    editor.commands.setContent(addNasImageTokens(initialContent || '', token))
+    const newContent = addNasImageTokens(initialContent || '', token)
+    // Only update if content actually differs to avoid resetting cursor
+    const currentHtml = editor.getHTML()
+    if (currentHtml !== newContent) {
+      editor.commands.setContent(newContent)
+    }
   }, [editor, initialContent, token])
 
-  // Update word/char count and force re-render for toolbar active states
+  // Update word/char count, force re-render for toolbar, and trigger auto-save on changes
   useEffect(() => {
     if (!editor) return
 
@@ -184,40 +234,34 @@ export function NoteEditor({ noteId, initialContent, onSave, onCancel }: NoteEdi
       setWordCount(trimmed ? trimmed.split(/\s+/).length : 0)
     }
 
+    const handleUpdate = () => {
+      updateCounts()
+      markDirty()
+    }
+
     updateCounts()
     const forceRender = () => setRenderKey(k => k + 1)
 
-    editor.on('update', updateCounts)
+    editor.on('update', handleUpdate)
     editor.on('selectionUpdate', forceRender)
 
     return () => {
-      editor.off('update', updateCounts)
+      editor.off('update', handleUpdate)
       editor.off('selectionUpdate', forceRender)
     }
-  }, [editor])
+  }, [editor, markDirty])
 
-  const handleSave = useCallback(async () => {
-    if (!editor || isSaving) return
-    setIsSaving(true)
-    try {
-      const html = stripNasImageTokens(editor.getHTML())
-      await onSave(html, editor.getJSON())
-    } finally {
-      setIsSaving(false)
-    }
-  }, [editor, isSaving, onSave])
-
-  // Ctrl+S to save
+  // Ctrl+S for manual save
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault()
-        handleSave()
+        save()
       }
     }
     document.addEventListener('keydown', handler)
     return () => document.removeEventListener('keydown', handler)
-  }, [handleSave])
+  }, [save])
 
   const handleInsertLink = () => {
     if (!editor) return
@@ -266,9 +310,9 @@ export function NoteEditor({ noteId, initialContent, onSave, onCancel }: NoteEdi
   const iconSize = 'h-4 w-4'
 
   return (
-    <div className="border border-border rounded-lg overflow-hidden flex flex-col">
+    <div className="flex flex-col">
       {/* Sticky toolbar */}
-      <div className="sticky top-0 z-10 flex flex-wrap items-center gap-0.5 px-2 py-1.5 bg-muted/50 border-b border-border backdrop-blur-sm">
+      <div className="sticky top-0 z-10 flex flex-wrap items-center gap-0.5 px-2 py-1.5 bg-muted/50 border border-border rounded-t-lg backdrop-blur-sm">
         {/* Undo / Redo */}
         <ToolbarBtn
           onClick={() => editor?.chain().focus().undo().run()}
@@ -461,37 +505,12 @@ export function NoteEditor({ noteId, initialContent, onSave, onCancel }: NoteEdi
         )}
       />
 
-      {/* Footer with word count and actions */}
-      <div className="flex items-center justify-between px-4 py-2.5 border-t border-border bg-muted/20">
+      {/* Footer with word count and save status */}
+      <div className="flex items-center justify-between px-4 py-2 border-t border-border/50">
         <span className="text-xs text-muted-foreground">
           {wordCount} {t('notes.words', 'words')} · {charCount} {t('notes.chars', 'chars')}
         </span>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border border-input text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-            onClick={onCancel}
-          >
-            <X className="h-3.5 w-3.5" />
-            {t('notes.cancelEdit')}
-          </button>
-          <button
-            type="button"
-            className={cn(
-              'inline-flex items-center gap-1.5 px-4 py-1.5 text-xs rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors',
-              isSaving && 'opacity-50 cursor-not-allowed'
-            )}
-            onClick={handleSave}
-            disabled={isSaving}
-          >
-            {isSaving ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Save className="h-3.5 w-3.5" />
-            )}
-            {isSaving ? t('common.saving') : t('notes.saveChanges')}
-          </button>
-        </div>
+        <SaveStatusIndicator status={saveStatus} />
       </div>
     </div>
   )
