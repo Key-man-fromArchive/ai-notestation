@@ -2,12 +2,12 @@ import { useState, useEffect, type FormEvent } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { ApiError } from '@/lib/api'
-import { Loader2 } from 'lucide-react'
+import { Globe, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useTranslation } from 'react-i18next'
 
 export default function Login() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { login, isAuthenticated } = useAuth()
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
@@ -41,6 +41,11 @@ export default function Login() {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const handleLanguageChange = (lang: string) => {
+    i18n.changeLanguage(lang)
+    localStorage.setItem('language', lang)
   }
 
   return (
@@ -122,6 +127,27 @@ export default function Login() {
                 t('auth.login')
               )}
             </button>
+
+            <div className="relative">
+              <Globe className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <select
+                value={i18n.language}
+                onChange={e => handleLanguageChange(e.target.value)}
+                className={cn(
+                  'flex h-9 w-full appearance-none rounded-lg border border-input bg-background',
+                  'pl-9 pr-8 text-sm text-muted-foreground',
+                  'hover:bg-accent hover:text-foreground transition-colors',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                  'cursor-pointer',
+                )}
+              >
+                <option value="ko">한국어</option>
+                <option value="en">English</option>
+              </select>
+              <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </div>
+            </div>
           </form>
         </div>
 
