@@ -1,3 +1,7 @@
+<p align="right">
+  <a href="README.md"><img src="https://img.shields.io/badge/🌐_한국어-여기_클릭-blue?style=for-the-badge&logoColor=white" alt="Korean Version" /></a>
+</p>
+
 <p align="center">
   <h1 align="center">LabNote AI</h1>
   <p align="center">
@@ -6,12 +10,12 @@
   AI-powered note-taking for Synology Note Station, Synology NAS, Note Station, LLM integration synology, note-station, nas, llm, ai-notes, note-taking, obsidian-like
   </p>
   <p align="center">
-    <a href="#quickstart">Quick Start</a> · <a href="#features">Features</a> · <a href="#architecture">Architecture</a> · <a href="#api">API Docs</a> · <a href="README.md">한국어</a>
+    <a href="#quickstart">Quick Start</a> · <a href="#features">Features</a> · <a href="#architecture">Architecture</a> · <a href="#api">API Docs</a>
   </p>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.1.0-blue?style=for-the-badge" alt="v1.1.0" />
+  <img src="https://img.shields.io/badge/version-1.2.0-blue?style=for-the-badge" alt="v1.2.0" />
   <img src="https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI" />
   <img src="https://img.shields.io/badge/React_19-61DAFB?style=for-the-badge&logo=react&logoColor=black" alt="React 19" />
   <img src="https://img.shields.io/badge/PostgreSQL_16-4169E1?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL" />

@@ -1,3 +1,7 @@
+<p align="right">
+  <a href="README.en.md"><img src="https://img.shields.io/badge/🌐_English-Click_Here-blue?style=for-the-badge&logoColor=white" alt="English Version" /></a>
+</p>
+
 <p align="center">
   <h1 align="center">LabNote AI</h1>
   <p align="center">
@@ -8,12 +12,12 @@ synology, note-station, nas, llm, ai-notes, note-taking, obsidian-like
 
   </p>
   <p align="center">
-    <a href="#quickstart">빠른 시작</a> · <a href="#features">핵심 기능</a> · <a href="#architecture">아키텍처</a> · <a href="#api">API 문서</a> · <a href="README.en.md">English</a>
+    <a href="#quickstart">빠른 시작</a> · <a href="#features">핵심 기능</a> · <a href="#architecture">아키텍처</a> · <a href="#api">API 문서</a>
   </p>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.1.0-blue?style=for-the-badge" alt="v1.1.0" />
+  <img src="https://img.shields.io/badge/version-1.2.0-blue?style=for-the-badge" alt="v1.2.0" />
   <img src="https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI" />
   <img src="https://img.shields.io/badge/React_19-61DAFB?style=for-the-badge&logo=react&logoColor=black" alt="React 19" />
   <img src="https://img.shields.io/badge/PostgreSQL_16-4169E1?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL" />
