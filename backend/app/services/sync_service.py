@@ -209,6 +209,10 @@ class SyncService:
 
         from app.utils.note_utils import inline_local_file_images, restore_nas_image_urls
 
+        # Build reverse notebook map (name → NAS object_id) for creating new notes
+        notebook_map = await self._fetch_notebook_map()
+        name_to_id = {title: oid for oid, title in notebook_map.items()}
+
         pushed = 0
         for note in local_modified:
             try:
@@ -231,11 +235,37 @@ class SyncService:
                     push_content.count("/api/"),
                 )
 
-                await self._notestation.update_note(
-                    object_id=note.synology_note_id,
-                    title=note.title,
-                    content=push_content,
-                )
+                # Detect whether note exists on NAS
+                is_new_note = False
+                try:
+                    await self._notestation.get_note(note.synology_note_id)
+                except Exception:
+                    is_new_note = True
+
+                if is_new_note:
+                    parent_id = name_to_id.get(note.notebook_name)
+                    if not parent_id:
+                        logger.warning(
+                            "Cannot create note %s: notebook '%s' not found on NAS",
+                            note.synology_note_id, note.notebook_name,
+                        )
+                        continue
+
+                    result_data = await self._notestation.create_note(
+                        parent_id=parent_id,
+                        title=note.title,
+                        content=push_content,
+                    )
+                    old_id = note.synology_note_id
+                    new_nas_id = result_data.get("object_id", old_id)
+                    note.synology_note_id = new_nas_id
+                    logger.info("_push: created note on NAS, old_id=%s → new_id=%s", old_id, new_nas_id)
+                else:
+                    await self._notestation.update_note(
+                        object_id=note.synology_note_id,
+                        title=note.title,
+                        content=push_content,
+                    )
 
                 # Fetch updated note from NAS to get new version hash & canonical content
                 try:

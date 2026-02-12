@@ -466,22 +466,31 @@ async def push_note(
         )
 
     try:
-        # Conflict check: was NAS modified AFTER our local edit?
+        # Detect whether this note already exists on NAS
+        is_new_note = False
         if not force:
-            nas_note = await service._notestation.get_note(note.synology_note_id)
-            nas_mtime = nas_note.get("mtime")
-            compare_dt = note.local_modified_at or note.source_updated_at
-            if nas_mtime and compare_dt:
-                nas_dt = datetime.fromtimestamp(nas_mtime, tz=UTC)
-                if nas_dt > compare_dt:
-                    from zoneinfo import ZoneInfo
-                    from app.api.settings import get_timezone
-                    nas_local = nas_dt.astimezone(ZoneInfo(get_timezone()))
-                    await sync_session.close()
-                    return NoteSyncResponse(
-                        status="conflict",
-                        message=msg("sync.push_conflict_detail", lang, time=nas_local.strftime('%m/%d %H:%M')),
-                    )
+            try:
+                nas_note = await service._notestation.get_note(note.synology_note_id)
+            except Exception:
+                # Note doesn't exist on NAS — treat as new note
+                is_new_note = True
+                logger.info("push_note %s: note not found on NAS, will create", note_id)
+
+            # Conflict check: was NAS modified AFTER our local edit?
+            if not is_new_note:
+                nas_mtime = nas_note.get("mtime")
+                compare_dt = note.local_modified_at or note.source_updated_at
+                if nas_mtime and compare_dt:
+                    nas_dt = datetime.fromtimestamp(nas_mtime, tz=UTC)
+                    if nas_dt > compare_dt:
+                        from zoneinfo import ZoneInfo
+                        from app.api.settings import get_timezone
+                        nas_local = nas_dt.astimezone(ZoneInfo(get_timezone()))
+                        await sync_session.close()
+                        return NoteSyncResponse(
+                            status="conflict",
+                            message=msg("sync.push_conflict_detail", lang, time=nas_local.strftime('%m/%d %H:%M')),
+                        )
 
         from app.synology_gateway.notestation import NoteStationService
         from app.utils.note_utils import inline_local_file_images, restore_nas_image_urls
@@ -510,11 +519,34 @@ async def push_note(
             push_content.count("/api/"),
         )
 
-        await service._notestation.update_note(
-            object_id=note.synology_note_id,
-            title=note.title,
-            content=push_content,
-        )
+        if is_new_note:
+            # Resolve notebook name → NAS parent_id
+            notebooks = await service._notestation.list_notebooks()
+            name_to_id = {nb.get("title", ""): nb["object_id"] for nb in notebooks if "object_id" in nb}
+            parent_id = name_to_id.get(note.notebook_name)
+            if not parent_id:
+                await sync_session.close()
+                return NoteSyncResponse(
+                    status="error",
+                    message=msg("sync.push_error", lang, detail=f"Notebook '{note.notebook_name}' not found on NAS"),
+                )
+
+            result_data = await service._notestation.create_note(
+                parent_id=parent_id,
+                title=note.title,
+                content=push_content,
+            )
+            # Update local note with NAS-assigned ID
+            old_id = note.synology_note_id
+            new_nas_id = result_data.get("object_id", old_id)
+            note.synology_note_id = new_nas_id
+            logger.info("push_note: created on NAS, old_id=%s → new_id=%s", old_id, new_nas_id)
+        else:
+            await service._notestation.update_note(
+                object_id=note.synology_note_id,
+                title=note.title,
+                content=push_content,
+            )
 
         # Fetch updated note from NAS to get new version hash, content & attachment metadata
         # NAS converts data URIs to NAS attachments, so we need the canonical NAS content

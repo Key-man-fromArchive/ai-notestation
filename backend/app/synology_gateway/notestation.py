@@ -280,6 +280,49 @@ class NoteStationService:
             **params,
         )
 
+    async def create_note(self, parent_id: str, title: str, content: str = "") -> dict:
+        """Create a new note on NoteStation.
+
+        Uses ``SYNO.NoteStation.Note`` / ``create`` method.
+        Uses POST to handle potentially large content payloads.
+
+        Args:
+            parent_id: The NAS notebook ``object_id`` to create the note in.
+            title: Note title.
+            content: HTML content (default empty).
+
+        Returns:
+            The response data dict from NoteStation (includes ``object_id``,
+            ``link_id``, ``ver``, etc.).
+
+        Raises:
+            SynologyApiError: If the create fails on both POST and GET.
+        """
+        params: dict[str, object] = {
+            "parent_id": parent_id,
+            "title": title,
+            "content": content,
+        }
+
+        # Try POST first (handles large content)
+        try:
+            return await self._client.post_request(
+                f"{self.NOTESTATION_API}.Note",
+                "create",
+                version=1,
+                **params,
+            )
+        except SynologyApiError:
+            logger.info("POST create_note failed, falling back to GET for parent %s", parent_id)
+
+        # Fallback to GET
+        return await self._client.request(
+            f"{self.NOTESTATION_API}.Note",
+            "create",
+            version=1,
+            **params,
+        )
+
     # ------------------------------------------------------------------
     # Utilities
     # ------------------------------------------------------------------

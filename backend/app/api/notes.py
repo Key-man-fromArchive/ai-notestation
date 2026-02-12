@@ -611,7 +611,8 @@ async def create_note(
         is_shortcut=False,
         source_created_at=now,
         source_updated_at=now,
-        synced_at=now,
+        sync_status="local_modified",
+        local_modified_at=now,
     )
     db.add(note)
     await db.flush()
