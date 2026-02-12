@@ -476,6 +476,7 @@ async def push_note(
                         message=f"NAS에서 더 최근에 수정되었습니다 ({nas_local.strftime('%m/%d %H:%M')}). 강제 푸시하려면 다시 시도하세요.",
                     )
 
+        from app.synology_gateway.notestation import NoteStationService
         from app.utils.note_utils import inline_local_file_images, restore_nas_image_urls
 
         # Convert local images: /api/files/ -> data URI, /api/images/ -> NAS ref
@@ -489,10 +490,28 @@ async def push_note(
             content=push_content,
         )
 
-        # Mark as synced
+        # Fetch updated note from NAS to get new version hash, content & attachment metadata
+        # NAS converts data URIs to NAS attachments, so we need the canonical NAS content
+        try:
+            nas_note = await service._notestation.get_note(note.synology_note_id)
+            if nas_note.get("ver"):
+                note.nas_ver = nas_note["ver"]
+            if nas_note.get("link_id"):
+                note.link_id = nas_note["link_id"]
+            if nas_note.get("mtime"):
+                note.source_updated_at = datetime.fromtimestamp(nas_note["mtime"], tz=UTC)
+            # Use NAS content (canonical format with NAS refs instead of data URIs)
+            if nas_note.get("content"):
+                push_content = nas_note["content"]
+        except Exception:
+            logger.warning("Failed to fetch updated note %s after push", note.synology_note_id)
+            note.source_updated_at = datetime.now(UTC)
+
+        # Mark as synced and store NAS-format content in DB
+        note.content_html = push_content
+        note.content_text = NoteStationService.extract_text(push_content)
         note.sync_status = "synced"
         note.local_modified_at = None
-        note.source_updated_at = datetime.now(UTC)
         await db.commit()
 
         await log_activity(

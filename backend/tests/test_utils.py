@@ -173,7 +173,7 @@ class TestNoteUtils:
         assert 'alt="notestation-image:image"' in result
 
     def test_rewrite_image_urls_with_attachment_lookup(self):
-        """Attachment metadata is used for display name."""
+        """Attachment metadata provides dimensions; alt uses decoded_name for round-trip."""
         import base64
 
         ref = base64.b64encode(b"original.png").decode()
@@ -187,7 +187,8 @@ class TestNoteUtils:
             }
         }
         result = rewrite_image_urls(html, "note1", attachment_lookup=lookup)
-        assert 'alt="notestation-image:Pretty Name.png"' in result
+        # alt preserves decoded_name (original.png) for correct round-trip restoration
+        assert 'alt="notestation-image:original.png"' in result
         assert 'width="800"' in result
         assert 'height="600"' in result
 

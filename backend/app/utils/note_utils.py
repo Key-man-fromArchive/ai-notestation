@@ -131,7 +131,9 @@ def rewrite_image_urls(
                     safe_att_key = quote(att_key, safe="")
                     safe_filename = quote(att_name, safe="")
                     parts = [f'<img src="/api/nas-images/{note_id}/{safe_att_key}/{safe_filename}"']
-                    parts.append(f' alt="{att_name}"')
+                    # Use decoded_name (original internal name) for alt to preserve
+                    # the exact ref for round-trip restoration to NAS format
+                    parts.append(f' alt="{decoded_name}"')
                     if width:
                         parts.append(f' width="{width}"')
                     if height:
@@ -163,7 +165,8 @@ def rewrite_image_urls(
             # Use the DB ref (NSX attachment key) for the URL path
             safe_ref = quote(img_record.ref, safe="")
             parts = [f'<img src="/api/images/{note_id}/{safe_ref}"']
-            parts.append(f' alt="{display_name}"')
+            # Use decoded_name (original internal name) for round-trip preservation
+            parts.append(f' alt="{decoded_name}"')
             if width:
                 parts.append(f' width="{width}"')
             if height:
@@ -172,7 +175,7 @@ def rewrite_image_urls(
             return "".join(parts)
 
         # Priority 3: No image source available - produce a placeholder
-        parts = [f'<img alt="notestation-image:{display_name}"']
+        parts = [f'<img alt="notestation-image:{decoded_name}"']
         if width:
             parts.append(f' width="{width}"')
         if height:

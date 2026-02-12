@@ -39,9 +39,28 @@ interface NoteEditorProps {
 const toolbarButton =
   'inline-flex items-center gap-1 rounded border border-input px-2 py-1 text-xs text-muted-foreground hover:text-foreground hover:border-primary/40 hover:bg-primary/5'
 
+// Add auth token to NAS image URLs so they display in the editor
+function addNasImageTokens(html: string, token: string | null): string {
+  if (!token) return html
+  return html.replace(
+    /src="(\/api\/nas-images\/[^"?]+)"/g,
+    `src="$1?token=${token}"`
+  )
+}
+
+// Strip auth tokens from NAS image URLs before saving
+function stripNasImageTokens(html: string): string {
+  return html.replace(
+    /src="(\/api\/nas-images\/[^"?]+)\?token=[^"]*"/g,
+    'src="$1"'
+  )
+}
+
 export function NoteEditor({ noteId, initialContent, onSave, onCancel }: NoteEditorProps) {
   const [isSaving, setIsSaving] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+
+  const token = apiClient.getToken()
 
   const extensions = useMemo(
     () => [
@@ -60,20 +79,26 @@ export function NoteEditor({ noteId, initialContent, onSave, onCancel }: NoteEdi
     []
   )
 
+  const editorContent = useMemo(
+    () => addNasImageTokens(initialContent || '', token),
+    [initialContent, token]
+  )
+
   const editor = useEditor({
     extensions,
-    content: initialContent,
+    content: editorContent,
   })
 
   useEffect(() => {
     if (!editor) return
-    editor.commands.setContent(initialContent || '')
-  }, [editor, initialContent])
+    editor.commands.setContent(addNasImageTokens(initialContent || '', token))
+  }, [editor, initialContent, token])
 
   const handleSave = async () => {
     if (!editor || isSaving) return
     setIsSaving(true)
-    await onSave(editor.getHTML(), editor.getJSON())
+    const html = stripNasImageTokens(editor.getHTML())
+    await onSave(html, editor.getJSON())
     setIsSaving(false)
   }
 

@@ -207,14 +207,40 @@ class SyncService:
         if not local_modified:
             return 0
 
+        from app.utils.note_utils import inline_local_file_images, restore_nas_image_urls
+
         pushed = 0
         for note in local_modified:
             try:
+                # Convert local image URLs before pushing to NAS
+                push_content = note.content_html or ""
+                push_content = inline_local_file_images(push_content)
+                push_content = restore_nas_image_urls(push_content)
+
                 await self._notestation.update_note(
                     object_id=note.synology_note_id,
                     title=note.title,
-                    content=note.content_html,
+                    content=push_content,
                 )
+
+                # Fetch updated note from NAS to get new version hash & canonical content
+                try:
+                    nas_note = await self._notestation.get_note(note.synology_note_id)
+                    if nas_note.get("ver"):
+                        note.nas_ver = nas_note["ver"]
+                    if nas_note.get("link_id"):
+                        note.link_id = nas_note["link_id"]
+                    if nas_note.get("mtime"):
+                        note.source_updated_at = _unix_to_utc(nas_note["mtime"])
+                    # Use NAS content (canonical format with NAS refs instead of data URIs)
+                    if nas_note.get("content"):
+                        push_content = nas_note["content"]
+                except Exception:
+                    logger.warning("Failed to fetch updated note %s after push", note.synology_note_id)
+
+                # Update DB with NAS-format content to keep it clean
+                note.content_html = push_content
+                note.content_text = NoteStationService.extract_text(push_content)
                 note.sync_status = "synced"
                 note.local_modified_at = None
                 pushed += 1
