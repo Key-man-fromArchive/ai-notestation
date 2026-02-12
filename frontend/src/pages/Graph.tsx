@@ -1,19 +1,68 @@
-import { useState } from 'react'
-import { Network, SlidersHorizontal } from 'lucide-react'
+import { useState, useMemo, useCallback } from 'react'
+import { Network, SlidersHorizontal, BarChart3 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { ObsidianGraph } from '@/components/ObsidianGraph'
+import { GraphAnalysisPanel } from '@/components/GraphAnalysisPanel'
 import { useGlobalGraph } from '@/hooks/useGlobalGraph'
+import { useClusterInsight } from '@/hooks/useClusterInsight'
 
 export default function Graph() {
   const [showSettings, setShowSettings] = useState(false)
+  const [showAnalysis, setShowAnalysis] = useState(false)
+  const [showAll, setShowAll] = useState(false)
   const [limit, setLimit] = useState(200)
   const [threshold, setThreshold] = useState(0.5)
+  const [neighborsPerNote, setNeighborsPerNote] = useState(5)
+
+  const effectiveLimit = showAll ? 0 : limit
 
   const { data, isLoading, error, refetch } = useGlobalGraph({
-    limit,
+    limit: effectiveLimit,
     similarityThreshold: threshold,
+    neighborsPerNote,
+    includeAnalysis: showAnalysis,
   })
+
+  const clusterInsight = useClusterInsight()
+  const [insightHubLabel, setInsightHubLabel] = useState<string | null>(null)
+  const [selectedModel, setSelectedModel] = useState('')
+
+  // Build adjacency map from graph links for hub→cluster resolution
+  const adjacencyMap = useMemo(() => {
+    const map = new Map<number, Set<number>>()
+    if (!data?.links) return map
+    for (const link of data.links) {
+      const src = typeof link.source === 'object' ? (link.source as { id: number }).id : link.source
+      const tgt = typeof link.target === 'object' ? (link.target as { id: number }).id : link.target
+      if (!map.has(src)) map.set(src, new Set())
+      if (!map.has(tgt)) map.set(tgt, new Set())
+      map.get(src)!.add(tgt)
+      map.get(tgt)!.add(src)
+    }
+    return map
+  }, [data?.links])
+
+  // Handle cluster analysis from graph right-click
+  const handleAnalyzeCluster = useCallback(
+    (noteIds: number[], hubLabel: string) => {
+      setInsightHubLabel(hubLabel)
+      if (!showAnalysis) setShowAnalysis(true)
+      clusterInsight.analyze(noteIds, undefined, selectedModel || undefined)
+    },
+    [showAnalysis, clusterInsight, selectedModel]
+  )
+
+  // Handle hub analysis from the analysis panel sparkle buttons
+  const handleAnalyzeHub = useCallback(
+    (noteId: number, label: string) => {
+      const neighbors = adjacencyMap.get(noteId)
+      const noteIds = [noteId, ...(neighbors ? [...neighbors].slice(0, 19) : [])]
+      setInsightHubLabel(label)
+      clusterInsight.analyze(noteIds, undefined, selectedModel || undefined)
+    },
+    [adjacencyMap, clusterInsight, selectedModel]
+  )
 
   return (
     <div className="h-[calc(100vh-6rem)] flex flex-col">
@@ -28,29 +77,55 @@ export default function Graph() {
           </div>
         </div>
 
-        <button
-          onClick={() => setShowSettings(!showSettings)}
-          className={cn(
-            'flex items-center gap-2 px-3 py-2 rounded-lg border',
-            showSettings ? 'bg-primary text-primary-foreground' : 'hover:bg-accent'
-          )}
-        >
-          <SlidersHorizontal className="h-4 w-4" />
-          설정
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              setShowAnalysis(!showAnalysis)
+            }}
+            className={cn(
+              'flex items-center gap-2 px-3 py-2 rounded-lg border',
+              showAnalysis ? 'bg-primary text-primary-foreground' : 'hover:bg-accent'
+            )}
+          >
+            <BarChart3 className="h-4 w-4" />
+            분석
+          </button>
+          <button
+            onClick={() => setShowSettings(!showSettings)}
+            className={cn(
+              'flex items-center gap-2 px-3 py-2 rounded-lg border',
+              showSettings ? 'bg-primary text-primary-foreground' : 'hover:bg-accent'
+            )}
+          >
+            <SlidersHorizontal className="h-4 w-4" />
+            설정
+          </button>
+        </div>
       </div>
 
       {showSettings && (
         <div className="mb-4 p-4 border border-border rounded-lg bg-card">
-          <div className="grid grid-cols-2 gap-6">
-            <div>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="flex items-center gap-3 col-span-2 lg:col-span-1">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showAll}
+                  onChange={e => setShowAll(e.target.checked)}
+                  className="w-4 h-4 rounded border-border"
+                />
+                <span className="text-sm font-medium">전체 노트 표시</span>
+              </label>
+            </div>
+
+            <div className={cn(showAll && 'opacity-40 pointer-events-none')}>
               <label className="text-sm font-medium block mb-2">
                 표시할 노트 수: {limit}
               </label>
               <input
                 type="range"
                 min={50}
-                max={500}
+                max={2500}
                 step={50}
                 value={limit}
                 onChange={e => setLimit(Number(e.target.value))}
@@ -58,7 +133,7 @@ export default function Graph() {
               />
               <div className="flex justify-between text-xs text-muted-foreground mt-1">
                 <span>50</span>
-                <span>500</span>
+                <span>2500</span>
               </div>
             </div>
 
@@ -80,6 +155,25 @@ export default function Graph() {
                 <span>95% (강한 연결만)</span>
               </div>
             </div>
+
+            <div>
+              <label className="text-sm font-medium block mb-2">
+                노트당 이웃 수: {neighborsPerNote}
+              </label>
+              <input
+                type="range"
+                min={1}
+                max={20}
+                step={1}
+                value={neighborsPerNote}
+                onChange={e => setNeighborsPerNote(Number(e.target.value))}
+                className="w-full"
+              />
+              <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                <span>1 (간결)</span>
+                <span>20 (밀집)</span>
+              </div>
+            </div>
           </div>
 
           <button
@@ -91,13 +185,39 @@ export default function Graph() {
         </div>
       )}
 
-      <div className="flex-1 border border-border rounded-lg overflow-hidden">
-        <ObsidianGraph
-          data={data}
-          isLoading={isLoading}
-          error={error}
-          className="h-full"
-        />
+      <div className="flex-1 flex overflow-hidden border border-border rounded-lg">
+        <div className="flex-1 overflow-hidden">
+          <ObsidianGraph
+            data={data}
+            isLoading={isLoading}
+            error={error}
+            className="h-full"
+            onAnalyzeCluster={handleAnalyzeCluster}
+          />
+        </div>
+
+        {showAnalysis && data?.analysis && (
+          <GraphAnalysisPanel
+            analysis={data.analysis}
+            onClose={() => setShowAnalysis(false)}
+            graphData={data}
+            clusterInsight={{
+              content: clusterInsight.content,
+              isStreaming: clusterInsight.isStreaming,
+              error: clusterInsight.error,
+              notes: clusterInsight.notes,
+              hubLabel: insightHubLabel,
+            }}
+            onAnalyzeHub={handleAnalyzeHub}
+            onStopInsight={clusterInsight.stop}
+            onResetInsight={() => {
+              clusterInsight.reset()
+              setInsightHubLabel(null)
+            }}
+            selectedModel={selectedModel}
+            onModelChange={setSelectedModel}
+          />
+        )}
       </div>
     </div>
   )

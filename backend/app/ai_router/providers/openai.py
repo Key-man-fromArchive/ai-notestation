@@ -167,6 +167,10 @@ _SUPPORTED_MODELS: list[ModelInfo] = [
     ),
 ]
 
+# Models that require max_completion_tokens instead of max_tokens
+# and do not support the temperature parameter.
+_REASONING_MODEL_PREFIXES = ("o1", "o3", "o4")
+
 
 class OpenAIProvider(AIProvider):
     """AI provider backed by the OpenAI API.
@@ -189,6 +193,20 @@ class OpenAIProvider(AIProvider):
             )
         self._client = AsyncOpenAI(api_key=resolved_key)
         self.is_oauth = is_oauth
+
+    @staticmethod
+    def _normalize_kwargs(model: str, kwargs: dict[str, Any]) -> dict[str, Any]:
+        """Remap kwargs for models with non-standard parameter names.
+
+        OpenAI reasoning models (o1, o3, o4-*) require
+        ``max_completion_tokens`` instead of ``max_tokens`` and do not
+        support the ``temperature`` parameter.
+        """
+        if model.startswith(_REASONING_MODEL_PREFIXES):
+            if "max_tokens" in kwargs:
+                kwargs["max_completion_tokens"] = kwargs.pop("max_tokens")
+            kwargs.pop("temperature", None)
+        return kwargs
 
     # ------------------------------------------------------------------
     # chat
@@ -215,6 +233,7 @@ class OpenAIProvider(AIProvider):
             ProviderError: On any OpenAI API error.
         """
         openai_messages = self._convert_messages(messages)
+        kwargs = self._normalize_kwargs(model, kwargs)
         try:
             completion = await self._client.chat.completions.create(
                 model=model,
@@ -275,6 +294,7 @@ class OpenAIProvider(AIProvider):
             ProviderError: On any OpenAI API error.
         """
         openai_messages = self._convert_messages(messages)
+        kwargs = self._normalize_kwargs(model, kwargs)
         try:
             response_stream = await self._client.chat.completions.create(
                 model=model,

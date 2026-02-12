@@ -5,32 +5,13 @@ import ForceGraph2D, {
   type NodeObject,
   type LinkObject,
 } from 'react-force-graph-2d'
-import { Search, ZoomIn, ZoomOut, Maximize2 } from 'lucide-react'
+import { Search, ZoomIn, ZoomOut, Maximize2, Loader2 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
 import { EmptyState } from '@/components/EmptyState'
-
-interface GraphNode {
-  id: number
-  note_key: string
-  label: string
-  notebook: string | null
-  size: number
-}
-
-interface GraphLink {
-  source: number
-  target: number
-  weight: number
-}
-
-interface GraphData {
-  nodes: GraphNode[]
-  links: GraphLink[]
-  total_notes: number
-  indexed_notes: number
-}
+import { useGraphSearch } from '@/hooks/useGraphSearch'
+import type { GraphData } from '@/hooks/useGlobalGraph'
 
 interface GraphNodeObject extends NodeObject {
   id: number
@@ -38,6 +19,7 @@ interface GraphNodeObject extends NodeObject {
   label: string
   notebook: string | null
   size: number
+  _degree?: number
   x?: number
   y?: number
 }
@@ -67,11 +49,16 @@ function getNotebookColor(notebook: string | null): string {
   return NOTEBOOK_COLORS[notebook]
 }
 
+// Large graph threshold: switch to performance mode
+const LARGE_GRAPH_THRESHOLD = 500
+
 interface ObsidianGraphProps {
   data: GraphData | undefined
   isLoading: boolean
   error: Error | null
   className?: string
+  /** Called when user wants to analyze the cluster around a node */
+  onAnalyzeCluster?: (noteIds: number[], hubLabel: string) => void
 }
 
 export function ObsidianGraph({
@@ -79,6 +66,7 @@ export function ObsidianGraph({
   isLoading,
   error,
   className,
+  onAnalyzeCluster,
 }: ObsidianGraphProps) {
   const navigate = useNavigate()
   const containerRef = useRef<HTMLDivElement>(null)
@@ -88,8 +76,28 @@ export function ObsidianGraph({
   >
   const graphRef = useRef<GraphMethods | undefined>(undefined)
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 })
-  const [searchQuery, setSearchQuery] = useState('')
   const [hoveredNode, setHoveredNode] = useState<GraphNodeObject | null>(null)
+  const [showLegend, setShowLegend] = useState(false)
+  const [simulationRunning, setSimulationRunning] = useState(false)
+
+  // Semantic search
+  const { query: searchQuery, hits, hitMap, isSearching, search: doSearch, clear: clearSearch } = useGraphSearch()
+  const hasSearchResults = searchQuery.trim().length > 0 && hits.length > 0
+  const isSearchActive = searchQuery.trim().length > 0
+
+  // Build set of neighbors of search hits (for secondary highlighting)
+  const searchNeighborIds = useMemo(() => {
+    if (!hasSearchResults || !data?.links) return new Set<number>()
+    const hitIds = new Set(hitMap.keys())
+    const neighbors = new Set<number>()
+    for (const link of data.links) {
+      const src = typeof link.source === 'number' ? link.source : (link.source as any).id
+      const tgt = typeof link.target === 'number' ? link.target : (link.target as any).id
+      if (hitIds.has(src) && !hitIds.has(tgt)) neighbors.add(tgt)
+      if (hitIds.has(tgt) && !hitIds.has(src)) neighbors.add(src)
+    }
+    return neighbors
+  }, [hasSearchResults, hitMap, data?.links])
 
   // Track the live node objects that d3-force mutates with x,y positions
   const liveNodesRef = useRef<GraphNodeObject[]>([])
@@ -115,16 +123,54 @@ export function ObsidianGraph({
   // Check if we have cached positions for the current data
   const hasCache = positionCache.size > 0
 
+  const isLargeGraph = (data?.nodes.length ?? 0) > LARGE_GRAPH_THRESHOLD
+
   useEffect(() => {
     if (data && data.nodes.length > 0 && graphRef.current && !hasCache) {
+      setSimulationRunning(true)
       setTimeout(() => {
         graphRef.current?.zoomToFit(400, 50)
       }, 500)
     }
   }, [data?.nodes.length, hasCache])
 
+  // Compute degree map from links
+  const degreeMap = useMemo(() => {
+    const map = new Map<number, number>()
+    if (!data?.links) return map
+    for (const link of data.links) {
+      const src = typeof link.source === 'number' ? link.source : (link.source as any).id
+      const tgt = typeof link.target === 'number' ? link.target : (link.target as any).id
+      map.set(src, (map.get(src) ?? 0) + 1)
+      map.set(tgt, (map.get(tgt) ?? 0) + 1)
+    }
+    return map
+  }, [data?.links])
+
+  // Build adjacency list for cluster extraction
+  const adjacency = useMemo(() => {
+    const adj = new Map<number, Set<number>>()
+    if (!data?.links) return adj
+    for (const link of data.links) {
+      const src = typeof link.source === 'number' ? link.source : (link.source as any).id
+      const tgt = typeof link.target === 'number' ? link.target : (link.target as any).id
+      if (!adj.has(src)) adj.set(src, new Set())
+      if (!adj.has(tgt)) adj.set(tgt, new Set())
+      adj.get(src)!.add(tgt)
+      adj.get(tgt)!.add(src)
+    }
+    return adj
+  }, [data?.links])
+
+  const orphanIds = useMemo(() => {
+    if (!data?.nodes) return new Set<number>()
+    const connected = new Set(degreeMap.keys())
+    return new Set(data.nodes.filter(n => !connected.has(n.id)).map(n => n.id))
+  }, [data?.nodes, degreeMap])
+
   // Auto-save all node positions when d3-force simulation finishes
   const handleEngineStop = useCallback(() => {
+    setSimulationRunning(false)
     for (const node of liveNodesRef.current) {
       if (node.x != null && node.y != null) {
         positionCache.set(node.id, { x: node.x, y: node.y })
@@ -134,7 +180,7 @@ export function ObsidianGraph({
 
   const handleNodeClick = useCallback(
     (node: GraphNodeObject) => {
-      // Also save positions on click (simulation may still be running)
+      // Save positions
       for (const n of liveNodesRef.current) {
         if (n.x != null && n.y != null) {
           positionCache.set(n.id, { x: n.x, y: n.y })
@@ -145,51 +191,61 @@ export function ObsidianGraph({
     [navigate]
   )
 
+  // Right-click: analyze cluster around this node
+  const handleNodeRightClick = useCallback(
+    (node: GraphNodeObject, event: MouseEvent) => {
+      event.preventDefault()
+      if (!onAnalyzeCluster) return
+
+      const neighbors = adjacency.get(node.id)
+      if (!neighbors || neighbors.size === 0) return
+
+      // Collect the hub + its direct neighbors (up to 20)
+      const clusterIds = [node.id, ...Array.from(neighbors).slice(0, 19)]
+      onAnalyzeCluster(clusterIds, node.label)
+    },
+    [onAnalyzeCluster, adjacency]
+  )
+
   const handleZoomIn = () => graphRef.current?.zoom(1.5, 300)
   const handleZoomOut = () => graphRef.current?.zoom(0.67, 300)
   const handleFit = () => graphRef.current?.zoomToFit(400, 50)
 
-  // Memoize filtered data so graphData useMemo doesn't re-run on hover/resize re-renders
-  const filteredNodes = useMemo(() => {
+  // Collect unique notebooks for legend
+  const notebooks = useMemo(() => {
     if (!data?.nodes) return []
-    if (!searchQuery) return data.nodes
-    const q = searchQuery.toLowerCase()
-    return data.nodes.filter(node =>
-      node.label.toLowerCase().includes(q) ||
-      node.notebook?.toLowerCase().includes(q)
-    )
-  }, [data?.nodes, searchQuery])
-
-  const filteredNodeIds = useMemo(() => new Set(filteredNodes.map(n => n.id)), [filteredNodes])
-
-  const filteredLinks = useMemo(() => {
-    if (!data?.links) return []
-    return data.links.filter(link => {
-      const sourceId = typeof link.source === 'number' ? link.source : link.source
-      const targetId = typeof link.target === 'number' ? link.target : link.target
-      return filteredNodeIds.has(sourceId as number) && filteredNodeIds.has(targetId as number)
-    })
-  }, [data?.links, filteredNodeIds])
-
-  // Build graphData: restore cached positions if available
-  // useMemo ensures stable references so ForceGraph2D doesn't restart simulation on re-renders
-  const graphData = useMemo(() => {
-    const nodes = filteredNodes.map(node => {
-      const cached = positionCache.get(node.id)
-      if (cached) {
-        return { ...node, x: cached.x, y: cached.y, fx: cached.x, fy: cached.y }
+    const seen = new Set<string>()
+    const result: { name: string; color: string }[] = []
+    for (const node of data.nodes) {
+      const nb = node.notebook ?? '(분류 없음)'
+      if (!seen.has(nb)) {
+        seen.add(nb)
+        result.push({ name: nb, color: getNotebookColor(node.notebook) })
       }
-      return { ...node }
+    }
+    return result.sort((a, b) => a.name.localeCompare(b.name))
+  }, [data?.nodes])
+
+  // Build graphData: no more client-side filtering — show all nodes, highlight via renderer
+  const graphData = useMemo(() => {
+    if (!data?.nodes) return { nodes: [] as GraphNodeObject[], links: [] as GraphLinkObject[] }
+
+    const nodes = data.nodes.map(node => {
+      const cached = positionCache.get(node.id)
+      const degree = degreeMap.get(node.id) ?? 0
+      if (cached) {
+        return { ...node, _degree: degree, x: cached.x, y: cached.y, fx: cached.x, fy: cached.y }
+      }
+      return { ...node, _degree: degree }
     }) as GraphNodeObject[]
 
-    // Store reference so we can read d3-mutated x,y positions later
     liveNodesRef.current = nodes
 
     return {
       nodes,
-      links: filteredLinks,
+      links: data.links as unknown as GraphLinkObject[],
     }
-  }, [filteredNodes, filteredLinks])
+  }, [data?.nodes, data?.links, degreeMap])
 
   // After restoring cached positions, unpin nodes so dragging works
   useEffect(() => {
@@ -205,10 +261,104 @@ export function ObsidianGraph({
     }
   }, [hasCache, graphData.nodes.length])
 
+  // Custom node canvas renderer with semantic search highlighting
+  const nodeCanvasObject = useCallback(
+    (node: GraphNodeObject, ctx: CanvasRenderingContext2D, globalScale: number) => {
+      const degree = node._degree ?? 0
+      const isOrphan = degree === 0
+      const searchScore = hitMap.get(node.id)
+      const isSearchHit = searchScore !== undefined
+      const isNeighborOfHit = searchNeighborIds.has(node.id)
+
+      // Size based on degree + search relevance boost
+      const baseSize = isLargeGraph ? 2.5 : 4
+      const sizeBoost = Math.min(degree * 0.5, isLargeGraph ? 6 : 8)
+      let radius = baseSize + sizeBoost
+
+      // Search hits get a size boost proportional to score
+      if (isSearchHit) {
+        radius += 3 + searchScore * 4
+      }
+
+      const x = node.x ?? 0
+      const y = node.y ?? 0
+
+      // Determine color and opacity
+      let fillColor: string
+      let labelAlpha = 0.85
+
+      if (isSearchActive) {
+        if (isSearchHit) {
+          // Warm orange-yellow gradient based on score
+          const r = Math.round(255 - searchScore * 30)
+          const g = Math.round(140 + searchScore * 80)
+          const b = Math.round(20 + searchScore * 20)
+          fillColor = `rgb(${r}, ${g}, ${b})`
+          labelAlpha = 1.0
+        } else if (isNeighborOfHit) {
+          // Neighbors: slightly brighter than default
+          fillColor = getNotebookColor(node.notebook)
+          labelAlpha = 0.6
+        } else {
+          // Non-matching: dimmed
+          fillColor = 'rgba(100, 100, 100, 0.15)'
+          labelAlpha = 0.15
+        }
+      } else if (isOrphan) {
+        fillColor = 'rgba(156, 163, 175, 0.35)'
+        labelAlpha = 0.4
+      } else {
+        fillColor = getNotebookColor(node.notebook)
+      }
+
+      // Draw glow for search hits
+      if (isSearchHit && isSearchActive) {
+        ctx.beginPath()
+        ctx.arc(x, y, radius + 3, 0, 2 * Math.PI)
+        ctx.fillStyle = `rgba(251, 191, 36, ${0.15 + searchScore * 0.2})`
+        ctx.fill()
+      }
+
+      // Draw node circle
+      ctx.beginPath()
+      ctx.arc(x, y, radius, 0, 2 * Math.PI)
+      ctx.fillStyle = fillColor
+      ctx.fill()
+
+      // Orphan: dashed border
+      if (isOrphan && !isSearchActive) {
+        ctx.setLineDash([2, 2])
+        ctx.strokeStyle = 'rgba(156, 163, 175, 0.6)'
+        ctx.lineWidth = 1
+        ctx.stroke()
+        ctx.setLineDash([])
+      }
+
+      // Labels: always show for search hits, zoom-based otherwise
+      const showLabel = isSearchHit
+        ? globalScale > 0.5
+        : globalScale > (isLargeGraph ? 3.5 : 1.5)
+
+      if (showLabel) {
+        const label = node.label.length > 25 ? node.label.slice(0, 23) + '...' : node.label
+        const fontSize = isSearchHit
+          ? Math.max(12 / globalScale, 3)
+          : Math.max(10 / globalScale, 2)
+        ctx.font = `${isSearchHit ? 'bold ' : ''}${fontSize}px Sans-Serif`
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'top'
+        ctx.fillStyle = `rgba(255, 255, 255, ${labelAlpha})`
+        ctx.fillText(label, x, y + radius + 2)
+      }
+    },
+    [hitMap, searchNeighborIds, isSearchActive, isLargeGraph]
+  )
+
   if (isLoading) {
     return (
-      <div className={cn('flex items-center justify-center h-full', className)}>
+      <div className={cn('flex flex-col items-center justify-center h-full gap-3', className)}>
         <LoadingSpinner size="lg" />
+        <p className="text-sm text-muted-foreground">그래프 데이터를 불러오는 중...</p>
       </div>
     )
   }
@@ -236,37 +386,48 @@ export function ObsidianGraph({
   return (
     <div className={cn('relative h-full', className)}>
       <div className="absolute top-4 left-4 z-10 flex flex-col gap-2">
+        {/* Semantic search bar */}
         <div className="flex items-center gap-2 bg-card/95 backdrop-blur rounded-lg p-2 shadow-lg border border-border">
           <Search className="h-4 w-4 text-muted-foreground" />
           <input
             type="text"
-            placeholder="노트 검색..."
+            placeholder="의미 검색 (semantic)..."
             value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            className="bg-transparent border-none outline-none text-sm w-48 placeholder:text-muted-foreground"
+            onChange={e => doSearch(e.target.value)}
+            className="bg-transparent border-none outline-none text-sm w-52 placeholder:text-muted-foreground"
           />
+          {isSearching && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+          {searchQuery && !isSearching && (
+            <button onClick={clearSearch} className="text-xs text-muted-foreground hover:text-foreground">
+              &times;
+            </button>
+          )}
         </div>
 
+        {/* Search results summary */}
+        {isSearchActive && !isSearching && (
+          <div className="bg-card/95 backdrop-blur rounded-lg px-3 py-1.5 shadow-lg border border-border text-xs text-muted-foreground">
+            {hits.length > 0 ? (
+              <span>
+                <span className="font-medium text-amber-400">{hits.length}</span>개 노트 발견
+                {searchNeighborIds.size > 0 && (
+                  <span> + 이웃 {searchNeighborIds.size}개</span>
+                )}
+              </span>
+            ) : (
+              <span>검색 결과 없음</span>
+            )}
+          </div>
+        )}
+
         <div className="flex gap-1 bg-card/95 backdrop-blur rounded-lg p-1 shadow-lg border border-border">
-          <button
-            onClick={handleZoomIn}
-            className="p-2 rounded hover:bg-accent"
-            title="확대"
-          >
+          <button onClick={handleZoomIn} className="p-2 rounded hover:bg-accent" title="확대">
             <ZoomIn className="h-4 w-4" />
           </button>
-          <button
-            onClick={handleZoomOut}
-            className="p-2 rounded hover:bg-accent"
-            title="축소"
-          >
+          <button onClick={handleZoomOut} className="p-2 rounded hover:bg-accent" title="축소">
             <ZoomOut className="h-4 w-4" />
           </button>
-          <button
-            onClick={handleFit}
-            className="p-2 rounded hover:bg-accent"
-            title="전체 보기"
-          >
+          <button onClick={handleFit} className="p-2 rounded hover:bg-accent" title="전체 보기">
             <Maximize2 className="h-4 w-4" />
           </button>
         </div>
@@ -278,7 +439,35 @@ export function ObsidianGraph({
           <div>인덱싱됨: <span className="font-medium text-foreground">{data.indexed_notes}</span></div>
           <div>표시중: <span className="font-medium text-foreground">{graphData.nodes.length}</span></div>
           <div>연결: <span className="font-medium text-foreground">{graphData.links.length}</span></div>
+          {orphanIds.size > 0 && (
+            <div>고립 노트: <span className="font-medium text-orange-400">{orphanIds.size}</span></div>
+          )}
+          {simulationRunning && (
+            <div className="flex items-center gap-1 text-primary">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              시뮬레이션 진행중
+            </div>
+          )}
         </div>
+        <button
+          onClick={() => setShowLegend(!showLegend)}
+          className="mt-2 text-xs text-primary hover:underline"
+        >
+          {showLegend ? '범례 숨기기' : '범례 보기'}
+        </button>
+        {showLegend && (
+          <div className="mt-2 pt-2 border-t border-border max-h-40 overflow-y-auto space-y-1">
+            {notebooks.map(nb => (
+              <div key={nb.name} className="flex items-center gap-2 text-xs">
+                <span
+                  className="w-3 h-3 rounded-full flex-shrink-0"
+                  style={{ backgroundColor: nb.color }}
+                />
+                <span className="truncate">{nb.name}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {hoveredNode && (
@@ -286,10 +475,18 @@ export function ObsidianGraph({
           <div className="font-medium text-sm truncate">{hoveredNode.label}</div>
           {hoveredNode.notebook && (
             <div className="text-xs text-muted-foreground mt-1">
-              📓 {hoveredNode.notebook}
+              {hoveredNode.notebook}
             </div>
           )}
-          <div className="text-xs text-primary mt-1">클릭하여 노트 열기</div>
+          <div className="text-xs text-muted-foreground mt-1">
+            연결: {hoveredNode._degree ?? 0}개
+          </div>
+          <div className="flex items-center gap-2 mt-1">
+            <span className="text-xs text-primary">클릭: 노트 열기</span>
+            {onAnalyzeCluster && (hoveredNode._degree ?? 0) > 0 && (
+              <span className="text-xs text-amber-400">우클릭: 클러스터 분석</span>
+            )}
+          </div>
         </div>
       )}
 
@@ -301,22 +498,40 @@ export function ObsidianGraph({
           graphData={graphData}
           nodeId="id"
           nodeLabel=""
-          nodeColor={(node: GraphNodeObject) => {
-            if (searchQuery && node.label.toLowerCase().includes(searchQuery.toLowerCase())) {
-              return '#fbbf24'
-            }
-            return getNotebookColor(node.notebook)
+          nodeCanvasObject={nodeCanvasObject}
+          nodePointerAreaPaint={(node: GraphNodeObject, color, ctx) => {
+            const degree = node._degree ?? 0
+            const baseSize = isLargeGraph ? 2.5 : 4
+            const searchScore = hitMap.get(node.id)
+            let radius = baseSize + Math.min(degree * 0.5, isLargeGraph ? 6 : 8)
+            if (searchScore !== undefined) radius += 3 + searchScore * 4
+            ctx.beginPath()
+            ctx.arc(node.x ?? 0, node.y ?? 0, radius + 2, 0, 2 * Math.PI)
+            ctx.fillStyle = color
+            ctx.fill()
           }}
-          nodeRelSize={6}
-          nodeVal={(node: GraphNodeObject) => node.size + 1}
-          linkColor={() => 'rgba(156, 163, 175, 0.5)'}
-          linkWidth={(link: GraphLinkObject) => Math.max(0.5, link.weight * 2)}
+          linkColor={(link: GraphLinkObject) => {
+            if (!isSearchActive) return 'rgba(156, 163, 175, 0.3)'
+            const src = typeof link.source === 'number' ? link.source : (link.source as any).id
+            const tgt = typeof link.target === 'number' ? link.target : (link.target as any).id
+            if (hitMap.has(src) || hitMap.has(tgt)) return 'rgba(251, 191, 36, 0.4)'
+            return 'rgba(100, 100, 100, 0.08)'
+          }}
+          linkWidth={(link: GraphLinkObject) => {
+            if (!isSearchActive) return Math.max(0.3, link.weight * 1.5)
+            const src = typeof link.source === 'number' ? link.source : (link.source as any).id
+            const tgt = typeof link.target === 'number' ? link.target : (link.target as any).id
+            if (hitMap.has(src) || hitMap.has(tgt)) return Math.max(1, link.weight * 2.5)
+            return 0.2
+          }}
           onNodeClick={handleNodeClick}
+          onNodeRightClick={handleNodeRightClick}
           onNodeHover={(node: GraphNodeObject | null) => setHoveredNode(node)}
           onEngineStop={handleEngineStop}
-          cooldownTicks={hasCache ? 0 : 100}
-          d3AlphaDecay={0.02}
-          d3VelocityDecay={0.3}
+          cooldownTicks={hasCache ? 0 : (isLargeGraph ? 60 : 100)}
+          d3AlphaDecay={isLargeGraph ? 0.04 : 0.02}
+          d3VelocityDecay={isLargeGraph ? 0.4 : 0.3}
+          warmupTicks={isLargeGraph ? 30 : 0}
           enableNodeDrag={true}
           enableZoomInteraction={true}
           enablePanInteraction={true}

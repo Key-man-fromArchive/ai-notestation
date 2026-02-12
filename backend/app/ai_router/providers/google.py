@@ -54,14 +54,14 @@ _GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta"
 
 _AVAILABLE_MODELS = [
     ModelInfo(
-        id="gemini-3-pro",
+        id="gemini-3-pro-preview",
         name="Gemini 3 Pro",
         provider=_PROVIDER_NAME,
         max_tokens=2_097_152,
         supports_streaming=True,
     ),
     ModelInfo(
-        id="gemini-3-flash",
+        id="gemini-3-flash-preview",
         name="Gemini 3 Flash",
         provider=_PROVIDER_NAME,
         max_tokens=1_048_576,
