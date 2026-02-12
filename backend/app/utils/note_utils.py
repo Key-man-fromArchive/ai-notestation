@@ -401,3 +401,35 @@ def extract_data_uri_images(html: str) -> str:
         return f'<img src="/api/files/{file_id}" alt="{alt}" />'
 
     return _DATA_URI_IMG_RE.sub(_replace_data_uri, html)
+
+
+# Regex to find /api/files/ references in img tags
+_API_FILES_REF_RE = re.compile(r'/api/files/([^\s"\']+)', re.IGNORECASE)
+
+
+def find_missing_file_refs(html: str) -> list[str]:
+    """Return list of /api/files/ references whose backing files don't exist on disk.
+
+    Args:
+        html: HTML content that may contain /api/files/ image URLs.
+
+    Returns:
+        List of file IDs (e.g. "abc123.jpg") that are referenced but missing from disk.
+    """
+    if not html or "/api/files/" not in html:
+        return []
+
+    from pathlib import Path
+
+    from app.config import get_settings
+
+    settings = get_settings()
+    uploads_dir = Path(settings.UPLOADS_PATH)
+
+    missing = []
+    for match in _API_FILES_REF_RE.finditer(html):
+        file_id = match.group(1)
+        file_path = uploads_dir / file_id
+        if not file_path.exists():
+            missing.append(file_id)
+    return missing

@@ -38,6 +38,7 @@ from app.synology_gateway.notestation import NoteStationService
 from app.utils.datetime_utils import datetime_to_iso, unix_to_iso
 from app.utils.note_utils import (
     extract_data_uri_images,
+    find_missing_file_refs,
     normalize_db_tags,
     normalize_tags,
     rewrite_image_urls,
@@ -452,6 +453,12 @@ async def get_note(
                 att_raw = nas_detail.get("attachment")
                 if isinstance(att_raw, dict):
                     nas_attachments = att_raw
+                # Keep nas_ver in sync so image proxy uses the correct version
+                latest_ver = nas_detail.get("ver", "")
+                if latest_ver and latest_ver != db_note.nas_ver:
+                    logger.info("Updating nas_ver for note %s: %s -> %s", note_id, db_note.nas_ver[:12], latest_ver[:12])
+                    db_note.nas_ver = latest_ver
+                    await db.commit()
             except Exception:
                 logger.debug("Could not fetch NAS attachment metadata for note %s", note_id)
 
@@ -466,6 +473,33 @@ async def get_note(
                 db_note.content_html = raw_html
                 await db.commit()
                 logger.info("Extracted data URI images for note %s", note_id)
+
+        # Self-healing: if /api/files/ URLs reference missing files, re-pull from NAS
+        # to recover the original data URIs and re-extract.
+        missing_refs = find_missing_file_refs(raw_html)
+        if missing_refs and db_note.link_id:
+            logger.warning(
+                "Note %s has %d missing file refs, attempting NAS re-pull to recover",
+                note_id,
+                len(missing_refs),
+            )
+            try:
+                nas_note = await ns_service.get_note(note_id)
+                nas_content = nas_note.get("content", "")
+                if nas_content and "data:image/" in nas_content:
+                    raw_html = extract_data_uri_images(nas_content)
+                    db_note.content_html = raw_html
+                    await db.commit()
+                    logger.info("Recovered %d missing files via NAS re-pull for note %s", len(missing_refs), note_id)
+                elif nas_content:
+                    # NAS content may not have data URIs (images are attachments).
+                    # Re-store NAS content; rewrite_image_urls will handle attachment refs.
+                    raw_html = nas_content
+                    db_note.content_html = raw_html
+                    await db.commit()
+                    logger.info("Restored NAS content for note %s (no data URIs)", note_id)
+            except Exception:
+                logger.debug("Could not re-pull note %s from NAS for file recovery", note_id)
 
         content = rewrite_image_urls(
             raw_html,

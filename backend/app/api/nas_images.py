@@ -78,6 +78,9 @@ async def proxy_nas_image(
     authenticated SynologyClient, and streams it back to the caller
     with cache headers.
 
+    If the stored ``nas_ver`` is stale (NAS returns HTML instead of an image),
+    automatically fetches the latest version from NAS and retries.
+
     Args:
         note_id: The synology_note_id of the note.
         att_key: The NAS attachment key (e.g. ``_yDRx9FC8_sWJ3qvjJxat2w``).
@@ -95,22 +98,35 @@ async def proxy_nas_image(
     if not note or not note.link_id or not note.nas_ver:
         raise HTTPException(status_code=404, detail="Note or NAS metadata not found")
 
-    # Construct NAS image path
-    nas_path = f"/note/ns/dv/{note.link_id}/{note.nas_ver}/{att_key}/{filename}"
-
     try:
         from app.api.sync import _create_sync_service
 
         service, session, _ = await _create_sync_service()
         try:
+            # Try with stored version first
+            nas_path = f"/note/ns/dv/{note.link_id}/{note.nas_ver}/{att_key}/{filename}"
             image_bytes, content_type = await service._notestation._client.fetch_binary(nas_path)
+
+            # If NAS returns HTML, the version is likely stale — refresh and retry
+            if content_type and "text/html" in content_type:
+                logger.info("Stale nas_ver for note %s, fetching latest from NAS", note_id)
+                try:
+                    nas_note = await service._notestation.get_note(note_id)
+                    latest_ver = nas_note.get("ver", "")
+                    if latest_ver and latest_ver != note.nas_ver:
+                        note.nas_ver = latest_ver
+                        await db.commit()
+                        nas_path = f"/note/ns/dv/{note.link_id}/{latest_ver}/{att_key}/{filename}"
+                        image_bytes, content_type = await service._notestation._client.fetch_binary(nas_path)
+                except Exception:
+                    logger.debug("Could not refresh nas_ver for note %s", note_id)
         finally:
             await session.close()
     except Exception as exc:
         logger.exception("Failed to fetch NAS image: %s", exc)
         raise HTTPException(status_code=502, detail="NAS 이미지 로드 실패") from exc
 
-    if not image_bytes:
+    if not image_bytes or (content_type and "text/html" in content_type):
         raise HTTPException(status_code=404, detail="Image not found on NAS")
 
     # Return with cache headers (images rarely change)

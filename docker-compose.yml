@@ -45,6 +45,7 @@ services:
       - ./backend:/app
       - nsx_images:/data/nsx_images
       - nsx_exports:/data/nsx_exports
+      - uploads:/data/uploads
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     restart: unless-stopped
     networks:
@@ -71,6 +72,7 @@ volumes:
   pgdata:
   nsx_images:
   nsx_exports:
+  uploads:
 
 networks:
   labnote-net:
