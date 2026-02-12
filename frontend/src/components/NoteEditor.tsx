@@ -40,11 +40,34 @@ interface NoteEditorProps {
 const toolbarButton =
   'inline-flex items-center gap-1 rounded border border-input px-2 py-1 text-xs text-muted-foreground hover:text-foreground hover:border-primary/40 hover:bg-primary/5'
 
+// Custom Image extension that accepts <img> tags without src (NAS placeholders)
+// and preserves width/height attributes for NoteStation images
+const NoteStationImage = Image.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      width: {
+        default: null,
+        renderHTML: (attributes: Record<string, unknown>) =>
+          attributes.width ? { width: attributes.width } : {},
+      },
+      height: {
+        default: null,
+        renderHTML: (attributes: Record<string, unknown>) =>
+          attributes.height ? { height: attributes.height } : {},
+      },
+    }
+  },
+  parseHTML() {
+    return [{ tag: 'img' }] // Accept img WITHOUT src requirement (placeholders)
+  },
+})
+
 // Add auth token to NAS image URLs so they display in the editor
 function addNasImageTokens(html: string, token: string | null): string {
   if (!token) return html
   return html.replace(
-    /src="(\/api\/nas-images\/[^"?]+)"/g,
+    /src="(\/api\/(?:nas-images|images)\/[^"?]+)"/g,
     `src="$1?token=${token}"`
   )
 }
@@ -52,7 +75,7 @@ function addNasImageTokens(html: string, token: string | null): string {
 // Strip auth tokens from NAS image URLs before saving
 function stripNasImageTokens(html: string): string {
   return html.replace(
-    /src="(\/api\/nas-images\/[^"?]+)\?token=[^"]*"/g,
+    /src="(\/api\/(?:nas-images|images)\/[^"?]+)\?token=[^"]*"/g,
     'src="$1"'
   )
 }
@@ -69,7 +92,7 @@ export function NoteEditor({ noteId, initialContent, onSave, onCancel }: NoteEdi
       StarterKit,
       Underline,
       Link.configure({ openOnClick: false }),
-      Image,
+      NoteStationImage,
       TextStyle,
       Color,
       Highlight,

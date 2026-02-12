@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import html as html_mod
 import logging
 import re
 from typing import TYPE_CHECKING
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 logger = logging.getLogger(__name__)
 
@@ -190,78 +191,94 @@ def rewrite_image_urls(
     return _NOTESTATION_IMG_RE.sub(_replace, html)
 
 
-# Regex to match local API image tags produced by rewrite_image_urls()
-_LOCAL_IMG_RE = re.compile(
-    r'<img\s+src="/api/images/[^/]+/([^"]+)"\s+alt="([^"]*)"[^/]*/?>',
-    re.IGNORECASE,
+# Flexible regex to match ANY <img> tag (order-agnostic attribute extraction)
+_IMG_TAG_RE = re.compile(r'<img\b([^>]*)/?>', re.IGNORECASE)
+_SRC_ATTR_RE = re.compile(r'\bsrc="([^"]*)"', re.IGNORECASE)
+_ALT_ATTR_RE = re.compile(r'\balt="([^"]*)"', re.IGNORECASE)
+
+_NAS_IMG_TEMPLATE = (
+    '<img class=" syno-notestation-image-object" '
+    'src="webman/3rdparty/NoteStation/images/transparent.gif" '
+    'border="0" ref="{ref}" adjust="true" />'
 )
 
-# Regex to match NAS proxy image tags produced by rewrite_image_urls()
-_NAS_PROXY_IMG_RE = re.compile(
-    r'<img\s+src="/api/nas-images/[^/]+/[^/]+/[^"]+"\s+alt="([^"]*)"[^/]*/?>',
-    re.IGNORECASE,
-)
+
+def _build_nas_ref(name: str) -> str | None:
+    """Encode a decoded name into a NAS base64 ref, or None on failure."""
+    if not name or name == "image":
+        return None
+    try:
+        return base64.b64encode(name.encode("utf-8")).decode("ascii")
+    except Exception:
+        return None
 
 
 def restore_nas_image_urls(html: str) -> str:
-    """Convert local ``/api/images/`` and ``/api/nas-images/`` img tags back to NoteStation format.
+    """Convert local ``/api/images/``, ``/api/nas-images/``, and placeholder img tags back to NoteStation format.
 
     This is the reverse of :func:`rewrite_image_urls`.  It is used when
     pushing edited content back to NAS so that NoteStation can resolve
     the image references.
 
-    Local format::
+    Handles three cases (attribute-order agnostic, HTML-entity safe):
 
-        <img src="/api/images/{note_id}/{ref}" alt="decoded_name" ... />
+    1. ``src`` starts with ``/api/nas-images/`` — use ``alt`` for ref reconstruction
+    2. ``src`` starts with ``/api/images/`` — use ``alt`` (fallback: ref from URL path)
+    3. No ``src`` but ``alt`` starts with ``notestation-image:`` — extract name, reconstruct ref
 
-    NAS proxy format::
-
-        <img src="/api/nas-images/{note_id}/{att_key}/{filename}" alt="name" ... />
+    All other ``<img>`` tags pass through unchanged.
 
     NAS format (restored)::
 
-        <img class="syno-notestation-image-object"
+        <img class=" syno-notestation-image-object"
              src="webman/3rdparty/NoteStation/images/transparent.gif"
-             ref="BASE64_ENCODED_NAME" />
+             border="0" ref="BASE64_ENCODED_NAME" adjust="true" />
     """
     if not html:
         return html
 
-    def _replace_local(match: re.Match) -> str:
-        alt_name = match.group(2)  # decoded filename from alt attribute
-        if not alt_name or alt_name == "image":
-            # Fallback: try to use the ref from the URL path
-            alt_name = match.group(1)
-        try:
-            ref_b64 = base64.b64encode(alt_name.encode("utf-8")).decode("ascii")
-        except Exception:
-            return match.group(0)  # leave unchanged if encoding fails
+    def _replace_img(match: re.Match) -> str:
+        full_tag = match.group(0)
+        attrs = match.group(1)
 
-        return (
-            '<img class=" syno-notestation-image-object" '
-            'src="webman/3rdparty/NoteStation/images/transparent.gif" '
-            f'border="0" ref="{ref_b64}" adjust="true" />'
-        )
+        src_m = _SRC_ATTR_RE.search(attrs)
+        alt_m = _ALT_ATTR_RE.search(attrs)
 
-    def _replace_nas_proxy(match: re.Match) -> str:
-        alt_name = match.group(1)  # filename from alt attribute
-        if not alt_name or alt_name == "image":
-            return match.group(0)  # leave unchanged if no name
-        try:
-            ref_b64 = base64.b64encode(alt_name.encode("utf-8")).decode("ascii")
-        except Exception:
-            return match.group(0)  # leave unchanged if encoding fails
+        src = src_m.group(1) if src_m else ""
+        alt = html_mod.unescape(alt_m.group(1)) if alt_m else ""
 
-        return (
-            '<img class=" syno-notestation-image-object" '
-            'src="webman/3rdparty/NoteStation/images/transparent.gif" '
-            f'border="0" ref="{ref_b64}" adjust="true" />'
-        )
+        # Case 1: NAS proxy URL → restore to NAS ref
+        if src.startswith("/api/nas-images/"):
+            ref = _build_nas_ref(alt)
+            if ref:
+                return _NAS_IMG_TEMPLATE.format(ref=ref)
+            return full_tag
 
-    # Restore both local and NAS proxy image URLs
-    result = _LOCAL_IMG_RE.sub(_replace_local, html)
-    result = _NAS_PROXY_IMG_RE.sub(_replace_nas_proxy, result)
-    return result
+        # Case 2: Local NSX image URL → restore to NAS ref
+        if src.startswith("/api/images/"):
+            name = alt
+            if not name or name == "image":
+                # Fallback: extract ref from URL path (last segment, URL-decoded)
+                parts = src.split("/")
+                if len(parts) >= 4:
+                    name = unquote(parts[-1])
+            ref = _build_nas_ref(name)
+            if ref:
+                return _NAS_IMG_TEMPLATE.format(ref=ref)
+            return full_tag
+
+        # Case 3: Placeholder image (no src or empty src) with notestation-image: alt
+        if (not src or src == "") and alt.startswith("notestation-image:"):
+            name = alt[len("notestation-image:"):]
+            ref = _build_nas_ref(name)
+            if ref:
+                return _NAS_IMG_TEMPLATE.format(ref=ref)
+            return full_tag
+
+        # All other images (external URLs, data URIs, etc.) pass through unchanged
+        return full_tag
+
+    return _IMG_TAG_RE.sub(_replace_img, html)
 
 
 # Regex to match local file upload image tags: <img src="/api/files/{file_id}" ...>

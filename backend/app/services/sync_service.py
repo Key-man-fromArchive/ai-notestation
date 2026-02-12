@@ -214,8 +214,22 @@ class SyncService:
             try:
                 # Convert local image URLs before pushing to NAS
                 push_content = note.content_html or ""
+                logger.info(
+                    "_push %s: before — nas-images=%d, images=%d, files=%d, placeholders=%d",
+                    note.synology_note_id,
+                    push_content.count("/api/nas-images/"),
+                    push_content.count("/api/images/"),
+                    push_content.count("/api/files/"),
+                    push_content.count("notestation-image:"),
+                )
                 push_content = inline_local_file_images(push_content)
                 push_content = restore_nas_image_urls(push_content)
+                logger.info(
+                    "_push %s: after transforms — NAS refs=%d, remaining /api/=%d",
+                    note.synology_note_id,
+                    push_content.count("syno-notestation-image-object"),
+                    push_content.count("/api/"),
+                )
 
                 await self._notestation.update_note(
                     object_id=note.synology_note_id,

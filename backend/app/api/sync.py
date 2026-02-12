@@ -488,8 +488,27 @@ async def push_note(
 
         # Convert local images: /api/files/ -> data URI, /api/images/ -> NAS ref
         push_content = note.content_html or ""
+        logger.info(
+            "push_note %s: before transforms — nas-images=%d, images=%d, files=%d, placeholders=%d",
+            note_id,
+            push_content.count("/api/nas-images/"),
+            push_content.count("/api/images/"),
+            push_content.count("/api/files/"),
+            push_content.count("notestation-image:"),
+        )
         push_content = inline_local_file_images(push_content)
+        logger.info(
+            "push_note %s: after inline_local_file_images — data URIs=%d",
+            note_id,
+            push_content.count("data:image/"),
+        )
         push_content = restore_nas_image_urls(push_content)
+        logger.info(
+            "push_note %s: after restore_nas_image_urls — NAS refs=%d, remaining /api/=%d",
+            note_id,
+            push_content.count("syno-notestation-image-object"),
+            push_content.count("/api/"),
+        )
 
         await service._notestation.update_note(
             object_id=note.synology_note_id,
@@ -510,6 +529,12 @@ async def push_note(
             # Use NAS content (canonical format with NAS refs instead of data URIs)
             if nas_note.get("content"):
                 push_content = nas_note["content"]
+                logger.info(
+                    "push_note %s: NAS re-fetch — refs=%d, data URIs=%d",
+                    note_id,
+                    push_content.count('ref="'),
+                    push_content.count("data:image/"),
+                )
         except Exception:
             logger.warning("Failed to fetch updated note %s after push", note.synology_note_id)
             note.source_updated_at = datetime.now(UTC)
