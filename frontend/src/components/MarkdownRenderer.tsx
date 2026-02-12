@@ -13,6 +13,11 @@ import { apiClient } from '@/lib/api'
 // Custom sanitize schema that allows our API image URLs, table styles, etc.
 const sanitizeSchema = {
   ...defaultSchema,
+  // Allow data: URIs for images (NAS sometimes stores inline base64 images)
+  protocols: {
+    ...defaultSchema.protocols,
+    src: [...(defaultSchema.protocols?.src || []), 'data'],
+  },
   tagNames: [
     ...(defaultSchema.tagNames || []),
     'colgroup',

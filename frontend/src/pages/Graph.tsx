@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Network, SlidersHorizontal, BarChart3 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
@@ -13,6 +14,7 @@ const MAX_PANEL_WIDTH = 700
 const DEFAULT_PANEL_WIDTH = 420
 
 export default function Graph() {
+  const { t } = useTranslation()
   const [showSettings, setShowSettings] = useState(false)
   const [showAnalysis, setShowAnalysis] = useState(false)
   const [showAll, setShowAll] = useState(true)
@@ -121,9 +123,9 @@ export default function Graph() {
         <div className="flex items-center gap-3">
           <Network className="h-6 w-6 text-primary" />
           <div>
-            <h1 className="text-2xl font-bold">그래프 뷰</h1>
+            <h1 className="text-2xl font-bold">{t('graph.title')}</h1>
             <p className="text-sm text-muted-foreground">
-              노트 간 연결성을 시각화합니다
+              {t('graph.layout')}
             </p>
           </div>
         </div>
@@ -144,7 +146,7 @@ export default function Graph() {
             )}
           >
             <BarChart3 className="h-4 w-4" />
-            분석
+            {t('graph.analysisPanel')}
           </button>
           <button
             onClick={() => setShowSettings(!showSettings)}
@@ -154,7 +156,7 @@ export default function Graph() {
             )}
           >
             <SlidersHorizontal className="h-4 w-4" />
-            설정
+            {t('sidebar.settings')}
           </button>
         </div>
       </div>
@@ -170,13 +172,13 @@ export default function Graph() {
                   onChange={e => setShowAll(e.target.checked)}
                   className="w-4 h-4 rounded border-border"
                 />
-                <span className="text-sm font-medium">전체 노트 표시</span>
+                <span className="text-sm font-medium">{t('common.viewAll')}</span>
               </label>
             </div>
 
             <div className={cn(showAll && 'opacity-40 pointer-events-none')}>
               <label className="text-sm font-medium block mb-2">
-                표시할 노트 수: {limit}
+                {t('graph.nodes')}: {limit}
               </label>
               <input
                 type="range"
@@ -195,7 +197,7 @@ export default function Graph() {
 
             <div>
               <label className="text-sm font-medium block mb-2">
-                유사도 임계값: {(threshold * 100).toFixed(0)}%
+                {t('graph.similarity')}: {(threshold * 100).toFixed(0)}%
               </label>
               <input
                 type="range"
@@ -214,7 +216,7 @@ export default function Graph() {
 
             <div>
               <label className="text-sm font-medium block mb-2">
-                노트당 이웃 수: {neighborsPerNote}
+                {t('graph.connections')}: {neighborsPerNote}
               </label>
               <input
                 type="range"
@@ -236,7 +238,7 @@ export default function Graph() {
             onClick={() => refetch()}
             className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
           >
-            적용
+            {t('common.apply')}
           </button>
         </div>
       )}
@@ -258,7 +260,7 @@ export default function Graph() {
             <div
               onMouseDown={handleDragStart}
               className="w-1.5 flex-shrink-0 cursor-col-resize bg-border hover:bg-primary/40 active:bg-primary/60 transition-colors"
-              title="드래그하여 패널 크기 조절"
+              title={t('graph.layout')}
             />
             <GraphAnalysisPanel
               analysis={data.analysis}

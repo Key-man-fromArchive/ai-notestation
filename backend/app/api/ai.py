@@ -19,7 +19,7 @@ import json
 import logging
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,6 +33,8 @@ from app.models import Note
 from app.search.engine import FullTextSearchEngine
 from app.services.auth_service import get_current_user
 from app.services.oauth_service import OAuthService
+from app.utils.i18n import get_language
+from app.utils.messages import msg
 
 logger = logging.getLogger(__name__)
 
@@ -315,6 +317,7 @@ def _build_messages_for_feature(
     feature: FeatureType,
     content: str,
     options: dict | None,
+    lang: str = "ko",
 ) -> list:
     """Build prompt messages based on the requested feature.
 
@@ -325,6 +328,7 @@ def _build_messages_for_feature(
         feature: The AI feature to invoke.
         content: Primary content or question text.
         options: Optional feature-specific parameters.
+        lang: Language code for prompt messages.
 
     Returns:
         List of Message objects for the AI request.
@@ -339,6 +343,7 @@ def _build_messages_for_feature(
         return insight.build_messages(
             note_content=content,
             additional_context=f"사용자 검색 쿼리: {search_query}" if search_query else None,
+            lang=lang,
         )
     elif feature == "search_qa":
         context_notes = opts.get("context_notes", [])
@@ -347,22 +352,25 @@ def _build_messages_for_feature(
         return search_qa.build_messages(
             question=content,
             context_notes=context_notes,
+            lang=lang,
         )
     elif feature == "writing":
         return writing.build_messages(
             topic=content,
             keywords=opts.get("keywords"),
             existing_content=opts.get("existing_content"),
+            lang=lang,
         )
     elif feature == "spellcheck":
-        return spellcheck.build_messages(text=content)
+        return spellcheck.build_messages(text=content, lang=lang)
     elif feature == "template":
         return template.build_messages(
             template_type=content,
             custom_instructions=opts.get("custom_instructions"),
+            lang=lang,
         )
     elif feature == "summarize":
-        return summarize.build_messages(note_content=content)
+        return summarize.build_messages(note_content=content, lang=lang)
     else:
         # This should never happen due to Literal type validation
         raise ValueError(f"Unknown feature: {feature}")
@@ -376,6 +384,7 @@ def _build_messages_for_feature(
 @router.post("/chat", response_model=AIChatResponse)
 async def ai_chat(
     request: AIChatRequest,
+    http_request: Request,
     current_user: dict = Depends(get_current_user),  # noqa: B008
     ai_router: AIRouter = Depends(get_ai_router),  # noqa: B008
     db: AsyncSession = Depends(get_db),  # noqa: B008
@@ -393,6 +402,7 @@ async def ai_chat(
 
     Requires JWT Bearer authentication.
     """
+    lang = get_language(http_request)
     opts = request.options or {}
     content = request.content
     effective_options = dict(opts)
@@ -405,7 +415,7 @@ async def ai_chat(
         notes_meta, combined = await _search_and_fetch_notes(content, db)
         if not combined:
             return AIChatResponse(
-                content="검색 결과가 없습니다. 다른 검색어를 시도해 주세요.",
+                content=msg("search.no_results", lang),
                 model=request.model or "",
                 provider="",
                 usage=None,
@@ -418,6 +428,7 @@ async def ai_chat(
             feature=request.feature,
             content=content,
             options=effective_options,
+            lang=lang,
         )
     except ValueError as exc:
         raise HTTPException(
@@ -474,6 +485,7 @@ async def ai_chat(
 @router.post("/stream")
 async def ai_stream(
     request: AIChatRequest,
+    http_request: Request,
     current_user: dict = Depends(get_current_user),  # noqa: B008
     ai_router: AIRouter = Depends(get_ai_router),  # noqa: B008
     db: AsyncSession = Depends(get_db),  # noqa: B008
@@ -497,6 +509,7 @@ async def ai_stream(
 
     Requires JWT Bearer authentication.
     """
+    lang = get_language(http_request)
     opts = request.options or {}
     content = request.content
     effective_options = dict(opts)
@@ -511,8 +524,8 @@ async def ai_stream(
         notes_metadata = notes_meta
         if not combined:
             async def no_results_generator():
-                msg = json.dumps({"chunk": "검색 결과가 없습니다. 다른 검색어를 시도해 주세요."})
-                yield f"data: {msg}\n\n"
+                message = json.dumps({"chunk": msg("search.no_results", lang)})
+                yield f"data: {message}\n\n"
                 yield "data: [DONE]\n\n"
 
             return StreamingResponse(
@@ -532,6 +545,7 @@ async def ai_stream(
             feature=request.feature,
             content=content,
             options=effective_options,
+            lang=lang,
         )
     except ValueError as exc:
         raise HTTPException(

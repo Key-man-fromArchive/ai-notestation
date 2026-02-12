@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useMembers, type Member } from '@/hooks/useMembers'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
 import { EmptyState } from '@/components/EmptyState'
@@ -36,6 +37,7 @@ interface InviteModalProps {
 }
 
 function InviteModal({ isOpen, onClose, onInvite, isLoading, error }: InviteModalProps) {
+  const { t } = useTranslation()
   const [email, setEmail] = useState('')
   const [role, setRole] = useState('member')
   const [success, setSuccess] = useState(false)
@@ -61,7 +63,7 @@ function InviteModal({ isOpen, onClose, onInvite, isLoading, error }: InviteModa
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-lg">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-lg font-semibold text-foreground">Invite Member</h2>
+          <h2 className="text-lg font-semibold text-foreground">{t('members.inviteMember')}</h2>
           <button
             onClick={onClose}
             className="rounded-lg p-1.5 text-muted-foreground hover:bg-accent"
@@ -73,7 +75,7 @@ function InviteModal({ isOpen, onClose, onInvite, isLoading, error }: InviteModa
         {success ? (
           <div className="flex flex-col items-center py-8">
             <CheckCircle className="h-12 w-12 text-green-500 mb-3" />
-            <p className="text-sm text-foreground">Invitation sent!</p>
+            <p className="text-sm text-foreground">{t('members.invited')}</p>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -86,7 +88,7 @@ function InviteModal({ isOpen, onClose, onInvite, isLoading, error }: InviteModa
 
             <div className="space-y-1.5">
               <label htmlFor="invite-email" className="text-sm font-medium text-foreground">
-                Email address
+                {t('members.inviteEmail')}
               </label>
               <input
                 id="invite-email"
@@ -107,7 +109,7 @@ function InviteModal({ isOpen, onClose, onInvite, isLoading, error }: InviteModa
 
             <div className="space-y-1.5">
               <label htmlFor="invite-role" className="text-sm font-medium text-foreground">
-                Role
+                {t('members.role')}
               </label>
               <select
                 id="invite-role"
@@ -141,7 +143,7 @@ function InviteModal({ isOpen, onClose, onInvite, isLoading, error }: InviteModa
                   'disabled:opacity-50',
                 )}
               >
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 type="submit"
@@ -157,10 +159,10 @@ function InviteModal({ isOpen, onClose, onInvite, isLoading, error }: InviteModa
                 {isLoading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Sending...
+                    {t('members.inviting')}
                   </>
                 ) : (
-                  'Send Invitation'
+                  t('members.invite')
                 )}
               </button>
             </div>
@@ -178,6 +180,7 @@ interface MemberRowProps {
 }
 
 function MemberRow({ member, onUpdateRole, isUpdating }: MemberRowProps) {
+  const { t } = useTranslation()
   const [isEditing, setIsEditing] = useState(false)
   const [selectedRole, setSelectedRole] = useState(member.role)
   const roleInfo = getRoleInfo(member.role)
@@ -208,7 +211,7 @@ function MemberRow({ member, onUpdateRole, isUpdating }: MemberRowProps) {
             {member.is_pending && (
               <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
                 <Clock className="h-3 w-3" />
-                Pending
+                {t('settings.pendingIndex')}
               </span>
             )}
           </div>
@@ -243,7 +246,7 @@ function MemberRow({ member, onUpdateRole, isUpdating }: MemberRowProps) {
                 'hover:bg-primary/90 disabled:opacity-50',
               )}
             >
-              {isUpdating ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save'}
+              {isUpdating ? <Loader2 className="h-4 w-4 animate-spin" /> : t('common.save')}
             </button>
             <button
               onClick={() => {
@@ -253,7 +256,7 @@ function MemberRow({ member, onUpdateRole, isUpdating }: MemberRowProps) {
               disabled={isUpdating}
               className="h-8 px-3 rounded-lg border border-input text-sm hover:bg-accent"
             >
-              Cancel
+              {t('common.cancel')}
             </button>
           </>
         ) : (
@@ -275,7 +278,7 @@ function MemberRow({ member, onUpdateRole, isUpdating }: MemberRowProps) {
                 onClick={() => setIsEditing(true)}
                 className="text-xs text-muted-foreground hover:text-foreground"
               >
-                Edit
+                {t('common.edit')}
               </button>
             )}
           </>
@@ -286,6 +289,7 @@ function MemberRow({ member, onUpdateRole, isUpdating }: MemberRowProps) {
 }
 
 export default function Members() {
+  const { t } = useTranslation()
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false)
   const {
     members,
@@ -307,8 +311,8 @@ export default function Members() {
     return (
       <EmptyState
         icon={AlertCircle}
-        title="Failed to load members"
-        description="There was an error loading the member list."
+        title={t('common.errorOccurred')}
+        description={error.message}
       />
     )
   }
@@ -317,9 +321,9 @@ export default function Members() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">멤버</h1>
+          <h1 className="text-2xl font-bold text-foreground">{t('members.title')}</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            조직 멤버를 관리합니다 ({total}명)
+            {t('common.count_items', { count: total })}
           </p>
         </div>
         <button
@@ -331,7 +335,7 @@ export default function Members() {
           )}
         >
           <UserPlus className="h-4 w-4" />
-          Invite Member
+          {t('members.inviteMember')}
         </button>
       </div>
 
@@ -340,8 +344,8 @@ export default function Members() {
           <div className="py-12">
             <EmptyState
               icon={Users}
-              title="No members yet"
-              description="Invite team members to collaborate."
+              title={t('members.noMembers')}
+              description=""
             />
           </div>
         ) : (

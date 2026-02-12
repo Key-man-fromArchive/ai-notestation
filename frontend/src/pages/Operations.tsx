@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useSync } from '@/hooks/useSync'
 import { useSearchIndex } from '@/hooks/useSearchIndex'
 import { useActivityLog } from '@/hooks/useActivityLog'
@@ -19,6 +20,7 @@ import { useTimezone } from '@/hooks/useTimezone'
 type FilterType = 'all' | 'sync' | 'embedding' | 'image_sync' | 'nsx' | 'auth' | 'member' | 'oauth' | 'note' | 'notebook' | 'access' | 'share_link' | 'settings' | 'admin'
 
 export default function Operations() {
+  const { t, i18n } = useTranslation()
   const [filter, setFilter] = useState<FilterType>('all')
   const timezone = useTimezone()
 
@@ -50,9 +52,9 @@ export default function Operations() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-bold mb-1">운영 현황</h1>
+        <h1 className="text-2xl font-bold mb-1">{t('operations.title')}</h1>
         <p className="text-sm text-muted-foreground">
-          동기화, 임베딩, 검색 상태를 한눈에 확인하고 관리합니다
+          {t('operations.systemHealth')}
         </p>
       </div>
 
@@ -71,16 +73,16 @@ export default function Operations() {
                   syncStatus === 'idle' && 'text-muted-foreground',
                 )}
               />
-              <h3 className="font-semibold">NAS 동기화</h3>
+              <h3 className="font-semibold">{t('dashboard.nasSync')}</h3>
             </div>
             <StatusBadge status={syncStatus} />
           </div>
           <div className="space-y-1 text-sm text-muted-foreground mb-3">
             {notesSynced != null && (
-              <p>동기화된 노트: <span className="text-foreground font-medium">{notesSynced.toLocaleString()}개</span></p>
+              <p>{t('operations.notesCreated')}: <span className="text-foreground font-medium">{notesSynced.toLocaleString()}</span></p>
             )}
             {lastSync && (
-              <p>마지막 동기화: {new Date(lastSync).toLocaleString('ko-KR', { timeZone: timezone })}</p>
+              <p>{t('operations.lastSync')}: {new Date(lastSync).toLocaleString(i18n.language === 'ko' ? 'ko-KR' : 'en-US', { timeZone: timezone })}</p>
             )}
             {syncError && <p className="text-destructive text-xs">{syncError}</p>}
           </div>
@@ -94,7 +96,7 @@ export default function Operations() {
             )}
           >
             <Play className="h-4 w-4" />
-            {syncStatus === 'syncing' ? '동기화 중...' : '동기화 시작'}
+            {syncStatus === 'syncing' ? t('dashboard.syncing') : t('dashboard.startSync')}
           </button>
         </div>
 
@@ -111,20 +113,20 @@ export default function Operations() {
                   indexStatus === 'idle' && 'text-muted-foreground',
                 )}
               />
-              <h3 className="font-semibold">임베딩 인덱싱</h3>
+              <h3 className="font-semibold">{t('settings.searchIndexing')}</h3>
             </div>
             <StatusBadge status={indexStatus} />
           </div>
           <div className="space-y-1 text-sm text-muted-foreground mb-3">
             <p>
-              인덱싱 완료:{' '}
+              {t('settings.indexed')}:{' '}
               <span className="text-foreground font-medium">
-                {indexedNotes.toLocaleString()} / {totalNotes.toLocaleString()}개
+                {indexedNotes.toLocaleString()} / {totalNotes.toLocaleString()}
               </span>{' '}
               ({indexPercentage}%)
             </p>
             {pendingNotes > 0 && (
-              <p>대기 중: <span className="text-amber-600 font-medium">{pendingNotes.toLocaleString()}개</span></p>
+              <p>{t('settings.pendingIndex')}: <span className="text-amber-600 font-medium">{pendingNotes.toLocaleString()}</span></p>
             )}
             {indexError && <p className="text-destructive text-xs">{indexError}</p>}
           </div>
@@ -138,7 +140,7 @@ export default function Operations() {
             )}
           >
             <Play className="h-4 w-4" />
-            {isIndexing ? '인덱싱 중...' : pendingNotes === 0 ? '인덱싱 완료' : '인덱싱 시작'}
+            {isIndexing ? t('settings.indexing') : pendingNotes === 0 ? t('settings.allIndexed') : t('settings.startIndex')}
           </button>
         </div>
 
@@ -153,19 +155,19 @@ export default function Operations() {
                   indexPercentage > 0 ? 'text-yellow-600' : 'text-muted-foreground',
                 )}
               />
-              <h3 className="font-semibold">검색 준비 상태</h3>
+              <h3 className="font-semibold">{t('search.title')}</h3>
             </div>
           </div>
           <div className="space-y-2 text-sm text-muted-foreground mb-3">
-            <p>전문 검색 (FTS): <span className="text-green-600 font-medium">사용 가능</span></p>
+            <p>{t('search.fts')}: <span className="text-green-600 font-medium">{t('admin.available')}</span></p>
             <p>
-              의미 검색:{' '}
+              {t('search.semantic')}:{' '}
               <span className={cn('font-medium', indexPercentage === 100 ? 'text-green-600' : 'text-amber-600')}>
-                {indexPercentage === 100 ? '사용 가능' : `${indexPercentage}% 준비`}
+                {indexPercentage === 100 ? t('admin.available') : `${indexPercentage}%`}
               </span>
             </p>
-            <p>하이브리드 검색: <span className={cn('font-medium', indexPercentage > 0 ? 'text-green-600' : 'text-amber-600')}>
-              {indexPercentage > 0 ? '사용 가능' : '임베딩 필요'}
+            <p>{t('search.hybrid')}: <span className={cn('font-medium', indexPercentage > 0 ? 'text-green-600' : 'text-amber-600')}>
+              {indexPercentage > 0 ? t('admin.available') : t('settings.pendingIndex')}
             </span></p>
           </div>
           <div>
@@ -179,7 +181,7 @@ export default function Operations() {
               />
             </div>
             <p className="text-xs text-muted-foreground mt-1 text-center">
-              전체 검색 준비도 {indexPercentage}%
+              {indexPercentage}%
             </p>
           </div>
         </div>
@@ -188,11 +190,11 @@ export default function Operations() {
       {/* Activity Log Section */}
       <div>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold">작업 로그</h2>
+          <h2 className="text-lg font-semibold">{t('operations.activityLog')}</h2>
           <div className="flex flex-wrap gap-x-4 gap-y-2">
             {/* 전체 */}
             <div className="flex gap-1">
-              <FilterButton label="전체" value="all" current={filter} onClick={setFilter} />
+              <FilterButton label={t('common.viewAll')} value="all" current={filter} onClick={setFilter} />
             </div>
             {/* 시스템 */}
             <div className="flex gap-1 items-center">
@@ -231,8 +233,8 @@ export default function Operations() {
         {!logLoading && (!logData?.items || logData.items.length === 0) && (
           <EmptyState
             icon={Clock}
-            title="작업 기록이 없습니다"
-            description="동기화나 인덱싱을 실행하면 여기에 기록됩니다"
+            title={t('operations.noActivity')}
+            description=""
           />
         )}
 
@@ -253,7 +255,7 @@ export default function Operations() {
                     )}
                   </div>
                   <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                    <span>{new Date(item.created_at).toLocaleString('ko-KR', { timeZone: timezone })}</span>
+                    <span>{new Date(item.created_at).toLocaleString(i18n.language === 'ko' ? 'ko-KR' : 'en-US', { timeZone: timezone })}</span>
                     {item.triggered_by && <span>by {item.triggered_by}</span>}
                     {item.details && item.status === 'completed' && (
                       <span className="text-foreground/60">
@@ -290,32 +292,33 @@ function FilterButton({ label, value, current, onClick }: { label: string; value
   )
 }
 
-const OPERATION_LABELS: Record<string, { label: string; color: string }> = {
-  sync: { label: '동기화', color: 'bg-blue-100 text-blue-700' },
-  embedding: { label: '임베딩', color: 'bg-purple-100 text-purple-700' },
-  image_sync: { label: '이미지', color: 'bg-amber-100 text-amber-700' },
-  nsx: { label: 'NSX', color: 'bg-indigo-100 text-indigo-700' },
-  auth: { label: '인증', color: 'bg-green-100 text-green-700' },
-  member: { label: '멤버', color: 'bg-teal-100 text-teal-700' },
-  oauth: { label: 'OAuth', color: 'bg-cyan-100 text-cyan-700' },
-  note: { label: '노트', color: 'bg-pink-100 text-pink-700' },
-  notebook: { label: '노트북', color: 'bg-rose-100 text-rose-700' },
-  access: { label: '권한', color: 'bg-violet-100 text-violet-700' },
-  share_link: { label: '공유링크', color: 'bg-fuchsia-100 text-fuchsia-700' },
-  settings: { label: '설정', color: 'bg-slate-100 text-slate-700' },
-  admin: { label: '관리', color: 'bg-red-100 text-red-700' },
-}
-
 function OperationBadge({ operation }: { operation: string }) {
-  const info = OPERATION_LABELS[operation] ?? { label: operation, color: 'bg-gray-100 text-gray-700' }
+  const { t } = useTranslation()
+  const OPERATION_LABELS: Record<string, { labelKey: string; color: string }> = {
+    sync: { labelKey: 'operations.syncHistory', color: 'bg-blue-100 text-blue-700' },
+    embedding: { labelKey: 'admin.embeddingCount', color: 'bg-purple-100 text-purple-700' },
+    image_sync: { labelKey: 'settings.imageSync', color: 'bg-amber-100 text-amber-700' },
+    nsx: { labelKey: 'settings.nsxImport', color: 'bg-indigo-100 text-indigo-700' },
+    auth: { labelKey: 'auth.login', color: 'bg-green-100 text-green-700' },
+    member: { labelKey: 'members.title', color: 'bg-teal-100 text-teal-700' },
+    oauth: { labelKey: 'settings.oauth', color: 'bg-cyan-100 text-cyan-700' },
+    note: { labelKey: 'notes.title', color: 'bg-pink-100 text-pink-700' },
+    notebook: { labelKey: 'notebooks.title', color: 'bg-rose-100 text-rose-700' },
+    access: { labelKey: 'notebooks.accessPermissions', color: 'bg-violet-100 text-violet-700' },
+    share_link: { labelKey: 'sharing.publicLink', color: 'bg-fuchsia-100 text-fuchsia-700' },
+    settings: { labelKey: 'settings.title', color: 'bg-slate-100 text-slate-700' },
+    admin: { labelKey: 'admin.title', color: 'bg-red-100 text-red-700' },
+  }
+  const info = OPERATION_LABELS[operation] ?? { labelKey: operation, color: 'bg-gray-100 text-gray-700' }
   return (
     <span className={cn('text-xs px-1.5 py-0.5 rounded', info.color)}>
-      {info.label}
+      {t(info.labelKey)}
     </span>
   )
 }
 
 function StatusBadge({ status }: { status: string }) {
+  const { t } = useTranslation()
   return (
     <span
       className={cn(
@@ -327,10 +330,10 @@ function StatusBadge({ status }: { status: string }) {
         status === 'error' && 'bg-red-100 text-red-700',
       )}
     >
-      {status === 'idle' && '대기'}
-      {(status === 'syncing' || status === 'indexing') && '진행 중'}
-      {status === 'completed' && '완료'}
-      {status === 'error' && '오류'}
+      {status === 'idle' && t('dashboard.syncIdle')}
+      {(status === 'syncing' || status === 'indexing') && t('settings.inProgress')}
+      {status === 'completed' && t('notes.done')}
+      {status === 'error' && t('dashboard.syncError')}
     </span>
   )
 }

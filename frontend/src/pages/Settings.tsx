@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { apiClient } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 import { useSync } from '@/hooks/useSync'
@@ -29,6 +30,7 @@ import {
   Image,
   Globe,
   Sparkles,
+  Languages,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -37,6 +39,7 @@ interface SettingsData {
 }
 
 export default function Settings() {
+  const { t } = useTranslation()
   const { user } = useAuth()
   const isAdmin = user?.role === 'owner' || user?.role === 'admin'
   const queryClient = useQueryClient()
@@ -110,8 +113,8 @@ export default function Settings() {
     return (
       <EmptyState
         icon={AlertCircle}
-        title="설정을 불러올 수 없습니다"
-        description={error instanceof Error ? error.message : '알 수 없는 오류'}
+        title={t('settings.loadError')}
+        description={error instanceof Error ? error.message : t('common.unknownError')}
       />
     )
   }
@@ -119,8 +122,8 @@ export default function Settings() {
   return (
     <div className="flex flex-col gap-6 max-w-3xl">
       <div>
-        <h1 className="text-2xl font-bold mb-1">설정</h1>
-        <p className="text-sm text-muted-foreground">LabNote AI의 기본 설정을 관리합니다</p>
+        <h1 className="text-2xl font-bold mb-1">{t('settings.title')}</h1>
+        <p className="text-sm text-muted-foreground">{t('settings.subtitle')}</p>
       </div>
 
       {isAdmin && (
@@ -145,6 +148,8 @@ export default function Settings() {
           <BackupSection />
         </>
       )}
+      <LanguageSection />
+
       <TimezoneSection
         data={data}
         isPending={updateMutation.isPending}
@@ -176,7 +181,7 @@ export default function Settings() {
           role="status"
         >
           <CheckCircle className="h-5 w-5 text-green-600" aria-hidden="true" />
-          <span className="text-sm text-green-600">설정이 저장되었습니다</span>
+          <span className="text-sm text-green-600">{t('settings.settingsSaved')}</span>
         </div>
       )}
 
@@ -186,7 +191,7 @@ export default function Settings() {
           role="alert"
         >
           <AlertCircle className="h-5 w-5 text-destructive" aria-hidden="true" />
-          <span className="text-sm text-destructive">설정 저장에 실패했습니다</span>
+          <span className="text-sm text-destructive">{t('settings.settingsSaveFailed')}</span>
         </div>
       )}
     </div>
@@ -224,13 +229,14 @@ function NasConnectionSection({
   onCancel,
   onEditValueChange,
 }: NasConnectionSectionProps) {
+  const { t, i18n } = useTranslation()
   const nasUrl = (data?.settings['nas_url'] || '').replace(/^"|"$/g, '').trim()
   const nasUser = (data?.settings['nas_user'] || '').trim()
   const isConfigured = Boolean(nasUrl && nasUser)
 
   return (
     <div className="p-4 border border-input rounded-md">
-      <h3 className="text-lg font-semibold mb-3">Synology NAS 연결</h3>
+      <h3 className="text-lg font-semibold mb-3">{t('settings.nasConnection')}</h3>
 
       <div className="flex items-center gap-2 mb-4">
         <div
@@ -245,15 +251,15 @@ function NasConnectionSection({
           aria-hidden="true"
         />
         <span className="text-sm font-medium">
-          {!isConfigured && syncStatus !== 'error' && '미설정'}
-          {isConfigured && syncStatus === 'idle' && '연결됨'}
-          {isConfigured && syncStatus === 'syncing' && '동기화 중...'}
-          {isConfigured && syncStatus === 'completed' && '동기화 완료'}
-          {syncStatus === 'error' && 'NAS 연결에 실패했습니다'}
+          {!isConfigured && syncStatus !== 'error' && t('settings.nasNotConfigured')}
+          {isConfigured && syncStatus === 'idle' && t('settings.nasConnected')}
+          {isConfigured && syncStatus === 'syncing' && t('settings.nasSyncing')}
+          {isConfigured && syncStatus === 'completed' && t('settings.nasSyncCompleted')}
+          {syncStatus === 'error' && t('settings.nasConnectionFailed')}
         </span>
         {lastSync && (
           <span className="text-xs text-muted-foreground ml-2">
-            (마지막 동기화: {new Date(lastSync).toLocaleString('ko-KR')})
+            ({t('settings.lastSync')}: {new Date(lastSync).toLocaleString(i18n.language === 'ko' ? 'ko-KR' : 'en-US')})
           </span>
         )}
       </div>
@@ -265,7 +271,7 @@ function NasConnectionSection({
         >
           <p className="text-sm text-destructive">{syncError}</p>
           <p className="text-xs text-destructive/80 mt-1">
-            아래에서 NAS URL과 인증 정보를 확인하세요
+            {t('settings.checkNasSettings')}
           </p>
         </div>
       )}
@@ -299,7 +305,7 @@ function NasConnectionSection({
           )}
         >
           <Wifi className="h-4 w-4" aria-hidden="true" />
-          {nasTestMutation.isPending ? '연결 테스트 중...' : '연결 테스트'}
+          {nasTestMutation.isPending ? t('settings.connectionTesting') : t('settings.connectionTest')}
         </button>
 
         {nasTestMutation.isSuccess && nasTestMutation.data?.success && (
@@ -317,7 +323,7 @@ function NasConnectionSection({
         {nasTestMutation.isError && (
           <div className="flex items-center gap-2 text-destructive">
             <AlertCircle className="h-4 w-4" aria-hidden="true" />
-            <span className="text-sm">연결 테스트에 실패했습니다</span>
+            <span className="text-sm">{t('settings.connectionTestFailed')}</span>
           </div>
         )}
       </div>
@@ -350,9 +356,10 @@ function ApiKeysSection({
   onEditValueChange,
   onToggleExpand,
 }: ApiKeysSectionProps) {
+  const { t } = useTranslation()
   return (
     <div className="p-4 border border-input rounded-md">
-      <h3 className="text-lg font-semibold mb-3">API 키 관리</h3>
+      <h3 className="text-lg font-semibold mb-3">{t('settings.apiKeyManagement')}</h3>
       <div className="space-y-4">
         {apiKeySettingsList.map(setting => {
           const currentValue = data?.settings[setting.key] || ''
@@ -390,7 +397,7 @@ function ApiKeysSection({
                     ) : (
                       <ChevronRight className="h-3 w-3" />
                     )}
-                    API 키로 직접 입력
+                    {t('settings.enterApiKey')}
                   </button>
                   {isApiKeyExpanded && (
                     <div className="flex gap-2 mt-2">
@@ -423,17 +430,17 @@ function ApiKeysSection({
                               'transition-colors duration-200',
                               'disabled:opacity-50 disabled:cursor-not-allowed',
                             )}
-                            aria-label="저장"
+                            aria-label={t('common.save')}
                           >
                             <Save className="h-4 w-4" aria-hidden="true" />
-                            저장
+                            {t('common.save')}
                           </button>
                           <button
                             onClick={onCancel}
                             disabled={isPending}
                             className="px-4 py-2 bg-muted text-muted-foreground rounded-md hover:bg-muted/80 transition-colors"
                           >
-                            취소
+                            {t('common.cancel')}
                           </button>
                         </>
                       ) : (
@@ -441,7 +448,7 @@ function ApiKeysSection({
                           onClick={() => onEdit(setting.key, currentValue)}
                           className="px-4 py-2 bg-muted text-muted-foreground rounded-md hover:bg-muted/80 transition-colors"
                         >
-                          수정
+                          {t('common.edit')}
                         </button>
                       )}
                     </div>
@@ -478,17 +485,17 @@ function ApiKeysSection({
                           'transition-colors duration-200',
                           'disabled:opacity-50 disabled:cursor-not-allowed',
                         )}
-                        aria-label="저장"
+                        aria-label={t('common.save')}
                       >
                         <Save className="h-4 w-4" aria-hidden="true" />
-                        저장
+                        {t('common.save')}
                       </button>
                       <button
                         onClick={onCancel}
                         disabled={isPending}
                         className="px-4 py-2 bg-muted text-muted-foreground rounded-md hover:bg-muted/80 transition-colors"
                       >
-                        취소
+                        {t('common.cancel')}
                       </button>
                     </>
                   ) : (
@@ -496,7 +503,7 @@ function ApiKeysSection({
                       onClick={() => onEdit(setting.key, currentValue)}
                       className="px-4 py-2 bg-muted text-muted-foreground rounded-md hover:bg-muted/80 transition-colors"
                     >
-                      수정
+                      {t('common.edit')}
                     </button>
                   )}
                 </div>
@@ -510,6 +517,7 @@ function ApiKeysSection({
 }
 
 function ImageSyncSection() {
+  const { t, i18n } = useTranslation()
   const {
     status,
     totalNotes,
@@ -536,38 +544,38 @@ function ImageSyncSection() {
     <div className="p-4 border border-input rounded-md">
       <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
         <Image className="h-5 w-5" aria-hidden="true" />
-        이미지 동기화
+        {t('settings.imageSync')}
       </h3>
 
       <p className="text-sm text-muted-foreground mb-4">
-        NAS에서 노트에 포함된 이미지를 가져옵니다. 이미지가 누락된 노트가 있을 때 실행하세요.
+        {t('settings.imageSyncDesc')}
       </p>
 
       {lastSyncAt && (
         <p className="text-xs text-muted-foreground mb-3">
-          마지막 동기화: {new Date(lastSyncAt).toLocaleString('ko-KR')}
+          {t('settings.lastImageSync')}: {new Date(lastSyncAt).toLocaleString(i18n.language === 'ko' ? 'ko-KR' : 'en-US')}
         </p>
       )}
 
       {status === 'syncing' && (
         <div className="space-y-3 mb-4">
           <div className="flex justify-between text-sm">
-            <span>진행 중</span>
+            <span>{t('settings.inProgress')}</span>
             <span className="font-medium">
-              {processedNotes.toLocaleString()} / {totalNotes.toLocaleString()}개 노트
+              {processedNotes.toLocaleString()} / {totalNotes.toLocaleString()} {t('common.count_notes', { count: totalNotes })}
             </span>
           </div>
           <div className="flex justify-between text-sm">
-            <span>추출된 이미지</span>
+            <span>{t('settings.extractedImages')}</span>
             <span className="font-medium text-green-600">
-              {imagesExtracted.toLocaleString()}개
+              {imagesExtracted.toLocaleString()} {t('common.count_items', { count: imagesExtracted })}
             </span>
           </div>
           {failedNotes > 0 && (
             <div className="flex justify-between text-sm">
-              <span>실패</span>
+              <span>{t('settings.failedCount')}</span>
               <span className="font-medium text-destructive">
-                {failedNotes.toLocaleString()}개
+                {failedNotes.toLocaleString()} {t('common.count_items', { count: failedNotes })}
               </span>
             </div>
           )}
@@ -579,7 +587,7 @@ function ImageSyncSection() {
               />
             </div>
             <p className="text-xs text-muted-foreground mt-1 text-center">
-              이미지 동기화 중... {progress}%
+              {t('settings.imageSyncing', { progress })}
             </p>
           </div>
         </div>
@@ -588,7 +596,7 @@ function ImageSyncSection() {
       {status === 'completed' && (
         <div className="mb-4 p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
           <p className="text-sm text-green-600">
-            {imagesExtracted.toLocaleString()}개 이미지 동기화 완료
+            {t('settings.imageSyncComplete', { count: imagesExtracted })}
           </p>
         </div>
       )}
@@ -596,11 +604,10 @@ function ImageSyncSection() {
       {status === 'partial' && (
         <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
           <p className="text-sm text-amber-600">
-            {imagesExtracted.toLocaleString()}개 이미지 동기화 완료 &mdash;{' '}
-            {remainingNotes.toLocaleString()}개 노트 추가 동기화 필요
+            {t('settings.imageSyncPartial', { completed: imagesExtracted, remaining: remainingNotes })}
           </p>
           <p className="text-xs text-amber-500 mt-1">
-            버튼을 다시 눌러 나머지 노트를 동기화하세요.
+            {t('settings.imageSyncPartialHint')}
           </p>
         </div>
       )}
@@ -625,13 +632,14 @@ function ImageSyncSection() {
         )}
       >
         <Image className="h-4 w-4" aria-hidden="true" />
-        {isSyncing ? '동기화 중...' : '이미지 동기화'}
+        {isSyncing ? t('settings.imageSyncingButton') : t('settings.imageSyncButton')}
       </button>
     </div>
   )
 }
 
 function SearchIndexSection() {
+  const { t } = useTranslation()
   const {
     status,
     totalNotes,
@@ -654,29 +662,28 @@ function SearchIndexSection() {
     <div className="p-4 border border-input rounded-md">
       <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
         <Database className="h-5 w-5" aria-hidden="true" />
-        검색 인덱싱
+        {t('settings.searchIndexing')}
       </h3>
 
       <p className="text-sm text-muted-foreground mb-4">
-        Semantic Search를 위한 노트 임베딩을 생성합니다. OPENAI_API_KEY가
-        설정되어 있어야 합니다.
+        {t('settings.searchIndexDesc')}
       </p>
 
       <div className="space-y-3 mb-4">
         <div className="flex justify-between text-sm">
-          <span>전체 노트</span>
-          <span className="font-medium">{totalNotes.toLocaleString()}개</span>
+          <span>{t('settings.totalNotes')}</span>
+          <span className="font-medium">{totalNotes.toLocaleString()} {t('common.count_items', { count: totalNotes })}</span>
         </div>
         <div className="flex justify-between text-sm">
-          <span>인덱싱 완료</span>
+          <span>{t('settings.indexed')}</span>
           <span className="font-medium text-green-600">
-            {indexedNotes.toLocaleString()}개 ({indexPercentage}%)
+            {indexedNotes.toLocaleString()} {t('common.count_items', { count: indexedNotes })} ({indexPercentage}%)
           </span>
         </div>
         <div className="flex justify-between text-sm">
-          <span>인덱싱 대기</span>
+          <span>{t('settings.pendingIndex')}</span>
           <span className="font-medium text-amber-600">
-            {pendingNotes.toLocaleString()}개
+            {pendingNotes.toLocaleString()} {t('common.count_items', { count: pendingNotes })}
           </span>
         </div>
 
@@ -689,7 +696,7 @@ function SearchIndexSection() {
               />
             </div>
             <p className="text-xs text-muted-foreground mt-1 text-center">
-              배치 진행 중... {progress}%
+              {t('settings.batchProgress', { progress })}
             </p>
           </div>
         )}
@@ -716,13 +723,13 @@ function SearchIndexSection() {
           )}
         >
           <Search className="h-4 w-4" aria-hidden="true" />
-          {isIndexing ? '인덱싱 중...' : '인덱싱 시작'}
+          {isIndexing ? t('settings.indexing') : t('settings.startIndex')}
         </button>
 
         {status === 'completed' && pendingNotes === 0 && (
           <div className="flex items-center gap-2 text-green-600">
             <CheckCircle className="h-4 w-4" aria-hidden="true" />
-            <span className="text-sm">모든 노트가 인덱싱되었습니다</span>
+            <span className="text-sm">{t('settings.allIndexed')}</span>
           </div>
         )}
       </div>
@@ -748,6 +755,7 @@ interface SettingResponse {
 }
 
 function AiModelSection() {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [localEnabled, setLocalEnabled] = useState<string[]>([])
   const [localDefault, setLocalDefault] = useState('')
@@ -841,18 +849,18 @@ function AiModelSection() {
     <div className="p-4 border border-input rounded-md">
       <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
         <Sparkles className="h-5 w-5" aria-hidden="true" />
-        AI 모델 설정
+        {t('settings.aiModelSettings')}
       </h3>
       <p className="text-sm text-muted-foreground mb-4">
-        기본 모델과 선택기에 표시할 모델을 설정합니다.
+        {t('settings.aiModelDesc')}
       </p>
 
       {!allModels.length ? (
-        <p className="text-sm text-muted-foreground">사용 가능한 모델이 없습니다. API 키를 먼저 설정하세요.</p>
+        <p className="text-sm text-muted-foreground">{t('settings.noModels')}</p>
       ) : (
         <>
           <div className="mb-4">
-            <label className="text-sm font-medium mb-1 block">기본 모델</label>
+            <label className="text-sm font-medium mb-1 block">{t('settings.defaultModel')}</label>
             <select
               value={localDefault}
               onChange={(e) => setLocalDefault(e.target.value)}
@@ -872,19 +880,19 @@ function AiModelSection() {
 
           <div className="mb-4">
             <div className="flex items-center justify-between mb-2">
-              <label className="text-sm font-medium">표시할 모델</label>
+              <label className="text-sm font-medium">{t('settings.visibleModels')}</label>
               <div className="flex gap-2">
                 <button
                   onClick={selectAll}
                   className="text-xs px-2 py-1 rounded border border-input hover:bg-muted transition-colors"
                 >
-                  모두 선택
+                  {t('common.selectAll')}
                 </button>
                 <button
                   onClick={selectNone}
                   className="text-xs px-2 py-1 rounded border border-input hover:bg-muted transition-colors"
                 >
-                  모두 해제
+                  {t('common.deselectAll')}
                 </button>
               </div>
             </div>
@@ -907,7 +915,7 @@ function AiModelSection() {
                     {model.name} ({model.provider})
                   </span>
                   {model.id === localDefault && (
-                    <span className="text-xs text-muted-foreground ml-auto">기본</span>
+                    <span className="text-xs text-muted-foreground ml-auto">{t('common.default')}</span>
                   )}
                 </label>
               ))}
@@ -926,12 +934,12 @@ function AiModelSection() {
               )}
             >
               <Save className="h-4 w-4" aria-hidden="true" />
-              {saving ? '저장 중...' : '저장'}
+              {saving ? t('common.saving') : t('common.save')}
             </button>
             {saved && (
               <div className="flex items-center gap-2 text-green-600">
                 <CheckCircle className="h-4 w-4" aria-hidden="true" />
-                <span className="text-sm">저장되었습니다</span>
+                <span className="text-sm">{t('common.saved')}</span>
               </div>
             )}
           </div>
@@ -940,24 +948,6 @@ function AiModelSection() {
     </div>
   )
 }
-
-const TIMEZONE_OPTIONS = [
-  { value: 'Asia/Seoul', label: '한국 (KST, UTC+9)' },
-  { value: 'Asia/Tokyo', label: '일본 (JST, UTC+9)' },
-  { value: 'Asia/Shanghai', label: '중국 (CST, UTC+8)' },
-  { value: 'Asia/Singapore', label: '싱가포르 (SGT, UTC+8)' },
-  { value: 'Asia/Kolkata', label: '인도 (IST, UTC+5:30)' },
-  { value: 'Europe/London', label: '런던 (GMT/BST)' },
-  { value: 'Europe/Paris', label: '파리 (CET/CEST)' },
-  { value: 'Europe/Berlin', label: '베를린 (CET/CEST)' },
-  { value: 'America/New_York', label: '뉴욕 (EST/EDT)' },
-  { value: 'America/Chicago', label: '시카고 (CST/CDT)' },
-  { value: 'America/Denver', label: '덴버 (MST/MDT)' },
-  { value: 'America/Los_Angeles', label: 'LA (PST/PDT)' },
-  { value: 'Pacific/Auckland', label: '오클랜드 (NZST, UTC+12)' },
-  { value: 'Australia/Sydney', label: '시드니 (AEST, UTC+10)' },
-  { value: 'UTC', label: 'UTC' },
-]
 
 function TimezoneSection({
   data,
@@ -968,27 +958,47 @@ function TimezoneSection({
   isPending: boolean
   onSave: (tz: string) => void
 }) {
+  const { t, i18n } = useTranslation()
+
+  const TIMEZONE_OPTIONS = [
+    { value: 'Asia/Seoul', labelKey: 'settings.timezone.seoul' },
+    { value: 'Asia/Tokyo', labelKey: 'settings.timezone.tokyo' },
+    { value: 'Asia/Shanghai', labelKey: 'settings.timezone.shanghai' },
+    { value: 'Asia/Singapore', labelKey: 'settings.timezone.singapore' },
+    { value: 'Asia/Kolkata', labelKey: 'settings.timezone.kolkata' },
+    { value: 'Europe/London', labelKey: 'settings.timezone.london' },
+    { value: 'Europe/Paris', labelKey: 'settings.timezone.paris' },
+    { value: 'Europe/Berlin', labelKey: 'settings.timezone.berlin' },
+    { value: 'America/New_York', labelKey: 'settings.timezone.newYork' },
+    { value: 'America/Chicago', labelKey: 'settings.timezone.chicago' },
+    { value: 'America/Denver', labelKey: 'settings.timezone.denver' },
+    { value: 'America/Los_Angeles', labelKey: 'settings.timezone.la' },
+    { value: 'Pacific/Auckland', labelKey: 'settings.timezone.auckland' },
+    { value: 'Australia/Sydney', labelKey: 'settings.timezone.sydney' },
+    { value: 'UTC', labelKey: 'UTC' },
+  ]
+
   const currentTz = data?.settings?.timezone || 'Asia/Seoul'
   const now = new Date()
   let preview = ''
   try {
-    preview = now.toLocaleString('ko-KR', {
+    preview = now.toLocaleString(i18n.language === 'ko' ? 'ko-KR' : 'en-US', {
       timeZone: currentTz,
       year: 'numeric', month: 'long', day: 'numeric',
       hour: '2-digit', minute: '2-digit', second: '2-digit',
     })
   } catch {
-    preview = now.toLocaleString('ko-KR')
+    preview = now.toLocaleString(i18n.language === 'ko' ? 'ko-KR' : 'en-US')
   }
 
   return (
     <div className="p-4 border border-input rounded-md">
       <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
         <Globe className="h-5 w-5" aria-hidden="true" />
-        시간대 설정
+        {t('settings.timezoneSettings')}
       </h3>
       <p className="text-sm text-muted-foreground mb-4">
-        노트 수정일, 동기화 시간 등에 사용할 시간대를 선택합니다.
+        {t('settings.timezoneDesc')}
       </p>
       <div className="flex items-center gap-3">
         <select
@@ -1003,13 +1013,60 @@ function TimezoneSection({
           )}
         >
           {TIMEZONE_OPTIONS.map((tz) => (
-            <option key={tz.value} value={tz.value}>{tz.label}</option>
+            <option key={tz.value} value={tz.value}>
+              {tz.labelKey === 'UTC' ? 'UTC' : t(tz.labelKey)}
+            </option>
           ))}
         </select>
       </div>
       <p className="text-xs text-muted-foreground mt-2">
-        현재 시간: {preview}
+        {t('settings.currentTime')}: {preview}
       </p>
+    </div>
+  )
+}
+
+function LanguageSection() {
+  const { t, i18n } = useTranslation()
+
+  const handleChange = (lang: string) => {
+    i18n.changeLanguage(lang)
+    localStorage.setItem('language', lang)
+  }
+
+  return (
+    <div className="p-4 border border-input rounded-md">
+      <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
+        <Languages className="h-5 w-5" aria-hidden="true" />
+        {t('settings.languageSettings')}
+      </h3>
+      <p className="text-sm text-muted-foreground mb-4">
+        {t('settings.languageDesc')}
+      </p>
+      <div className="flex gap-3">
+        <button
+          onClick={() => handleChange('ko')}
+          className={cn(
+            'flex-1 px-4 py-2.5 rounded-md border text-sm font-medium transition-colors',
+            i18n.language === 'ko'
+              ? 'border-primary bg-primary/10 text-primary'
+              : 'border-input hover:bg-accent',
+          )}
+        >
+          🇰🇷 {t('settings.korean')}
+        </button>
+        <button
+          onClick={() => handleChange('en')}
+          className={cn(
+            'flex-1 px-4 py-2.5 rounded-md border text-sm font-medium transition-colors',
+            i18n.language === 'en'
+              ? 'border-primary bg-primary/10 text-primary'
+              : 'border-input hover:bg-accent',
+          )}
+        >
+          🇺🇸 {t('settings.english')}
+        </button>
+      </div>
     </div>
   )
 }

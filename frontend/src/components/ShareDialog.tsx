@@ -19,27 +19,6 @@ interface ShareDialogProps {
   onClose: () => void
 }
 
-const LINK_TYPE_OPTIONS = [
-  {
-    value: 'public',
-    label: '공개 링크',
-    description: '누구나 접근 가능',
-    icon: Globe,
-  },
-  {
-    value: 'email_required',
-    label: '이메일 필수',
-    description: '특정 이메일만 접근 가능',
-    icon: Mail,
-  },
-  {
-    value: 'time_limited',
-    label: '기간 제한',
-    description: '지정된 기간 동안만 유효',
-    icon: Clock,
-  },
-] as const
-
 function formatDate(dateString: string): string {
   return new Date(dateString).toLocaleDateString('ko-KR', {
     year: 'numeric',

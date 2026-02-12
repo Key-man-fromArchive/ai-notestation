@@ -4,6 +4,7 @@
 
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { apiClient } from '@/lib/api'
 import { AIChat } from '@/components/AIChat'
@@ -20,45 +21,46 @@ import {
 
 type AIFeature = 'insight' | 'search_qa' | 'writing' | 'spellcheck' | 'template'
 
-const features: {
-  id: AIFeature
-  name: string
-  icon: React.ComponentType<{ className?: string }>
-  description: string
-}[] = [
-  {
-    id: 'insight',
-    name: '인사이트',
-    icon: Lightbulb,
-    description: '노트에서 핵심 인사이트 도출',
-  },
-  {
-    id: 'search_qa',
-    name: '검색 QA',
-    icon: MessageSquare,
-    description: '검색 결과 기반 질의응답',
-  },
-  {
-    id: 'writing',
-    name: '작성',
-    icon: FileEdit,
-    description: '연구노트 작성 지원',
-  },
-  {
-    id: 'spellcheck',
-    name: '교정',
-    icon: CheckCircle,
-    description: '맞춤법 및 문법 교정',
-  },
-  {
-    id: 'template',
-    name: '템플릿',
-    icon: FileType,
-    description: '노트 템플릿 생성',
-  },
-]
-
 export default function AIWorkbench() {
+  const { t } = useTranslation()
+
+  const features: {
+    id: AIFeature
+    name: string
+    icon: React.ComponentType<{ className?: string }>
+    description: string
+  }[] = [
+    {
+      id: 'insight',
+      name: t('ai.insightFeatures.insight'),
+      icon: Lightbulb,
+      description: t('ai.generateInsight'),
+    },
+    {
+      id: 'search_qa',
+      name: t('search.askAI'),
+      icon: MessageSquare,
+      description: t('search.aiAnswer'),
+    },
+    {
+      id: 'writing',
+      name: t('ai.insightFeatures.writing'),
+      icon: FileEdit,
+      description: t('ai.writing'),
+    },
+    {
+      id: 'spellcheck',
+      name: t('ai.insightFeatures.spellcheck'),
+      icon: CheckCircle,
+      description: t('ai.spellcheck'),
+    },
+    {
+      id: 'template',
+      name: t('ai.insightFeatures.template'),
+      icon: FileType,
+      description: t('ai.template'),
+    },
+  ]
   const [selectedFeature, setSelectedFeature] = useState<AIFeature>('insight')
   const [selectedModel, setSelectedModel] = useState('')
 
@@ -71,9 +73,9 @@ export default function AIWorkbench() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-bold mb-1">AI Workbench</h1>
+        <h1 className="text-2xl font-bold mb-1">{t('ai.workbench')}</h1>
         <p className="text-sm text-muted-foreground">
-          AI를 활용하여 노트를 분석하고 작성하세요
+          {t('dashboard.aiAnalysisDesc')}
         </p>
       </div>
 
@@ -89,16 +91,16 @@ export default function AIWorkbench() {
           />
           <div className="flex-1">
             <h3 className="font-semibold text-destructive mb-1">
-              AI API 키가 설정되지 않았습니다
+              {t('ai.noModel')}
             </h3>
             <p className="text-sm text-destructive/80 mb-2">
-              AI 기능을 사용하려면 API 키를 설정해야 합니다.
+              {t('ai.noModelDesc')}
             </p>
             <Link
               to="/settings"
               className="inline-block px-4 py-2 bg-destructive text-destructive-foreground rounded-md text-sm hover:bg-destructive/90 transition-colors"
             >
-              설정으로 이동
+              {t('dashboard.goToSettings')}
             </Link>
           </div>
         </div>
@@ -106,7 +108,7 @@ export default function AIWorkbench() {
 
       {/* 기능 선택 탭 */}
       <div>
-        <h3 className="text-sm font-semibold mb-2">기능 선택</h3>
+        <h3 className="text-sm font-semibold mb-2">{t('ai.feature')}</h3>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-2" role="tablist">
           {features.map((feature) => {
             const Icon = feature.icon
@@ -156,7 +158,7 @@ export default function AIWorkbench() {
       {/* 모델 선택 */}
       <div>
         <label htmlFor="model-selector" className="text-sm font-semibold mb-2 block">
-          AI 모델
+          {t('ai.model')}
         </label>
         <ModelSelector
           value={selectedModel}

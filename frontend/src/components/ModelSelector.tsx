@@ -1,7 +1,8 @@
-// @TASK P5-T5.3 - AI 모델 선택기
+// @TASK P5-T5.3 - AI Model Selector
 // @SPEC docs/plans/2026-01-29-labnote-ai-design.md#ai-workbench-페이지
 
 import { useEffect, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { apiClient } from '@/lib/api'
 import { cn } from '@/lib/utils'
@@ -29,12 +30,13 @@ interface ModelSelectorProps {
 }
 
 /**
- * AI 모델 선택기
- * - API에서 사용 가능한 모델 목록 가져오기
- * - enabled_models 설정으로 표시할 모델 필터링
- * - default_ai_model 설정값을 기본 선택
+ * AI Model Selector
+ * - Fetch available models from API
+ * - Filter models by enabled_models setting
+ * - Auto-select default_ai_model from settings
  */
 export function ModelSelector({ value, onChange, className }: ModelSelectorProps) {
+  const { t } = useTranslation()
   const { data, isLoading, isError } = useQuery<ModelsResponse>({
     queryKey: ['ai', 'models'],
     queryFn: () => apiClient.get('/ai/models'),
@@ -79,7 +81,7 @@ export function ModelSelector({ value, onChange, className }: ModelSelectorProps
   if (isLoading) {
     return (
       <div className={cn('text-sm text-muted-foreground', className)}>
-        모델 로딩 중...
+        {t('ai.loadingModels')}
       </div>
     )
   }
@@ -87,7 +89,7 @@ export function ModelSelector({ value, onChange, className }: ModelSelectorProps
   if (isError || !filteredModels.length) {
     return (
       <div className={cn('text-sm text-destructive', className)}>
-        사용 가능한 모델이 없습니다
+        {t('ai.noModelsAvailable')}
       </div>
     )
   }
@@ -104,7 +106,7 @@ export function ModelSelector({ value, onChange, className }: ModelSelectorProps
         'motion-reduce:transition-none',
         className
       )}
-      aria-label="AI 모델 선택"
+      aria-label={t('ai.selectModel')}
     >
       {filteredModels.map((model) => (
         <option key={model.id} value={model.id}>

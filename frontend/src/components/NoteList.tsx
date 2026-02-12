@@ -2,6 +2,7 @@
 // @SPEC docs/plans/2026-01-29-labnote-ai-design.md#노트-목록
 
 import { useRef, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { NoteCard } from './NoteCard'
 import type { NoteListItem } from '@/types/note'
@@ -24,6 +25,7 @@ export function NoteList({
   isFetchingNextPage,
   fetchNextPage,
 }: NoteListProps) {
+  const { t } = useTranslation()
   const parentRef = useRef<HTMLDivElement>(null)
 
   const virtualizer = useVirtualizer({
@@ -95,7 +97,7 @@ export function NoteList({
       {/* 로딩 인디케이터 */}
       {isFetchingNextPage && (
         <div className="py-4 text-center text-sm text-muted-foreground">
-          로딩 중...
+          {t('common.loading')}
         </div>
       )}
     </div>

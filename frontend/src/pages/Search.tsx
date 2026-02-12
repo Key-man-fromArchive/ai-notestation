@@ -4,6 +4,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import DOMPurify from 'dompurify'
 import { useSearch } from '@/hooks/useSearch'
 import { useNotebooks } from '@/hooks/useNotebooks'
@@ -16,6 +17,7 @@ import { cn } from '@/lib/utils'
 import { useTimezone } from '@/hooks/useTimezone'
 
 export default function Search() {
+  const { t, i18n } = useTranslation()
   const [searchParams, setSearchParams] = useSearchParams()
   const [query, setQuery] = useState(searchParams.get('q') || '')
   const [searchMode, setSearchMode] = useState<'search' | 'hybrid' | 'exact'>('search')
@@ -105,7 +107,7 @@ export default function Search() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-bold mb-4">노트 검색</h1>
+        <h1 className="text-2xl font-bold mb-4">{t('search.title')}</h1>
 
         {/* 검색 바 */}
         <SearchBar value={query} onChange={setQuery} />
@@ -124,7 +126,7 @@ export default function Search() {
               )}
             >
               <TextSearch className="h-3.5 w-3.5" />
-              전문검색
+              {t('search.fts')}
             </button>
             <button
               onClick={() => setSearchMode('search')}
@@ -135,7 +137,7 @@ export default function Search() {
                   : 'text-muted-foreground hover:text-foreground'
               )}
             >
-              키워드 검색
+              {t('search.fts')}
             </button>
             <button
               onClick={() => setSearchMode('hybrid')}
@@ -147,7 +149,7 @@ export default function Search() {
               )}
             >
               <Sparkles className="h-3.5 w-3.5" />
-              AI 하이브리드
+              {t('search.hybrid')}
             </button>
           </div>
 
@@ -163,7 +165,7 @@ export default function Search() {
             )}
           >
             <Filter className="h-4 w-4" />
-            필터
+            {t('common.filter')}
             {activeFilterCount > 0 && (
               <span className="ml-1 px-1.5 py-0.5 text-xs rounded-full bg-primary text-primary-foreground">
                 {activeFilterCount}
@@ -177,9 +179,9 @@ export default function Search() {
           <div className="flex items-start gap-3 mt-3 p-4 rounded-lg bg-amber-50 border border-amber-200 text-sm">
             <AlertCircle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
             <div className="flex-1">
-              <p className="font-medium text-amber-800">AI 검색을 위해 임베딩 색인이 필요합니다</p>
+              <p className="font-medium text-amber-800">{t('settings.searchIndexing')}</p>
               <p className="text-amber-700 mt-0.5">
-                하이브리드 검색은 키워드 결과만 반환됩니다. 의미 검색 결과를 포함하려면 색인을 실행해주세요.
+                {t('settings.searchIndexDesc')}
               </p>
             </div>
             {pendingNotes > 0 && !isIndexing && (
@@ -190,7 +192,7 @@ export default function Search() {
                   'bg-amber-600 text-white hover:bg-amber-700 transition-colors'
                 )}
               >
-                색인 시작
+                {t('settings.startIndex')}
               </button>
             )}
             {isIndexing && (
@@ -203,14 +205,14 @@ export default function Search() {
         {showFilters && (
           <div className="mt-3 p-4 border border-border rounded-lg bg-muted/30">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-sm font-medium">검색 필터</span>
+              <span className="text-sm font-medium">{t('common.filter')}</span>
               {activeFilterCount > 0 && (
                 <button
                   onClick={clearFilters}
                   className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
                 >
                   <X className="h-3 w-3" />
-                  초기화
+                  {t('common.clearFilter')}
                 </button>
               )}
             </div>
@@ -218,7 +220,7 @@ export default function Search() {
               {/* 노트북 필터 */}
               <div>
                 <label htmlFor="filter-notebook" className="block text-xs text-muted-foreground mb-1">
-                  노트북
+                  {t('notes.notebooks')}
                 </label>
                 <select
                   id="filter-notebook"
@@ -230,7 +232,7 @@ export default function Search() {
                     'focus:outline-none focus-visible:ring-2 focus-visible:ring-ring'
                   )}
                 >
-                  <option value="">전체 노트북</option>
+                  <option value="">{t('notes.allNotes')}</option>
                   {notebooks.map((nb) => (
                     <option key={nb.id} value={nb.name}>
                       {nb.name}
@@ -242,7 +244,7 @@ export default function Search() {
               {/* 시작 날짜 */}
               <div>
                 <label htmlFor="filter-date-from" className="block text-xs text-muted-foreground mb-1">
-                  시작일
+                  {t('settings.lastSync')}
                 </label>
                 <input
                   id="filter-date-from"
@@ -260,7 +262,7 @@ export default function Search() {
               {/* 종료 날짜 */}
               <div>
                 <label htmlFor="filter-date-to" className="block text-xs text-muted-foreground mb-1">
-                  종료일
+                  {t('settings.lastSync')}
                 </label>
                 <input
                   id="filter-date-to"
@@ -285,8 +287,8 @@ export default function Search() {
         {!query && (
           <EmptyState
             icon={SearchIcon}
-            title="검색어를 입력하세요"
-            description="노트 제목, 내용, 태그를 검색할 수 있습니다"
+            title={t('search.placeholder')}
+            description={t('dashboard.searchDesc')}
           />
         )}
 
@@ -297,8 +299,8 @@ export default function Search() {
         {isError && query && (
           <EmptyState
             icon={AlertCircle}
-            title="검색 중 오류가 발생했습니다"
-            description={error instanceof Error ? error.message : '알 수 없는 오류'}
+            title={t('common.errorOccurred')}
+            description={error instanceof Error ? error.message : t('common.unknownError')}
           />
         )}
 
@@ -306,8 +308,8 @@ export default function Search() {
         {data && allResults.length === 0 && (
           <EmptyState
             icon={FileText}
-            title="결과가 없습니다"
-            description={`"${query}"에 대한 검색 결과가 없습니다`}
+            title={t('search.noResults')}
+            description={t('search.noResultsDesc')}
           />
         )}
 
@@ -315,7 +317,7 @@ export default function Search() {
         {allResults.length > 0 && (
           <div>
             <div className="text-sm text-muted-foreground mb-4">
-              <span className="font-medium text-foreground">{totalCount}</span>개의 결과
+              {t('search.resultCount', { count: totalCount })}
             </div>
 
             <ul className="space-y-3" role="list">
@@ -357,12 +359,12 @@ export default function Search() {
                           {result.created_at && (
                             <span className="inline-flex items-center gap-1">
                               <Calendar className="h-3 w-3" />
-                              작성 {new Date(result.created_at).toLocaleDateString('ko-KR', { timeZone: timezone })}
+                              {t('notes.created')} {new Date(result.created_at).toLocaleDateString(i18n.language === 'ko' ? 'ko-KR' : 'en-US', { timeZone: timezone })}
                             </span>
                           )}
                           {result.updated_at && (
                             <span>
-                              수정 {new Date(result.updated_at).toLocaleDateString('ko-KR', { timeZone: timezone })}
+                              {new Date(result.updated_at).toLocaleDateString(i18n.language === 'ko' ? 'ko-KR' : 'en-US', { timeZone: timezone })}
                             </span>
                           )}
                         </div>
@@ -379,7 +381,7 @@ export default function Search() {
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
               )}
               {!hasNextPage && allResults.length > 0 && (
-                <p className="text-sm text-muted-foreground">모든 결과를 불러왔습니다</p>
+                <p className="text-sm text-muted-foreground">{t('search.results')}</p>
               )}
             </div>
           </div>

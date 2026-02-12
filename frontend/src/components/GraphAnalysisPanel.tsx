@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { X, TrendingUp, AlertCircle, BarChart3, Layers, Sparkles, Loader2, Square, ChevronDown, ChevronRight, ExternalLink, Send, Play } from 'lucide-react'
 import type { GraphAnalysis, GraphData } from '@/hooks/useGlobalGraph'
 import { useAIStream } from '@/hooks/useAIStream'
@@ -48,6 +49,7 @@ export function GraphAnalysisPanel({
   selectedModel,
   width,
 }: GraphAnalysisPanelProps) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<'stats' | 'insight'>(
     clusterInsight?.content || clusterInsight?.isStreaming ? 'insight' : 'stats'
@@ -112,7 +114,7 @@ export function GraphAnalysisPanel({
     const userMessage = chatInput.trim()
     setChatMessages(prev => [...prev, { role: 'user', content: userMessage }])
     setChatInput('')
-    const contextMessage = `다음은 노트 클러스터 분석 결과입니다:\n${clusterInsight?.content}\n\n사용자 질문: ${userMessage}`
+    const contextMessage = `${t('graph.followUpContext')}:\n${clusterInsight?.content}\n\n${t('graph.userQuestion')}: ${userMessage}`
     followUpStream.startStream({
       message: contextMessage,
       feature: 'insight',
@@ -134,7 +136,7 @@ export function GraphAnalysisPanel({
         <div className="p-4 flex items-center justify-between">
           <h3 className="font-semibold text-sm flex items-center gap-2">
             <BarChart3 className="h-4 w-4" />
-            그래프 분석
+            {t('graph.analysisPanel')}
           </h3>
           <button onClick={onClose} className="p-1 rounded hover:bg-accent">
             <X className="h-4 w-4" />
@@ -151,7 +153,7 @@ export function GraphAnalysisPanel({
                 : 'text-muted-foreground hover:text-foreground'
             }`}
           >
-            통계
+            {t('graph.stats')}
           </button>
           <button
             onClick={() => setActiveTab('insight')}
@@ -162,7 +164,7 @@ export function GraphAnalysisPanel({
             }`}
           >
             <Sparkles className="h-3 w-3" />
-            AI 인사이트
+            {t('graph.aiInsight')}
             {clusterInsight?.isStreaming && (
               <Loader2 className="h-3 w-3 animate-spin" />
             )}
@@ -175,15 +177,15 @@ export function GraphAnalysisPanel({
           {/* Network Stats */}
           <div className="p-4 border-b border-border">
             <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-              네트워크 통계
+              {t('graph.networkStats')}
             </h4>
             <div className="grid grid-cols-2 gap-3">
-              <StatCard label="노드" value={network_stats.nodes.toLocaleString()} />
-              <StatCard label="엣지" value={network_stats.edges.toLocaleString()} />
-              <StatCard label="평균 연결" value={network_stats.avg_degree.toFixed(1)} />
-              <StatCard label="밀도" value={(network_stats.density * 100).toFixed(2) + '%'} />
-              <StatCard label="컴포넌트" value={String(network_stats.components)} />
-              <StatCard label="고립 노트" value={String(orphan_count)} highlight={orphan_count > 0} />
+              <StatCard label="{t('graph.nodes')}" value={network_stats.nodes.toLocaleString()} />
+              <StatCard label="{t('graph.edges')}" value={network_stats.edges.toLocaleString()} />
+              <StatCard label="{t('graph.avgConnections')}" value={network_stats.avg_degree.toFixed(1)} />
+              <StatCard label="{t('graph.density')}" value={(network_stats.density * 100).toFixed(2) + '%'} />
+              <StatCard label="{t('graph.components')}" value={String(network_stats.components)} />
+              <StatCard label="{t('graph.orphanNotes')}" value={String(orphan_count)} highlight={orphan_count > 0} />
             </div>
           </div>
 
@@ -263,7 +265,7 @@ export function GraphAnalysisPanel({
             <div className="p-4 border-b border-border">
               <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-1.5">
                 <AlertCircle className="h-3.5 w-3.5" />
-                고립 노트 ({orphan_count}개)
+                {t('graph.orphanNotes')} ({orphan_count}개)
               </h4>
               <div className="space-y-1 max-h-48 overflow-y-auto">
                 {orphan_notes.slice(0, 50).map(note => (

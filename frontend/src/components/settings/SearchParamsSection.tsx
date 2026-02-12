@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { apiClient } from '@/lib/api'
 import { Save, RotateCcw, CheckCircle, SlidersHorizontal, HelpCircle, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -41,6 +42,7 @@ const DEFAULT_PARAMS: SearchParams = {
 }
 
 export function SearchParamsSection() {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [localParams, setLocalParams] = useState<SearchParams>(DEFAULT_PARAMS)
   const [initialized, setInitialized] = useState(false)
@@ -121,11 +123,11 @@ export function SearchParamsSection() {
           )}
         >
           <HelpCircle className="h-4 w-4" aria-hidden="true" />
-          도움말
+          {t('common.help', 'Help')}
         </button>
       </div>
       <p className="text-sm text-muted-foreground mb-4">
-        하이브리드 검색, 전문 검색, 트라이그램, 통합 검색의 가중치와 임계값을 조정합니다.
+        {t('settings.searchParamsDesc')}
       </p>
 
       {showHelp && <SearchParamsHelpModal onClose={() => setShowHelp(false)} />}
@@ -289,7 +291,7 @@ export function SearchParamsSection() {
           )}
         >
           <Save className="h-4 w-4" aria-hidden="true" />
-          {saving ? '저장 중...' : '저장'}
+          {saving ? t('common.saving') : t('common.save')}
         </button>
         <button
           onClick={handleReset}
@@ -302,12 +304,12 @@ export function SearchParamsSection() {
           )}
         >
           <RotateCcw className="h-4 w-4" aria-hidden="true" />
-          {resetting ? '초기화 중...' : '초기화'}
+          {resetting ? t('common.resetting', 'Resetting...') : t('common.reset', 'Reset')}
         </button>
         {saved && (
           <div className="flex items-center gap-2 text-green-600">
             <CheckCircle className="h-4 w-4" aria-hidden="true" />
-            <span className="text-sm">저장되었습니다</span>
+            <span className="text-sm">{t('common.saved')}</span>
           </div>
         )}
       </div>
@@ -317,7 +319,7 @@ export function SearchParamsSection() {
           className="mt-4 flex items-center gap-2 p-3 bg-destructive/10 border border-destructive/20 rounded-lg"
           role="alert"
         >
-          <span className="text-sm text-destructive">저장에 실패했습니다</span>
+          <span className="text-sm text-destructive">{t('settings.settingsSaveFailed')}</span>
         </div>
       )}
 
@@ -326,7 +328,7 @@ export function SearchParamsSection() {
           className="mt-4 flex items-center gap-2 p-3 bg-destructive/10 border border-destructive/20 rounded-lg"
           role="alert"
         >
-          <span className="text-sm text-destructive">초기화에 실패했습니다</span>
+          <span className="text-sm text-destructive">{t('common.resetFailed', 'Reset failed')}</span>
         </div>
       )}
     </div>
@@ -369,6 +371,7 @@ function SliderParam({ label, value, min, max, step, description, onChange }: Sl
 // ---------------------------------------------------------------------------
 
 function SearchParamsHelpModal({ onClose }: { onClose: () => void }) {
+  const { t } = useTranslation()
   // Close on Escape key
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -386,11 +389,11 @@ function SearchParamsHelpModal({ onClose }: { onClose: () => void }) {
       <div className="bg-background border border-input rounded-lg shadow-lg w-full max-w-2xl max-h-[85vh] overflow-y-auto mx-4">
         {/* Header */}
         <div className="sticky top-0 bg-background border-b border-input px-6 py-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">검색 파라미터 도움말</h2>
+          <h2 className="text-lg font-semibold">{t('settings.searchParams')} {t('common.help', 'Help')}</h2>
           <button
             onClick={onClose}
             className="p-1 rounded-md hover:bg-muted transition-colors"
-            aria-label="닫기"
+            aria-label={t('common.close')}
           >
             <X className="h-5 w-5" />
           </button>
@@ -542,7 +545,7 @@ function SearchParamsHelpModal({ onClose }: { onClose: () => void }) {
               'hover:bg-primary/90 transition-colors',
             )}
           >
-            닫기
+            {t('common.close')}
           </button>
         </div>
       </div>

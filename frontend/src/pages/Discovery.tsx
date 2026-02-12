@@ -3,6 +3,7 @@
 
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { ArrowLeft, Sparkles, Loader2, Network, Tag, FileText } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
@@ -28,6 +29,7 @@ function ClusterCard({
   isSelected: boolean
   onClick: () => void
 }) {
+  const { t } = useTranslation()
   const color = getClusterColor(cluster.cluster_index)
 
   return (
@@ -46,10 +48,10 @@ function ClusterCard({
           style={{ backgroundColor: color }}
         />
         <span className="font-medium text-sm">
-          클러스터 {cluster.cluster_index + 1}
+          {t('graph.clusters')} {cluster.cluster_index + 1}
         </span>
         <span className="text-xs text-muted-foreground ml-auto">
-          {cluster.note_ids.length}개
+          {cluster.note_ids.length}
         </span>
       </div>
       <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
@@ -73,6 +75,7 @@ function ClusterCard({
 }
 
 function ClusterLegend() {
+  const { t } = useTranslation()
   return (
     <div className="flex flex-wrap gap-2 p-3 bg-muted/30 rounded-lg">
       {CLUSTER_COLORS.slice(0, 5).map((color, i) => (
@@ -89,13 +92,14 @@ function ClusterLegend() {
           className="w-2.5 h-2.5 rounded-full"
           style={{ backgroundColor: UNCLUSTERED_COLOR }}
         />
-        <span className="text-xs text-muted-foreground">미분류</span>
+        <span className="text-xs text-muted-foreground">{t('graph.clusters')}</span>
       </div>
     </div>
   )
 }
 
 export default function Discovery() {
+  const { t } = useTranslation()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const notebookId = parseInt(id ?? '0', 10)
@@ -141,10 +145,10 @@ export default function Discovery() {
     return (
       <EmptyState
         icon={Network}
-        title="노트북을 찾을 수 없습니다"
-        description="요청하신 노트북이 존재하지 않거나 접근 권한이 없습니다."
+        title={t('notebooks.notFound')}
+        description={t('notebooks.notFoundDesc')}
         action={{
-          label: '노트북 목록으로',
+          label: t('notebooks.backToList'),
           onClick: () => navigate('/notebooks'),
         }}
       />
@@ -157,18 +161,18 @@ export default function Discovery() {
         <button
           onClick={() => navigate(`/notebooks/${notebookId}`)}
           className="p-2 rounded-lg hover:bg-accent"
-          aria-label="뒤로"
+          aria-label={t('common.back')}
         >
           <ArrowLeft className="h-5 w-5" />
         </button>
         <div className="flex-1">
-          <h1 className="text-2xl font-bold mb-1">Discovery</h1>
-          <p className="text-sm text-muted-foreground">{notebook.name}의 노트를 클러스터링합니다</p>
+          <h1 className="text-2xl font-bold mb-1">{t('graph.discoveryTitle')}</h1>
+          <p className="text-sm text-muted-foreground">{notebook.name}</p>
         </div>
 
         <div className="flex items-center gap-3">
           <label className="flex items-center gap-2 text-sm">
-            <span className="text-muted-foreground">클러스터 수:</span>
+            <span className="text-muted-foreground">{t('graph.clusters')}:</span>
             <select
               value={numClusters}
               onChange={e => setNumClusters(parseInt(e.target.value, 10))}
@@ -195,12 +199,12 @@ export default function Discovery() {
             {isAnalyzing ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
-                <span>분석 중...</span>
+                <span>{t('ai.analyzing')}</span>
               </>
             ) : (
               <>
                 <Sparkles className="h-4 w-4" />
-                <span>Analyze</span>
+                <span>{t('ai.analyze')}</span>
               </>
             )}
           </button>
@@ -221,9 +225,7 @@ export default function Discovery() {
             <div className="text-center py-8 text-muted-foreground">
               <Sparkles className="h-8 w-8 mx-auto mb-2 opacity-50" />
               <p className="text-sm">
-                "Analyze" 버튼을 클릭하여
-                <br />
-                노트 클러스터링을 시작하세요
+                {t('ai.analyze')}
               </p>
             </div>
           )}
@@ -232,7 +234,7 @@ export default function Discovery() {
             <div className="text-center py-8">
               <LoadingSpinner />
               <p className="text-sm text-muted-foreground mt-2">
-                AI가 노트를 분석하고 있습니다...
+                {t('ai.analyzing')}
               </p>
             </div>
           )}
@@ -241,7 +243,7 @@ export default function Discovery() {
             <div className="space-y-2">
               <h3 className="font-medium text-sm flex items-center gap-2">
                 <FileText className="h-4 w-4" />
-                클러스터 ({clusters.length})
+                {t('graph.clusters')} ({clusters.length})
               </h3>
               {clusters.map((cluster, i) => (
                 <ClusterCard

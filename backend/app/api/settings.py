@@ -20,7 +20,7 @@ import logging
 import os
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,6 +30,8 @@ from app.database import get_db
 from app.models import Setting
 from app.services.activity_log import get_trigger_name, log_activity
 from app.services.auth_service import get_current_user
+from app.utils.i18n import get_language
+from app.utils.messages import msg
 
 logger = logging.getLogger(__name__)
 
@@ -388,14 +390,16 @@ class NasTestResponse(BaseModel):
 
 @router.post("/nas/test", response_model=NasTestResponse)
 async def test_nas_connection(
+    request: Request,
     _current_user: dict = Depends(get_current_user),  # noqa: B008
 ) -> NasTestResponse:
     from app.synology_gateway.client import Synology2FARequired, SynologyAuthError, SynologyClient
 
+    lang = get_language(request)
     nas = get_nas_config()
 
     if not nas["url"]:
-        return NasTestResponse(success=False, message="NAS URL이 설정되지 않았습니다.")
+        return NasTestResponse(success=False, message=msg("settings.nas_url_not_set", lang))
 
     client = SynologyClient(
         url=nas["url"],
@@ -409,9 +413,9 @@ async def test_nas_connection(
             message="NAS 연결 테스트 성공",
             triggered_by=get_trigger_name(_current_user),
         )
-        return NasTestResponse(success=True, message="NAS에 성공적으로 연결되었습니다.")
+        return NasTestResponse(success=True, message=msg("settings.nas_test_success_full", lang))
     except Synology2FARequired:
-        return NasTestResponse(success=True, message="NAS 연결 성공 (2FA 계정)")
+        return NasTestResponse(success=True, message=msg("settings.nas_test_success_2fa", lang))
     except SynologyAuthError:
         await log_activity(
             "auth", "error",
@@ -420,7 +424,7 @@ async def test_nas_connection(
         )
         return NasTestResponse(
             success=False,
-            message="NAS 인증에 실패했습니다. 사용자 이름과 비밀번호를 확인하세요.",
+            message=msg("settings.nas_test_auth_failed", lang),
         )
     except Exception as exc:
         await log_activity(
@@ -430,7 +434,7 @@ async def test_nas_connection(
         )
         return NasTestResponse(
             success=False,
-            message=f"NAS 연결에 실패했습니다: {exc}",
+            message=msg("settings.nas_test_connection_failed", lang, detail=str(exc)),
         )
     finally:
         await client.close()

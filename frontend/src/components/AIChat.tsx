@@ -1,7 +1,8 @@
-// @TASK P5-T5.3 - AI 채팅 컴포넌트
+// @TASK P5-T5.3 - AI Chat Component
 // @SPEC docs/plans/2026-01-29-labnote-ai-design.md#ai-workbench-페이지
 
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useAIStream } from '@/hooks/useAIStream'
 import { MarkdownRenderer } from './MarkdownRenderer'
 import { LoadingSpinner } from './LoadingSpinner'
@@ -15,24 +16,25 @@ interface AIChatProps {
 }
 
 /**
- * AI 채팅 컴포넌트
- * - SSE 스트리밍 응답
+ * AI Chat Component
+ * - SSE streaming response
  * - aria-live="polite" for streaming response
- * - AbortController로 스트림 정리
+ * - AbortController for stream cleanup
  */
 const TEMPLATE_TYPES = [
-  { id: 'experiment_log', label: '실험 기록' },
-  { id: 'lab_report', label: '실험 보고서' },
-  { id: 'meeting_notes', label: '회의록' },
-  { id: 'paper_review', label: '논문 리뷰' },
-  { id: 'research_proposal', label: '연구 제안서' },
+  'experiment_log',
+  'lab_report',
+  'meeting_notes',
+  'paper_review',
+  'research_proposal',
 ] as const
 
 export function AIChat({ feature, model, className }: AIChatProps) {
+  const { t } = useTranslation()
   const { content, isStreaming, error, matchedNotes, startStream, stopStream, reset } =
     useAIStream()
   const [copied, setCopied] = useState(false)
-  const [templateType, setTemplateType] = useState(TEMPLATE_TYPES[0].id)
+  const [templateType, setTemplateType] = useState(TEMPLATE_TYPES[0])
 
   const isSearchMode = feature === 'insight'
   const isTemplateMode = feature === 'template'
@@ -70,7 +72,7 @@ export function AIChat({ feature, model, className }: AIChatProps) {
 
   return (
     <div className={cn('flex flex-col gap-4', className)}>
-      {/* 입력 폼 */}
+      {/* Input form */}
       <form onSubmit={handleSubmit} className="flex gap-2">
         {isTemplateMode && (
           <select
@@ -83,11 +85,11 @@ export function AIChat({ feature, model, className }: AIChatProps) {
               'focus:outline-none focus-visible:ring-2 focus-visible:ring-ring',
               'disabled:opacity-50 disabled:cursor-not-allowed'
             )}
-            aria-label="템플릿 유형 선택"
+            aria-label={t('ai.selectTemplateType')}
           >
-            {TEMPLATE_TYPES.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.label}
+            {TEMPLATE_TYPES.map((templateId) => (
+              <option key={templateId} value={templateId}>
+                {t(`ai.templateTypes.${templateId}`)}
               </option>
             ))}
           </select>
@@ -97,10 +99,10 @@ export function AIChat({ feature, model, className }: AIChatProps) {
           name="message"
           placeholder={
             isTemplateMode
-              ? '추가 요청사항 (선택)...'
+              ? t('ai.additionalInstructions')
               : isSearchMode
-                ? '검색어를 입력하세요 (예: asg pcr)...'
-                : '메시지를 입력하세요...'
+                ? t('ai.searchPlaceholder')
+                : t('ai.chatPlaceholder')
           }
           disabled={isStreaming}
           className={cn(
@@ -112,7 +114,7 @@ export function AIChat({ feature, model, className }: AIChatProps) {
             'transition-all duration-200',
             'motion-reduce:transition-none'
           )}
-          aria-label={isTemplateMode ? '추가 요청사항 입력' : 'AI 메시지 입력'}
+          aria-label={isTemplateMode ? t('ai.additionalInstructions') : t('ai.messageInput')}
         />
         {isStreaming ? (
           <button
@@ -125,10 +127,10 @@ export function AIChat({ feature, model, className }: AIChatProps) {
               'transition-colors duration-200',
               'motion-reduce:transition-none'
             )}
-            aria-label="스트리밍 중단"
+            aria-label={t('ai.stopStreaming')}
           >
             <Square className="h-4 w-4" aria-hidden="true" />
-            중단
+            {t('ai.stop')}
           </button>
         ) : (
           <button
@@ -140,15 +142,15 @@ export function AIChat({ feature, model, className }: AIChatProps) {
               'transition-colors duration-200',
               'motion-reduce:transition-none'
             )}
-            aria-label="전송"
+            aria-label={t('ai.send')}
           >
             <Send className="h-4 w-4" aria-hidden="true" />
-            전송
+            {t('ai.send')}
           </button>
         )}
       </form>
 
-      {/* 응답 영역 */}
+      {/* Response area */}
       <div
         className={cn(
           'min-h-[200px] border border-input rounded-lg bg-muted/20 overflow-hidden',
@@ -163,7 +165,7 @@ export function AIChat({ feature, model, className }: AIChatProps) {
             type="button"
             onClick={handleCopy}
             className="absolute top-3 right-3 p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors z-10"
-            aria-label={copied ? '복사됨' : '결과 복사'}
+            aria-label={copied ? t('ai.copied') : t('ai.copyResult')}
           >
             {copied ? (
               <Check className="h-4 w-4 text-green-600" />
@@ -174,18 +176,18 @@ export function AIChat({ feature, model, className }: AIChatProps) {
         )}
 
         <div className="p-4">
-          {/* 매칭된 노트 표시 (검색 모드) */}
+          {/* Matched notes display (search mode) */}
           {matchedNotes.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mb-3 pb-3 border-b border-input">
               <span className="text-xs text-muted-foreground flex items-center gap-1 mr-1">
                 <FileText className="h-3 w-3" aria-hidden="true" />
-                참조 노트:
+                {t('ai.referencedNotes')}:
               </span>
               {matchedNotes.map((note) => (
                 <span
                   key={note.note_id}
                   className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-primary/10 text-primary"
-                  title={`${note.title} (관련도: ${(note.score * 100).toFixed(0)}%)`}
+                  title={`${note.title} (${t('ai.relevance')}: ${(note.score * 100).toFixed(0)}%)`}
                 >
                   {note.title.length > 30 ? note.title.slice(0, 30) + '...' : note.title}
                 </span>
@@ -195,14 +197,14 @@ export function AIChat({ feature, model, className }: AIChatProps) {
 
           {error && (
             <div className="flex items-center gap-2 text-destructive text-sm" role="alert">
-              <span className="font-medium">오류:</span> {error}
+              <span className="font-medium">{t('ai.error')}:</span> {error}
             </div>
           )}
 
           {isStreaming && !content && (
             <div className="flex items-center gap-3 text-muted-foreground">
               <LoadingSpinner />
-              <span className="text-sm">AI가 응답을 생성하고 있습니다...</span>
+              <span className="text-sm">{t('ai.aiGenerating')}</span>
             </div>
           )}
 
@@ -220,24 +222,24 @@ export function AIChat({ feature, model, className }: AIChatProps) {
               <Send className="h-8 w-8 mb-3 opacity-30" />
               <p className="text-sm">
                 {isTemplateMode
-                  ? '템플릿 유형을 선택하고 전송을 눌러 생성하세요'
+                  ? t('ai.templateModePrompt')
                   : isSearchMode
-                    ? '검색어를 입력하면 관련 노트를 찾아 인사이트를 도출합니다'
-                    : '메시지를 입력하고 전송을 눌러 시작하세요'}
+                    ? t('ai.searchModePrompt')
+                    : t('ai.chatModePrompt')}
               </p>
             </div>
           )}
         </div>
       </div>
 
-      {/* 리셋 버튼 */}
+      {/* Reset button */}
       {content && !isStreaming && (
         <button
           type="button"
           onClick={reset}
           className="self-end px-3 py-1.5 text-sm bg-muted text-muted-foreground rounded-md hover:bg-muted/80 transition-colors"
         >
-          새 대화
+          {t('ai.newConversation')}
         </button>
       )}
     </div>

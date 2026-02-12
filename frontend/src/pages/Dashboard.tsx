@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useTimezone } from '@/hooks/useTimezone'
+import { useTranslation } from 'react-i18next'
 
 interface Note {
   note_id: string
@@ -44,6 +45,7 @@ interface NotebooksResponse {
 }
 
 export default function Dashboard() {
+  const { t, i18n } = useTranslation()
   const { status: syncStatus, lastSync, error: syncError, triggerSync } = useSync()
   const timezone = useTimezone()
 
@@ -64,9 +66,9 @@ export default function Dashboard() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-bold mb-1">대시보드</h1>
+        <h1 className="text-2xl font-bold mb-1">{t('dashboard.title')}</h1>
         <p className="text-sm text-muted-foreground">
-          LabNote AI에 오신 것을 환영합니다
+          {t('dashboard.welcome')}
         </p>
       </div>
 
@@ -82,16 +84,16 @@ export default function Dashboard() {
           />
           <div className="flex-1">
             <h3 className="font-semibold text-destructive mb-1">
-              NAS 동기화에 실패했습니다
+              {t('dashboard.syncFailed')}
             </h3>
             <p className="text-sm text-destructive/80 mb-2">
               {syncError?.includes('400')
-                ? 'NAS 계정 정보가 올바르지 않습니다. 사용자 이름과 비밀번호를 확인해주세요.'
+                ? t('dashboard.syncErrorInvalidCredentials')
                 : syncError?.includes('401')
-                  ? 'NAS 계정이 비활성화되어 있습니다.'
+                  ? t('dashboard.syncErrorDisabled')
                   : syncError?.includes('timeout') || syncError?.includes('connect')
-                    ? 'NAS에 연결할 수 없습니다. 네트워크 연결과 NAS 주소를 확인해주세요.'
-                    : syncError || '알 수 없는 오류가 발생했습니다.'}
+                    ? t('dashboard.syncErrorConnection')
+                    : syncError || t('dashboard.syncErrorUnknown')}
             </p>
             {syncError && (
               <p className="text-xs text-muted-foreground mb-2 font-mono">
@@ -102,7 +104,7 @@ export default function Dashboard() {
               to="/settings"
               className="inline-block px-4 py-2 bg-destructive text-destructive-foreground rounded-md text-sm hover:bg-destructive/90 transition-colors"
             >
-              설정 확인하기
+              {t('dashboard.goToSettings')}
             </Link>
           </div>
         </div>
@@ -120,7 +122,7 @@ export default function Dashboard() {
             </div>
             <div>
               <div className="text-2xl font-bold">{totalNotes}</div>
-              <div className="text-xs text-muted-foreground">전체 노트</div>
+              <div className="text-xs text-muted-foreground">{t('dashboard.totalNotes')}</div>
             </div>
           </div>
         </Link>
@@ -135,7 +137,7 @@ export default function Dashboard() {
             </div>
             <div>
               <div className="text-2xl font-bold">{totalNotebooks}</div>
-              <div className="text-xs text-muted-foreground">노트북</div>
+              <div className="text-xs text-muted-foreground">{t('dashboard.notebooks')}</div>
             </div>
           </div>
         </Link>
@@ -158,15 +160,15 @@ export default function Dashboard() {
             </div>
             <div>
               <div className="text-sm font-semibold">
-                {syncStatus === 'idle' && '대기 중'}
-                {syncStatus === 'syncing' && '동기화 중...'}
-                {syncStatus === 'completed' && '동기화 완료'}
-                {syncStatus === 'error' && '동기화 오류'}
+                {syncStatus === 'idle' && t('dashboard.syncIdle')}
+                {syncStatus === 'syncing' && t('dashboard.syncing')}
+                {syncStatus === 'completed' && t('dashboard.syncCompleted')}
+                {syncStatus === 'error' && t('dashboard.syncError')}
               </div>
               <div className="text-xs text-muted-foreground">
                 {lastSync
-                  ? new Date(lastSync).toLocaleString('ko-KR', { timeZone: timezone })
-                  : '동기화 기록 없음'}
+                  ? new Date(lastSync).toLocaleString(i18n.language === 'ko' ? 'ko-KR' : 'en-US', { timeZone: timezone })
+                  : t('dashboard.noSyncRecord')}
               </div>
             </div>
           </div>
@@ -185,9 +187,9 @@ export default function Dashboard() {
         >
           <Search className="h-5 w-5 text-primary" aria-hidden="true" />
           <div>
-            <div className="font-semibold text-sm">노트 검색</div>
+            <div className="font-semibold text-sm">{t('dashboard.searchNotes')}</div>
             <div className="text-xs text-muted-foreground">
-              키워드, 의미 검색
+              {t('dashboard.searchDesc')}
             </div>
           </div>
         </Link>
@@ -202,9 +204,9 @@ export default function Dashboard() {
         >
           <Sparkles className="h-5 w-5 text-primary" aria-hidden="true" />
           <div>
-            <div className="font-semibold text-sm">AI 분석</div>
+            <div className="font-semibold text-sm">{t('dashboard.aiAnalysis')}</div>
             <div className="text-xs text-muted-foreground">
-              노트 요약, 인사이트
+              {t('dashboard.aiAnalysisDesc')}
             </div>
           </div>
         </Link>
@@ -228,9 +230,9 @@ export default function Dashboard() {
             aria-hidden="true"
           />
           <div>
-            <div className="font-semibold text-sm">NAS 동기화</div>
+            <div className="font-semibold text-sm">{t('dashboard.nasSync')}</div>
             <div className="text-xs text-muted-foreground">
-              {syncStatus === 'syncing' ? '동기화 중...' : '노트 데이터 갱신'}
+              {syncStatus === 'syncing' ? t('dashboard.syncingData') : t('dashboard.refreshData')}
             </div>
           </div>
         </button>
@@ -239,9 +241,9 @@ export default function Dashboard() {
       {/* 최근 노트 */}
       <div>
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-lg font-semibold">최근 노트</h3>
+          <h3 className="text-lg font-semibold">{t('dashboard.recentNotes')}</h3>
           <Link to="/notes" className="text-sm text-primary hover:text-primary/80">
-            전체 보기
+            {t('common.viewAll')}
           </Link>
         </div>
         {isLoading ? (
@@ -282,7 +284,7 @@ export default function Dashboard() {
                         {note.updated_at && (
                           <span className="flex items-center gap-1">
                             <Clock className="h-3 w-3" aria-hidden="true" />
-                            {new Date(note.updated_at).toLocaleDateString('ko-KR', { timeZone: timezone })}
+                            {new Date(note.updated_at).toLocaleDateString(i18n.language === 'ko' ? 'ko-KR' : 'en-US', { timeZone: timezone })}
                           </span>
                         )}
                       </div>
@@ -295,10 +297,10 @@ export default function Dashboard() {
         ) : (
           <EmptyState
             icon={FileText}
-            title="노트가 없습니다"
-            description="NAS와 동기화하여 노트를 불러오세요"
+            title={t('dashboard.noNotes')}
+            description={t('dashboard.noNotesDesc')}
             action={{
-              label: '동기화 시작',
+              label: t('dashboard.startSync'),
               onClick: () => triggerSync(),
             }}
           />

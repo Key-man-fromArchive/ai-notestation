@@ -13,6 +13,7 @@ import Table from '@tiptap/extension-table'
 import TableRow from '@tiptap/extension-table-row'
 import TableCell from '@tiptap/extension-table-cell'
 import TableHeader from '@tiptap/extension-table-header'
+import { useTranslation } from 'react-i18next'
 import { apiClient } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import {
@@ -57,6 +58,7 @@ function stripNasImageTokens(html: string): string {
 }
 
 export function NoteEditor({ noteId, initialContent, onSave, onCancel }: NoteEditorProps) {
+  const { t } = useTranslation()
   const [isSaving, setIsSaving] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
@@ -104,7 +106,7 @@ export function NoteEditor({ noteId, initialContent, onSave, onCancel }: NoteEdi
 
   const handleInsertLink = () => {
     if (!editor) return
-    const href = window.prompt('링크 URL을 입력하세요')
+    const href = window.prompt(t('notes.editNote'))
     if (!href) return
     editor.chain().focus().extendMarkRange('link').setLink({ href }).run()
   }
@@ -121,7 +123,7 @@ export function NoteEditor({ noteId, initialContent, onSave, onCancel }: NoteEdi
     })
 
     if (!response.ok) {
-      throw new Error('파일 업로드 실패')
+      throw new Error(t('common.errorOccurred'))
     }
 
     return response.json() as Promise<{ url: string; name: string }>
@@ -150,7 +152,7 @@ export function NoteEditor({ noteId, initialContent, onSave, onCancel }: NoteEdi
           onClick={() => editor?.chain().focus().toggleBold().run()}
         >
           <Bold className="h-3.5 w-3.5" />
-          굵게
+          Bold
         </button>
         <button
           type="button"
@@ -158,7 +160,7 @@ export function NoteEditor({ noteId, initialContent, onSave, onCancel }: NoteEdi
           onClick={() => editor?.chain().focus().toggleItalic().run()}
         >
           <Italic className="h-3.5 w-3.5" />
-          기울임
+          Italic
         </button>
         <button
           type="button"
@@ -166,7 +168,7 @@ export function NoteEditor({ noteId, initialContent, onSave, onCancel }: NoteEdi
           onClick={() => editor?.chain().focus().toggleUnderline().run()}
         >
           <UnderlineIcon className="h-3.5 w-3.5" />
-          밑줄
+          Underline
         </button>
         <button
           type="button"
@@ -174,7 +176,7 @@ export function NoteEditor({ noteId, initialContent, onSave, onCancel }: NoteEdi
           onClick={() => editor?.chain().focus().toggleBulletList().run()}
         >
           <List className="h-3.5 w-3.5" />
-          목록
+          List
         </button>
         <button
           type="button"
@@ -182,11 +184,11 @@ export function NoteEditor({ noteId, initialContent, onSave, onCancel }: NoteEdi
           onClick={() => editor?.chain().focus().toggleOrderedList().run()}
         >
           <ListOrdered className="h-3.5 w-3.5" />
-          번호
+          Ordered
         </button>
         <button type="button" className={toolbarButton} onClick={handleInsertLink}>
           <LinkIcon className="h-3.5 w-3.5" />
-          링크
+          Link
         </button>
         <button
           type="button"
@@ -194,11 +196,11 @@ export function NoteEditor({ noteId, initialContent, onSave, onCancel }: NoteEdi
           onClick={() => editor?.chain().focus().toggleHighlight().run()}
         >
           <Highlighter className="h-3.5 w-3.5" />
-          하이라이트
+          Highlight
         </button>
         <label className={cn(toolbarButton, 'cursor-pointer')}>
           <ImageIcon className="h-3.5 w-3.5" />
-          파일/이미지
+          File/Image
           <input
             ref={fileInputRef}
             type="file"
@@ -214,10 +216,10 @@ export function NoteEditor({ noteId, initialContent, onSave, onCancel }: NoteEdi
           }
         >
           <TableIcon className="h-3.5 w-3.5" />
-          표
+          Table
         </button>
         <label className={cn(toolbarButton, 'cursor-pointer')}>
-          글자색
+          Color
           <input
             type="color"
             className="ml-2 h-5 w-5 cursor-pointer"
@@ -236,7 +238,7 @@ export function NoteEditor({ noteId, initialContent, onSave, onCancel }: NoteEdi
         >
           <span className="flex items-center gap-1">
             <X className="h-3.5 w-3.5" />
-            취소
+            {t('notes.cancelEdit')}
           </span>
         </button>
         <button
@@ -250,7 +252,7 @@ export function NoteEditor({ noteId, initialContent, onSave, onCancel }: NoteEdi
         >
           <span className="flex items-center gap-1">
             <Save className="h-3.5 w-3.5" />
-            {isSaving ? '저장 중...' : '저장'}
+            {isSaving ? t('common.saving') : t('notes.saveChanges')}
           </span>
         </button>
       </div>

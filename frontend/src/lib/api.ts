@@ -86,6 +86,7 @@ class ApiClient {
   async request<T>(path: string, options?: RequestInit): Promise<T> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
+      'Accept-Language': localStorage.getItem('language') || 'ko',
     }
 
     // Authorization 헤더 추가

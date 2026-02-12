@@ -26,7 +26,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
 from pydantic import BaseModel
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -48,6 +48,8 @@ from app.search.engine import (
 from app.search.indexer import NoteIndexer
 from app.services.auth_service import get_current_user
 from app.services.oauth_service import OAuthService
+from app.utils.i18n import get_language
+from app.utils.messages import msg
 
 logger = logging.getLogger(__name__)
 
@@ -495,6 +497,7 @@ async def _run_index_background(state: IndexState) -> None:
 @router.post("/index", response_model=IndexTriggerResponse)
 async def trigger_index(
     background_tasks: BackgroundTasks,
+    request: Request,
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> IndexTriggerResponse:
@@ -503,10 +506,12 @@ async def trigger_index(
     Uses OAuth token if user is connected to OpenAI, otherwise falls back
     to server-side OPENAI_API_KEY.
     """
+    lang = get_language(request)
+
     if _index_state.is_indexing:
         return IndexTriggerResponse(
             status="already_indexing",
-            message="임베딩 인덱싱이 이미 진행 중입니다.",
+            message=msg("search.index_trigger_already_running", lang),
         )
 
     username = current_user.get("username", "")
@@ -517,17 +522,17 @@ async def trigger_index(
     if not api_key:
         return IndexTriggerResponse(
             status="error",
-            message="OpenAI API 키가 필요합니다. Settings에서 API 키를 입력하거나 OAuth 연결하세요.",
+            message=msg("search.index_trigger_no_api_key", lang),
         )
 
     _index_state.triggered_by = current_user.get("username", "unknown")
 
     background_tasks.add_task(_run_index_background, _index_state)
 
-    source = "API 키"
+    source = "API 키" if lang == "ko" else "API key"
     return IndexTriggerResponse(
         status="indexing",
-        message=f"임베딩 인덱싱을 시작합니다. ({source} 사용)",
+        message=msg("search.index_trigger_started", lang, source=source),
     )
 
 

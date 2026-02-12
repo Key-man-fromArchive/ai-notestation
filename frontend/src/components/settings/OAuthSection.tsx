@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { apiClient } from '@/lib/api'
 import { useOAuth } from '@/hooks/useOAuth'
 import { cn } from '@/lib/utils'
@@ -25,6 +26,7 @@ interface OAuthSectionProps {
 type UIMode = 'browser' | 'device'
 
 export function OAuthSection({ provider, label }: OAuthSectionProps) {
+  const { t } = useTranslation()
   const {
     configured,
     connected,
@@ -168,7 +170,7 @@ export function OAuthSection({ provider, label }: OAuthSectionProps) {
           aria-hidden="true"
         />
         <span className="text-sm text-muted-foreground">
-          {label} OAuth가 설정되지 않았습니다. 서버 환경변수를 확인하세요.
+          {label} {t('common.oauthNotConfigured', 'OAuth not configured')}
         </span>
       </div>
     )
@@ -180,7 +182,7 @@ export function OAuthSection({ provider, label }: OAuthSectionProps) {
         <div className="flex items-center gap-2">
           <CheckCircle className="h-4 w-4 text-green-600" aria-hidden="true" />
           <span className="text-sm font-medium text-green-700">
-            {label} 연결됨
+            {label} {t('common.connected', 'Connected')}
           </span>
           {email && (
             <span className="text-xs text-muted-foreground">({email})</span>
@@ -197,7 +199,7 @@ export function OAuthSection({ provider, label }: OAuthSectionProps) {
           )}
         >
           <Unlink className="h-3.5 w-3.5" aria-hidden="true" />
-          연결 해제
+          {t('common.disconnect', 'Disconnect')}
         </button>
       </div>
     )
@@ -554,6 +556,7 @@ function ApiKeySection({
   provider: string
   label: string
 }) {
+  const { t } = useTranslation()
   const [apiKey, setApiKey] = useState('')
   const [saving, setSaving] = useState(false)
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle')
@@ -585,7 +588,7 @@ function ApiKeySection({
           type="password"
           value={apiKey}
           onChange={e => setApiKey(e.target.value)}
-          placeholder={`${label} API Key 입력`}
+          placeholder={`${label} API Key`}
           className="flex-1 px-3 py-2 text-sm bg-background border border-input rounded-md"
           onKeyDown={e => e.key === 'Enter' && handleSave()}
         />
@@ -600,14 +603,14 @@ function ApiKeySection({
           )}
         >
           <Key className="h-4 w-4" aria-hidden="true" />
-          {saving ? '저장 중...' : '저장'}
+          {saving ? t('common.saving') : t('common.save')}
         </button>
       </div>
 
       {status === 'success' && (
         <div className="flex items-center gap-2 p-2 bg-green-500/10 border border-green-500/20 rounded-md">
           <CheckCircle className="h-3.5 w-3.5 text-green-600" />
-          <span className="text-xs text-green-700">API 키가 저장되었습니다.</span>
+          <span className="text-xs text-green-700">{t('common.apiKeySaved', 'API key saved')}</span>
         </div>
       )}
 
@@ -615,13 +618,13 @@ function ApiKeySection({
         <div className="flex items-center gap-2 p-2 bg-destructive/10 border border-destructive/20 rounded-md">
           <AlertCircle className="h-3.5 w-3.5 text-destructive" />
           <span className="text-xs text-destructive">
-            저장에 실패했습니다. 다시 시도해주세요.
+            {t('settings.settingsSaveFailed')}
           </span>
         </div>
       )}
 
       <p className="text-xs text-muted-foreground">
-        API 키는 서버에 암호화되어 저장됩니다.
+        {t('common.apiKeyEncrypted', 'API key is encrypted on the server')}
       </p>
     </div>
   )

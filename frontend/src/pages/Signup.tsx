@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { ApiError } from '@/lib/api'
 import { Loader2, FlaskConical, AlertCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useTranslation } from 'react-i18next'
 
 function slugify(text: string): string {
   return text
@@ -14,6 +15,7 @@ function slugify(text: string): string {
 }
 
 export default function Signup() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const { isAuthenticated, signup } = useAuth()
   const [email, setEmail] = useState('')
@@ -89,10 +91,10 @@ export default function Signup() {
               <FlaskConical className="h-7 w-7 text-primary" aria-hidden="true" />
             </div>
             <h1 className="text-2xl font-bold text-foreground">
-              Create your account
+              {t('auth.createAccountTitle')}
             </h1>
             <p className="text-sm text-muted-foreground mt-1.5">
-              Start with a free organization
+              {t('auth.createAccountSubtitle')}
             </p>
           </div>
 
@@ -115,7 +117,7 @@ export default function Signup() {
                 htmlFor="email"
                 className="text-sm font-medium text-foreground"
               >
-                Email
+                {t('common.email')}
               </label>
               <input
                 id="email"
@@ -141,7 +143,7 @@ export default function Signup() {
                 htmlFor="password"
                 className="text-sm font-medium text-foreground"
               >
-                Password
+                {t('common.password')}
               </label>
               <input
                 id="password"
@@ -167,7 +169,7 @@ export default function Signup() {
                 htmlFor="name"
                 className="text-sm font-medium text-foreground"
               >
-                Your name
+                {t('auth.yourName')}
               </label>
               <input
                 id="name"
@@ -188,7 +190,7 @@ export default function Signup() {
 
             <div className="pt-2 border-t border-border">
               <p className="text-xs text-muted-foreground mb-3">
-                Organization details
+                {t('auth.orgDetails')}
               </p>
 
               <div className="space-y-4">
@@ -197,7 +199,7 @@ export default function Signup() {
                     htmlFor="org-name"
                     className="text-sm font-medium text-foreground"
                   >
-                    Organization name
+                    {t('auth.orgName')}
                   </label>
                   <input
                     id="org-name"
@@ -221,7 +223,7 @@ export default function Signup() {
                     htmlFor="org-slug"
                     className="text-sm font-medium text-foreground"
                   >
-                    Organization URL
+                    {t('auth.orgUrl')}
                   </label>
                   <div className="flex items-center">
                     <span className="text-sm text-muted-foreground mr-1">
@@ -246,8 +248,7 @@ export default function Signup() {
                   </div>
                   {orgSlug && !isValidSlug && (
                     <p className="text-xs text-destructive">
-                      3-50 characters, lowercase letters, numbers, and hyphens
-                      only
+                      {t('auth.slugValidation')}
                     </p>
                   )}
                 </div>
@@ -272,21 +273,21 @@ export default function Signup() {
                     className="mr-2 h-4 w-4 animate-spin"
                     aria-hidden="true"
                   />
-                  Creating account...
+                  {t('auth.creatingAccount')}
                 </>
               ) : (
-                'Create account'
+                t('auth.createAccount')
               )}
             </button>
           </form>
 
           <div className="mt-6 text-center text-sm text-muted-foreground">
-            Already have an account?{' '}
+            {t('auth.alreadyHaveAccount')}{' '}
             <Link
               to="/login"
               className="font-medium text-primary hover:underline"
             >
-              Sign in
+              {t('auth.signIn')}
             </Link>
           </div>
         </div>

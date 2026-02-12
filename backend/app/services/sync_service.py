@@ -354,7 +354,11 @@ class SyncService:
         Returns:
             A new :class:`Note` instance (not yet added to the session).
         """
+        from app.utils.note_utils import extract_data_uri_images
+
         content_html = note_data.get("content", "")
+        # Extract data URI images to local files (rehype-raw can't parse huge data URIs)
+        content_html = extract_data_uri_images(content_html)
         content_text = NoteStationService.extract_text(content_html)
 
         return Note(
@@ -381,7 +385,11 @@ class SyncService:
             note_data: Merged note dict (summary + detail).
             synced_at: The timestamp to set as ``synced_at``.
         """
+        from app.utils.note_utils import extract_data_uri_images
+
         content_html = note_data.get("content", "")
+        # Extract data URI images to local files (rehype-raw can't parse huge data URIs)
+        content_html = extract_data_uri_images(content_html)
 
         db_note.title = note_data.get("title", "")
         db_note.content_html = content_html

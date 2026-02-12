@@ -2,6 +2,7 @@
 // @SPEC docs/plans/2026-01-29-labnote-ai-design.md#ai-workbench-페이지
 
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
 import rehypeSanitize from 'rehype-sanitize'
 import { cn } from '@/lib/utils'
@@ -23,10 +24,12 @@ interface MarkdownEditorProps {
 export function MarkdownEditor({
   value,
   onChange,
-  placeholder = '메시지를 입력하세요...',
+  placeholder,
   className,
 }: MarkdownEditorProps) {
+  const { t } = useTranslation()
   const [isPreview, setIsPreview] = useState(false)
+  const defaultPlaceholder = placeholder || t('notes.editorPlaceholder')
 
   return (
     <div className={cn('flex flex-col', className)}>
@@ -45,7 +48,7 @@ export function MarkdownEditor({
           aria-pressed={!isPreview}
         >
           <Edit3 className="h-4 w-4" aria-hidden="true" />
-          편집
+          {t('notes.edit')}
         </button>
         <button
           type="button"
@@ -60,7 +63,7 @@ export function MarkdownEditor({
           aria-pressed={isPreview}
         >
           <Eye className="h-4 w-4" aria-hidden="true" />
-          미리보기
+          {t('notes.preview')}
         </button>
       </div>
 
@@ -68,14 +71,14 @@ export function MarkdownEditor({
       {isPreview ? (
         <div className="min-h-[200px] p-4 border border-input rounded-md bg-background prose prose-sm max-w-none">
           <ReactMarkdown rehypePlugins={[rehypeSanitize]}>
-            {value || '*미리보기 내용이 없습니다*'}
+            {value || `*${t('notes.noPreview')}*`}
           </ReactMarkdown>
         </div>
       ) : (
         <textarea
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
+          placeholder={defaultPlaceholder}
           rows={10}
           className={cn(
             'w-full p-4 border border-input rounded-md',
@@ -86,7 +89,7 @@ export function MarkdownEditor({
             'transition-all duration-200',
             'motion-reduce:transition-none'
           )}
-          aria-label="마크다운 입력"
+          aria-label={t('notes.markdownInput')}
         />
       )}
     </div>

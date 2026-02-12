@@ -20,22 +20,23 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/AuthContext'
+import { useTranslation } from 'react-i18next'
 
 const baseNavItems = [
-  { to: '/', icon: Home, label: '대시보드' },
-  { to: '/notes', icon: FileText, label: '노트' },
-  { to: '/notebooks', icon: BookOpen, label: '노트북' },
-  { to: '/search', icon: Search, label: '검색' },
-  { to: '/librarian', icon: BookOpenCheck, label: 'AI 사서' },
-  { to: '/ai', icon: Sparkles, label: 'AI 분석' },
-  { to: '/graph', icon: Network, label: '그래프' },
-  { to: '/members', icon: Users, label: '멤버' },
-  { to: '/settings', icon: Settings, label: '설정' },
-  { to: '/operations', icon: Activity, label: '운영 현황' },
+  { to: '/', icon: Home, labelKey: 'sidebar.dashboard' },
+  { to: '/notes', icon: FileText, labelKey: 'sidebar.notes' },
+  { to: '/notebooks', icon: BookOpen, labelKey: 'sidebar.notebooks' },
+  { to: '/search', icon: Search, labelKey: 'sidebar.search' },
+  { to: '/librarian', icon: BookOpenCheck, labelKey: 'sidebar.librarian' },
+  { to: '/ai', icon: Sparkles, labelKey: 'sidebar.aiAnalysis' },
+  { to: '/graph', icon: Network, labelKey: 'sidebar.graph' },
+  { to: '/members', icon: Users, labelKey: 'sidebar.members' },
+  { to: '/settings', icon: Settings, labelKey: 'sidebar.settings' },
+  { to: '/operations', icon: Activity, labelKey: 'sidebar.operations' },
 ]
 
-const adminNavItem = { to: '/admin', icon: ShieldCheck, label: '관리자' }
-const demoNavItem = { to: '/demo', icon: LayoutGrid, label: '데모' }
+const adminNavItem = { to: '/admin', icon: ShieldCheck, labelKey: 'sidebar.admin' }
+const demoNavItem = { to: '/demo', icon: LayoutGrid, labelKey: 'sidebar.demo' }
 
 /**
  * 앱 네비게이션 사이드바
@@ -44,6 +45,7 @@ const demoNavItem = { to: '/demo', icon: LayoutGrid, label: '데모' }
  * - 접근성: nav 태그, 명확한 링크 텍스트
  */
 export function Sidebar() {
+  const { t } = useTranslation()
   const { user, logout } = useAuth()
   const isAdmin = user?.role === 'owner' || user?.role === 'admin'
   const navItems = [...baseNavItems, ...(isAdmin ? [adminNavItem] : []), demoNavItem]
@@ -81,7 +83,7 @@ export function Sidebar() {
                 }
               >
                 <item.icon className="h-[18px] w-[18px]" aria-hidden="true" />
-                <span>{item.label}</span>
+                <span>{t(item.labelKey)}</span>
               </NavLink>
             </li>
           ))}
@@ -105,7 +107,7 @@ export function Sidebar() {
                 'hover:bg-accent hover:text-foreground',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
               )}
-              aria-label="로그아웃"
+              aria-label={t('common.logout')}
             >
               <LogOut className="h-4 w-4" aria-hidden="true" />
             </button>

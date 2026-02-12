@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import {
   ArrowLeft,
   BookOpen,
@@ -24,13 +25,13 @@ import { LoadingSpinner } from '@/components/LoadingSpinner'
 import { EmptyState } from '@/components/EmptyState'
 import { cn } from '@/lib/utils'
 
-const PERMISSION_OPTIONS = [
-  { value: 'read', label: '읽기', icon: Eye },
-  { value: 'write', label: '편집', icon: Edit },
-  { value: 'admin', label: '관리', icon: Shield },
-]
-
 function PermissionBadge({ permission }: { permission: string }) {
+  const { t } = useTranslation()
+  const PERMISSION_OPTIONS = [
+    { value: 'read', label: t('notebooks.permRead'), icon: Eye },
+    { value: 'write', label: t('notebooks.permWrite'), icon: Edit },
+    { value: 'admin', label: t('notebooks.permAdmin'), icon: Shield },
+  ]
   const option = PERMISSION_OPTIONS.find(o => o.value === permission)
   const Icon = option?.icon ?? Eye
   return (
@@ -54,6 +55,7 @@ function EditModal({
   initialName: string
   initialDescription: string | null
 }) {
+  const { t } = useTranslation()
   const [name, setName] = useState(initialName)
   const [description, setDescription] = useState(initialDescription ?? '')
   const { mutateAsync: updateNotebook, isPending } = useUpdateNotebook()
@@ -80,8 +82,8 @@ function EditModal({
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
       <div className="relative bg-card rounded-lg shadow-lg w-full max-w-md mx-4 p-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold">노트북 편집</h2>
-          <button onClick={onClose} className="p-1 rounded hover:bg-accent" aria-label="닫기">
+          <h2 className="text-lg font-semibold">{t('notebooks.editModalTitle')}</h2>
+          <button onClick={onClose} className="p-1 rounded hover:bg-accent" aria-label={t('common.close')}>
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -89,7 +91,7 @@ function EditModal({
         <form onSubmit={handleSubmit}>
           <div className="space-y-4">
             <div>
-              <label htmlFor="edit-name" className="text-sm font-medium">이름</label>
+              <label htmlFor="edit-name" className="text-sm font-medium">{t('notebooks.nameLabel')}</label>
               <input
                 id="edit-name"
                 type="text"
@@ -100,7 +102,7 @@ function EditModal({
               />
             </div>
             <div>
-              <label htmlFor="edit-description" className="text-sm font-medium">설명</label>
+              <label htmlFor="edit-description" className="text-sm font-medium">{t('common.description')}</label>
               <textarea
                 id="edit-description"
                 value={description}
@@ -112,7 +114,7 @@ function EditModal({
           </div>
           <div className="mt-6 flex justify-end gap-3">
             <button type="button" onClick={onClose} className="px-4 py-2 text-sm rounded-md hover:bg-accent">
-              취소
+              {t('common.cancel')}
             </button>
             <button
               type="submit"
@@ -122,7 +124,7 @@ function EditModal({
                 'hover:bg-primary/90 disabled:opacity-50',
               )}
             >
-              {isPending ? '저장 중...' : '저장'}
+              {isPending ? t('common.saving') : t('common.save')}
             </button>
           </div>
         </form>
@@ -132,6 +134,7 @@ function EditModal({
 }
 
 function AccessPanel({ notebookId }: { notebookId: number }) {
+  const { t } = useTranslation()
   const [email, setEmail] = useState('')
   const [permission, setPermission] = useState('read')
   const {
@@ -142,6 +145,12 @@ function AccessPanel({ notebookId }: { notebookId: number }) {
     revokeAccess,
     isRevoking,
   } = useNotebookAccess(notebookId)
+
+  const PERMISSION_OPTIONS = [
+    { value: 'read', label: t('notebooks.permRead'), icon: Eye },
+    { value: 'write', label: t('notebooks.permWrite'), icon: Edit },
+    { value: 'admin', label: t('notebooks.permAdmin'), icon: Shield },
+  ]
 
   const handleGrant = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -158,7 +167,7 @@ function AccessPanel({ notebookId }: { notebookId: number }) {
     <div className="bg-card rounded-lg border border-border p-4" data-testid="access-panel">
       <div className="flex items-center gap-2 mb-4">
         <Users className="h-5 w-5 text-primary" />
-        <h3 className="font-medium">접근 권한</h3>
+        <h3 className="font-medium">{t('notebooks.accessPermissions')}</h3>
       </div>
 
       <form onSubmit={handleGrant} className="flex gap-2 mb-4">
@@ -166,7 +175,7 @@ function AccessPanel({ notebookId }: { notebookId: number }) {
           type="email"
           value={email}
           onChange={e => setEmail(e.target.value)}
-          placeholder="이메일 주소"
+          placeholder={t('notebooks.emailPlaceholder')}
           className="flex-1 px-3 py-2 text-sm rounded-md border border-input bg-background focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         />
         <select
@@ -186,7 +195,7 @@ function AccessPanel({ notebookId }: { notebookId: number }) {
             'hover:bg-primary/90 disabled:opacity-50',
           )}
         >
-          {isGranting ? '...' : '추가'}
+          {isGranting ? '...' : t('common.add')}
         </button>
       </form>
 
@@ -196,7 +205,7 @@ function AccessPanel({ notebookId }: { notebookId: number }) {
         </div>
       ) : accesses.length === 0 ? (
         <p className="text-sm text-muted-foreground text-center py-4">
-          아직 공유된 사용자가 없습니다.
+          {t('notebooks.noSharedUsers')}
         </p>
       ) : (
         <ul className="space-y-2">
@@ -207,7 +216,7 @@ function AccessPanel({ notebookId }: { notebookId: number }) {
                   {access.user_email?.charAt(0).toUpperCase() ?? '?'}
                 </div>
                 <div>
-                  <p className="text-sm font-medium">{access.user_email ?? '알 수 없음'}</p>
+                  <p className="text-sm font-medium">{access.user_email ?? t('notebooks.unknown')}</p>
                   <PermissionBadge permission={access.permission} />
                 </div>
               </div>
@@ -215,7 +224,7 @@ function AccessPanel({ notebookId }: { notebookId: number }) {
                 onClick={() => revokeAccess(access.id)}
                 disabled={isRevoking}
                 className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-destructive"
-                aria-label="권한 삭제"
+                aria-label={t('notebooks.revokeAccess')}
               >
                 <Trash2 className="h-4 w-4" />
               </button>
@@ -228,6 +237,7 @@ function AccessPanel({ notebookId }: { notebookId: number }) {
 }
 
 export default function NotebookDetail() {
+  const { t } = useTranslation()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const notebookId = parseInt(id ?? '0', 10)
@@ -247,7 +257,7 @@ export default function NotebookDetail() {
   const notes = notesData?.pages.flatMap(page => page.items) ?? []
 
   const handleDelete = async () => {
-    if (!confirm('이 노트북을 삭제하시겠습니까?')) return
+    if (!confirm(t('notebooks.deleteConfirm'))) return
     try {
       await deleteNotebook(notebookId)
       navigate('/notebooks')
@@ -269,10 +279,10 @@ export default function NotebookDetail() {
     return (
       <EmptyState
         icon={AlertCircle}
-        title={is404 ? '노트북을 찾을 수 없습니다' : '에러가 발생했습니다'}
-        description={is404 ? '요청하신 노트북이 존재하지 않거나 접근 권한이 없습니다.' : '알 수 없는 오류'}
+        title={is404 ? t('notebooks.notFound') : t('common.errorOccurred')}
+        description={is404 ? t('notebooks.notFoundDesc') : t('common.unknownError')}
         action={{
-          label: '노트북 목록으로',
+          label: t('notebooks.backToList'),
           onClick: () => navigate('/notebooks'),
         }}
       />
@@ -287,7 +297,7 @@ export default function NotebookDetail() {
         <button
           onClick={() => navigate('/notebooks')}
           className="p-2 rounded-lg hover:bg-accent"
-          aria-label="뒤로"
+          aria-label={t('common.back')}
         >
           <ArrowLeft className="h-5 w-5" />
         </button>
@@ -306,21 +316,21 @@ export default function NotebookDetail() {
             className="flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-accent bg-primary/10 text-primary"
           >
             <Network className="h-4 w-4" />
-            <span>발견하기</span>
+            <span>{t('notebooks.discover')}</span>
           </Link>
           <button
             onClick={() => setIsShareOpen(true)}
             className="flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-accent"
           >
             <Share2 className="h-4 w-4" />
-            <span>공유</span>
+            <span>{t('notebooks.share')}</span>
           </button>
           <button
             onClick={() => setIsEditOpen(true)}
             className="flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-accent"
           >
             <Pencil className="h-4 w-4" />
-            <span>편집</span>
+            <span>{t('common.edit')}</span>
           </button>
           <button
             onClick={handleDelete}
@@ -330,10 +340,10 @@ export default function NotebookDetail() {
               'text-destructive hover:bg-destructive/10',
               'disabled:opacity-50 disabled:cursor-not-allowed',
             )}
-            title={notebook.note_count > 0 ? '노트가 있는 노트북은 삭제할 수 없습니다' : undefined}
+            title={notebook.note_count > 0 ? t('notebooks.cannotDelete') : undefined}
           >
             <Trash2 className="h-4 w-4" />
-            <span>삭제</span>
+            <span>{t('common.delete')}</span>
           </button>
         </div>
       </div>
@@ -343,15 +353,15 @@ export default function NotebookDetail() {
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-medium flex items-center gap-2">
               <FileText className="h-4 w-4" />
-              노트 ({notebook.note_count}개)
+              {t('notebooks.notes', { count: notebook.note_count })}
             </h2>
           </div>
 
           {notes.length === 0 ? (
             <EmptyState
               icon={FileText}
-              title="노트가 없습니다"
-              description="이 노트북에 노트를 추가해보세요."
+              title={t('notes.noNotes')}
+              description={t('notes.addNotes')}
             />
           ) : (
             <NoteList

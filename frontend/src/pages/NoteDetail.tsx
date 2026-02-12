@@ -5,6 +5,7 @@
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Notebook, Tag, Paperclip, Image, File, AlertCircle, Calendar, Pencil, Share2, AlertTriangle, CloudOff, CloudUpload, CloudDownload, Loader2, Check, Sparkles, X } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { apiClient } from '@/lib/api'
 import { useNote } from '@/hooks/useNote'
 import { useQueryClient } from '@tanstack/react-query'
@@ -19,6 +20,7 @@ import { useConflicts } from '@/hooks/useConflicts'
 import { useTimezone, formatDateWithTz } from '@/hooks/useTimezone'
 
 export default function NoteDetail() {
+  const { t } = useTranslation()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -59,12 +61,12 @@ export default function NoteDetail() {
         setSyncMessage(res.message)
       } else {
         setSyncState('error')
-        setSyncMessage(res.message || '동기화 실패')
+        setSyncMessage(res.message || t('notes.syncFailed'))
         setTimeout(() => setSyncState('idle'), 3000)
       }
     } catch {
       setSyncState('error')
-      setSyncMessage('동기화 실패')
+      setSyncMessage(t('notes.syncFailed'))
       setTimeout(() => setSyncState('idle'), 3000)
     }
   }
@@ -91,12 +93,12 @@ export default function NoteDetail() {
         setPullMessage(res.message)
       } else {
         setPullState('error')
-        setPullMessage(res.message || '가져오기 실패')
+        setPullMessage(res.message || t('notes.pullFailed'))
         setTimeout(() => setPullState('idle'), 3000)
       }
     } catch {
       setPullState('error')
-      setPullMessage('가져오기 실패')
+      setPullMessage(t('notes.pullFailed'))
       setTimeout(() => setPullState('idle'), 3000)
     }
   }
@@ -157,10 +159,10 @@ export default function NoteDetail() {
     return (
       <EmptyState
         icon={AlertCircle}
-        title="노트를 찾을 수 없습니다"
-        description="요청하신 노트가 존재하지 않거나 삭제되었습니다."
+        title={t('notes.notFound')}
+        description={t('notes.notFoundDesc')}
         action={{
-          label: '노트 목록으로',
+          label: t('notes.backToList'),
           onClick: () => navigate('/notes'),
         }}
       />
@@ -172,10 +174,10 @@ export default function NoteDetail() {
     return (
       <EmptyState
         icon={AlertCircle}
-        title="에러가 발생했습니다"
-        description={error instanceof Error ? error.message : '알 수 없는 오류'}
+        title={t('common.errorOccurred')}
+        description={error instanceof Error ? error.message : t('common.unknownError')}
         action={{
-          label: '다시 시도',
+          label: t('common.retry'),
           onClick: () => window.location.reload(),
         }}
       />
@@ -198,7 +200,7 @@ export default function NoteDetail() {
           className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6 transition-colors"
         >
           <ArrowLeft className="h-4 w-4" />
-          노트 목록으로
+          {t('notes.backToList')}
         </button>
 
         {/* 노트 제목 */}
@@ -209,7 +211,7 @@ export default function NoteDetail() {
             {note.sync_status === 'local_modified' && (
               <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded bg-amber-100 text-amber-700 border border-amber-200">
                 <CloudOff className="h-3.5 w-3.5" />
-                미동기화
+                {t('notes.unsynced')}
               </span>
             )}
             {note.sync_status === 'conflict' && (
@@ -218,13 +220,13 @@ export default function NoteDetail() {
                 className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded bg-red-100 text-red-700 border border-red-200 hover:bg-red-200"
               >
                 <AlertTriangle className="h-3.5 w-3.5" />
-                충돌 해결
+                {t('notes.conflictResolve')}
               </button>
             )}
             {note.sync_status === 'local_only' && (
               <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded bg-purple-100 text-purple-700 border border-purple-200">
                 <CloudOff className="h-3.5 w-3.5" />
-                로컬 전용
+                {t('notes.localOnly')}
               </span>
             )}
             {/* Pull button (NAS → local) */}
@@ -232,19 +234,19 @@ export default function NoteDetail() {
               <div className="inline-flex items-center gap-1">
                 <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded border border-amber-300 bg-amber-50 text-amber-700">
                   <AlertTriangle className="h-3.5 w-3.5" />
-                  {pullMessage || '로컬 수정 있음'}
+                  {pullMessage || t('notes.localModified')}
                 </span>
                 <button
                   onClick={() => handlePullSync(true)}
                   className="text-xs px-2 py-1.5 rounded border border-red-300 bg-red-50 text-red-700 hover:bg-red-100"
                 >
-                  강제 가져오기
+                  {t('notes.forcePull')}
                 </button>
                 <button
                   onClick={() => setPullState('idle')}
                   className="text-xs px-2 py-1.5 rounded border border-input text-muted-foreground hover:text-foreground"
                 >
-                  취소
+                  {t('common.cancel')}
                 </button>
               </div>
             ) : (
@@ -269,7 +271,7 @@ export default function NoteDetail() {
                 ) : (
                   <CloudDownload className="h-3.5 w-3.5" />
                 )}
-                {pullState === 'syncing' ? '가져오는 중...' : pullState === 'success' ? '완료' : pullState === 'error' ? '실패' : pullState === 'skipped' ? '변경 없음' : '가져오기'}
+                {pullState === 'syncing' ? t('notes.pulling') : pullState === 'success' ? t('notes.done') : pullState === 'error' ? t('notes.failed') : pullState === 'skipped' ? t('notes.noChanges') : t('notes.pull')}
               </button>
             )}
             {/* Push button (local → NAS) */}
@@ -277,19 +279,19 @@ export default function NoteDetail() {
               <div className="inline-flex items-center gap-1">
                 <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded border border-amber-300 bg-amber-50 text-amber-700">
                   <AlertTriangle className="h-3.5 w-3.5" />
-                  {syncMessage || 'NAS가 더 최신'}
+                  {syncMessage || t('notes.nasNewer')}
                 </span>
                 <button
                   onClick={() => handlePushSync(true)}
                   className="text-xs px-2 py-1.5 rounded border border-red-300 bg-red-50 text-red-700 hover:bg-red-100"
                 >
-                  강제 보내기
+                  {t('notes.forcePush')}
                 </button>
                 <button
                   onClick={() => setSyncState('idle')}
                   className="text-xs px-2 py-1.5 rounded border border-input text-muted-foreground hover:text-foreground"
                 >
-                  취소
+                  {t('common.cancel')}
                 </button>
               </div>
             ) : (
@@ -314,7 +316,7 @@ export default function NoteDetail() {
                 ) : (
                   <CloudUpload className="h-3.5 w-3.5" />
                 )}
-                {syncState === 'syncing' ? '보내는 중...' : syncState === 'success' ? '완료' : syncState === 'error' ? '실패' : syncState === 'skipped' ? '수정 없음' : '보내기'}
+                {syncState === 'syncing' ? t('notes.pushing') : syncState === 'success' ? t('notes.done') : syncState === 'error' ? t('notes.failed') : syncState === 'skipped' ? t('notes.noModification') : t('notes.push')}
               </button>
             )}
             <button
@@ -327,21 +329,21 @@ export default function NoteDetail() {
               ) : (
                 <Sparkles className="h-3.5 w-3.5" />
               )}
-              {summarizeState === 'loading' ? '생성 중...' : '제목 생성'}
+              {summarizeState === 'loading' ? t('notes.generating') : t('notes.generateTitle')}
             </button>
             <button
               onClick={() => setIsSharingOpen(true)}
               className="inline-flex items-center gap-2 text-xs px-2.5 py-1.5 rounded border border-input text-muted-foreground hover:text-foreground hover:border-primary/30"
             >
               <Share2 className="h-3.5 w-3.5" />
-              공유
+              {t('notes.share')}
             </button>
             <button
               onClick={() => setIsEditing(true)}
               className="inline-flex items-center gap-2 text-xs px-2.5 py-1.5 rounded border border-input text-muted-foreground hover:text-foreground hover:border-primary/30"
             >
               <Pencil className="h-3.5 w-3.5" />
-              편집
+              {t('notes.editNote')}
             </button>
           </div>
         </div>
@@ -351,11 +353,11 @@ export default function NoteDetail() {
           <div className="mb-4 rounded-lg border border-violet-200 bg-violet-50/50 p-4">
             <div className="flex items-center gap-2 mb-3 text-sm font-medium text-violet-700">
               <Sparkles className="h-4 w-4" />
-              AI 제안
+              {t('notes.aiSuggestion')}
             </div>
             <div className="space-y-3">
               <div>
-                <label className="text-xs text-muted-foreground mb-1 block">제목</label>
+                <label className="text-xs text-muted-foreground mb-1 block">{t('notes.suggestedTitle')}</label>
                 <input
                   type="text"
                   value={suggestedTitle}
@@ -364,7 +366,7 @@ export default function NoteDetail() {
                 />
               </div>
               <div>
-                <label className="text-xs text-muted-foreground mb-1 block">태그</label>
+                <label className="text-xs text-muted-foreground mb-1 block">{t('notes.suggestedTags')}</label>
                 <div className="flex items-center gap-1.5 flex-wrap">
                   {suggestedTags.map((tag, i) => (
                     <span
@@ -387,7 +389,7 @@ export default function NoteDetail() {
                   onClick={handleCancelSummary}
                   className="text-xs px-3 py-1.5 rounded border border-input text-muted-foreground hover:text-foreground"
                 >
-                  취소
+                  {t('common.cancel')}
                 </button>
                 <button
                   onClick={handleApplySummary}
@@ -395,7 +397,7 @@ export default function NoteDetail() {
                   className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50"
                 >
                   {isApplying && <Loader2 className="h-3 w-3 animate-spin" />}
-                  적용
+                  {t('common.apply')}
                 </button>
               </div>
             </div>
@@ -424,7 +426,7 @@ export default function NoteDetail() {
             {/* 생성일 (수정일과 다른 경우만 표시) */}
             {note.created_at && note.updated_at && note.created_at !== note.updated_at && (
               <span className="text-xs text-muted-foreground/70">
-                (작성: {formatDate(note.created_at)})
+                ({t('notes.created')}: {formatDate(note.created_at)})
               </span>
             )}
           </div>
@@ -474,7 +476,7 @@ export default function NoteDetail() {
           <section className="border-t border-border pt-6">
             <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
               <Paperclip className="h-5 w-5" aria-hidden="true" />
-              첨부파일
+              {t('notes.attachments')}
               <span className="text-sm font-normal text-muted-foreground">
                 ({note.attachments?.length})
               </span>
@@ -501,7 +503,7 @@ export default function NoteDetail() {
                       }}
                       className="text-xs text-muted-foreground hover:text-destructive ml-2"
                     >
-                      삭제
+                      {t('common.delete')}
                     </button>
                   </div>
                 )

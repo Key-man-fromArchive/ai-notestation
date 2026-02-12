@@ -1,9 +1,11 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { apiClient } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { FileArchive, Download, Upload, CheckCircle, AlertCircle } from 'lucide-react'
 
 export function BackupSection() {
+  const { t } = useTranslation()
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [isExporting, setIsExporting] = useState(false)
   const [isImporting, setIsImporting] = useState(false)
@@ -90,11 +92,11 @@ export function BackupSection() {
     <div className="p-4 border border-input rounded-md">
       <div className="flex items-center gap-2 mb-3">
         <FileArchive className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
-        <h3 className="text-lg font-semibold">AI-NoteStation 백업</h3>
+        <h3 className="text-lg font-semibold">{t('settings.backup')}</h3>
       </div>
 
       <p className="text-sm text-muted-foreground mb-4">
-        노트, 이미지, 첨부파일을 AI-NoteStation 전용 포맷으로 내보내거나 가져올 수 있습니다.
+        {t('settings.backupDesc')}
       </p>
 
       <div className="flex flex-wrap gap-2 mb-4">
@@ -109,7 +111,7 @@ export function BackupSection() {
           )}
         >
           <Download className="h-4 w-4" aria-hidden="true" />
-          {isExporting ? '내보내는 중...' : '백업 내보내기'}
+          {isExporting ? t('common.exporting', 'Exporting...') : t('common.export', 'Export')}
         </button>
       </div>
 
@@ -130,7 +132,7 @@ export function BackupSection() {
           />
           <Upload className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
           <span className="text-sm text-muted-foreground">
-            {selectedFile ? selectedFile.name : '백업 파일(.zip)을 선택하세요'}
+            {selectedFile ? selectedFile.name : t('common.selectFile', 'Select file')}
           </span>
         </label>
 
@@ -154,7 +156,7 @@ export function BackupSection() {
               )}
             >
               <Upload className="h-4 w-4" aria-hidden="true" />
-              {isImporting ? '가져오는 중...' : '가져오기'}
+              {isImporting ? t('common.importing', 'Importing...') : t('common.import', 'Import')}
             </button>
           </div>
         )}

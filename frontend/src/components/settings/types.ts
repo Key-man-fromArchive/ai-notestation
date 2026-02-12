@@ -24,13 +24,13 @@ export const nasSettingsList: Setting[] = [
   },
   {
     key: 'nas_user',
-    label: 'NAS 사용자 이름',
+    label: 'settings.nasUsername',
     type: 'text',
     placeholder: 'admin',
   },
   {
     key: 'nas_password',
-    label: 'NAS 비밀번호',
+    label: 'settings.nasPassword',
     type: 'password',
     placeholder: '••••••••',
   },

@@ -4,8 +4,10 @@ import { useAuth } from '@/contexts/AuthContext'
 import { ApiError } from '@/lib/api'
 import { Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useTranslation } from 'react-i18next'
 
 export default function Login() {
+  const { t } = useTranslation()
   const { login, isAuthenticated } = useAuth()
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
@@ -27,14 +29,14 @@ export default function Login() {
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.status === 401) {
-          setError('이메일 또는 비밀번호가 올바르지 않습니다.')
+          setError(t('auth.invalidCredentials'))
         } else if (err.status === 403) {
-          setError('활성 조직 멤버십이 없습니다.')
+          setError(t('auth.noMembership'))
         } else {
-          setError('로그인에 실패했습니다. 다시 시도해주세요.')
+          setError(t('auth.loginFailed'))
         }
       } else {
-        setError('네트워크 오류가 발생했습니다.')
+        setError(t('common.networkError'))
       }
     } finally {
       setIsLoading(false)
@@ -46,7 +48,7 @@ export default function Login() {
       <div className="w-full max-w-sm space-y-6">
         <div className="text-center">
           <h1 className="text-2xl font-bold text-foreground">LabNote AI</h1>
-          <p className="mt-2 text-sm text-muted-foreground">로그인하여 시작하세요</p>
+          <p className="mt-2 text-sm text-muted-foreground">{t('auth.loginSubtitle')}</p>
         </div>
 
         <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
@@ -59,7 +61,7 @@ export default function Login() {
 
             <div className="space-y-1.5">
               <label htmlFor="email" className="text-sm font-medium text-foreground">
-                이메일
+                {t('auth.email')}
               </label>
               <input
                 id="email"
@@ -81,7 +83,7 @@ export default function Login() {
 
             <div className="space-y-1.5">
               <label htmlFor="password" className="text-sm font-medium text-foreground">
-                비밀번호
+                {t('auth.password')}
               </label>
               <input
                 id="password"
@@ -114,19 +116,19 @@ export default function Login() {
               {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  로그인 중...
+                  {t('auth.loggingIn')}
                 </>
               ) : (
-                '로그인'
+                t('auth.login')
               )}
             </button>
           </form>
         </div>
 
         <p className="text-center text-sm text-muted-foreground">
-          계정이 없으신가요?{' '}
+          {t('auth.noAccount')}{' '}
           <Link to="/signup" className="font-medium text-primary hover:underline">
-            회원가입
+            {t('auth.signup')}
           </Link>
         </p>
       </div>

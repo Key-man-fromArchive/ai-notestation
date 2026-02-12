@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import base64
+import hashlib
+import logging
 import re
 from typing import TYPE_CHECKING
 from urllib.parse import quote
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from app.models import NoteImage
@@ -311,3 +315,72 @@ def inline_local_file_images(html: str) -> str:
             return match.group(0)
 
     return _LOCAL_FILE_IMG_RE.sub(_replace_file, html)
+
+
+# Regex to match data URI img tags: <img ... src="data:image/...;base64,..." ...>
+_DATA_URI_IMG_RE = re.compile(
+    r'<img\b([^>]*?)\bsrc="(data:image/([^;]+);base64,([^"]+))"([^>]*)/?>', re.IGNORECASE
+)
+
+
+def extract_data_uri_images(html: str) -> str:
+    """Extract inline ``data:`` URI images, save them to disk, and replace with ``/api/files/`` URLs.
+
+    This is the reverse of :func:`inline_local_file_images`.  ``rehype-raw``
+    (parse5) cannot handle very large attribute values, so data URI images
+    must be converted to regular file URLs for the frontend to display them.
+
+    When pushing back to NAS, :func:`inline_local_file_images` will convert
+    these ``/api/files/`` URLs back to data URIs, preserving round-trip fidelity.
+
+    Args:
+        html: HTML content that may contain ``data:`` URI images.
+
+    Returns:
+        HTML with data URI images replaced by ``/api/files/`` URLs.
+    """
+    if not html or "data:image/" not in html:
+        return html
+
+    from pathlib import Path
+
+    from app.config import get_settings
+
+    settings = get_settings()
+    uploads_dir = Path(settings.UPLOADS_PATH)
+    uploads_dir.mkdir(parents=True, exist_ok=True)
+
+    def _replace_data_uri(match: re.Match) -> str:
+        full_tag = match.group(0)
+        img_format = match.group(3)  # e.g. "jpeg", "png"
+        b64_data = match.group(4)
+
+        # Determine file extension from MIME type
+        ext_map = {"jpeg": ".jpg", "png": ".png", "gif": ".gif", "webp": ".webp", "svg+xml": ".svg"}
+        ext = ext_map.get(img_format, f".{img_format}")
+
+        try:
+            data = base64.b64decode(b64_data)
+        except Exception:
+            return full_tag  # leave unchanged if decode fails
+
+        # Generate deterministic filename from content hash
+        content_hash = hashlib.md5(data).hexdigest()  # noqa: S324
+        file_id = f"{content_hash}{ext}"
+        file_path = uploads_dir / file_id
+
+        try:
+            if not file_path.exists():
+                file_path.write_bytes(data)
+                logger.debug("Saved data URI image to %s (%d bytes)", file_id, len(data))
+        except Exception:
+            logger.warning("Failed to save data URI image to %s", file_id)
+            return full_tag
+
+        # Extract alt from existing attributes
+        alt_match = re.search(r'alt="([^"]*)"', full_tag)
+        alt = alt_match.group(1) if alt_match else file_id
+
+        return f'<img src="/api/files/{file_id}" alt="{alt}" />'
+
+    return _DATA_URI_IMG_RE.sub(_replace_data_uri, html)

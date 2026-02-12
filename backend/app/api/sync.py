@@ -22,7 +22,7 @@ import asyncio
 import logging
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,6 +30,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models import Note
 from app.services.auth_service import get_current_user
+from app.utils.i18n import get_language
+from app.utils.messages import msg
 
 logger = logging.getLogger(__name__)
 
@@ -349,6 +351,7 @@ async def _run_sync_background(state: SyncState) -> None:
 @router.post("/trigger", response_model=SyncTriggerResponse)
 async def trigger_sync(
     background_tasks: BackgroundTasks,
+    request: Request,
     current_user: dict = Depends(get_current_user),  # noqa: B008
 ) -> SyncTriggerResponse:
     """Manually trigger a NoteStation synchronisation.
@@ -358,10 +361,12 @@ async def trigger_sync(
 
     Requires a valid Bearer access token.
     """
+    lang = get_language(request)
+
     if _sync_state.is_syncing:
         return SyncTriggerResponse(
             status="already_syncing",
-            message="이미 동기화가 진행 중입니다.",
+            message=msg("sync.trigger_already_running", lang),
         )
 
     _sync_state.triggered_by = current_user.get("username", "unknown")
@@ -369,7 +374,7 @@ async def trigger_sync(
 
     return SyncTriggerResponse(
         status="syncing",
-        message="동기화를 시작합니다.",
+        message=msg("sync.trigger_started", lang),
     )
 
 
@@ -414,6 +419,7 @@ NotePushResponse = NoteSyncResponse
 @router.post("/push/{note_id}", response_model=NoteSyncResponse)
 async def push_note(
     note_id: str,
+    request: Request,
     force: bool = False,
     current_user: dict = Depends(get_current_user),  # noqa: B008
     db: AsyncSession = Depends(get_db),  # noqa: B008
@@ -428,34 +434,35 @@ async def push_note(
     """
     from app.services.activity_log import log_activity
 
+    lang = get_language(request)
     username = current_user.get("username", "unknown")
 
     # Fetch the note from local DB
     result = await db.execute(select(Note).where(Note.synology_note_id == note_id))
     note = result.scalar_one_or_none()
     if not note:
-        raise HTTPException(status_code=404, detail="노트를 찾을 수 없습니다.")
+        raise HTTPException(status_code=404, detail=msg("sync.note_not_found", lang))
 
     # Guard: only push if locally modified
     if not note.local_modified_at and not force:
         return NoteSyncResponse(
             status="skipped",
-            message="로컬에서 수정된 내용이 없습니다.",
+            message=msg("sync.push_skipped_detail", lang),
         )
 
     try:
         service, sync_session, write_enabled = await _create_sync_service()
-    except Sync2FARequiredError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+    except Sync2FARequiredError:
+        raise HTTPException(status_code=400, detail=msg("sync.2fa_required", lang))
     except Exception as exc:
         logger.exception("NAS connection failed: %s", exc)
-        raise HTTPException(status_code=502, detail=f"NAS 연결 실패: {exc}")
+        raise HTTPException(status_code=502, detail=msg("sync.nas_connection_failed", lang, detail=str(exc)))
 
     if not write_enabled:
         await sync_session.close()
         raise HTTPException(
             status_code=400,
-            detail="NoteStation 쓰기 권한이 없습니다. NAS 설정을 확인하세요.",
+            detail=msg("sync.no_write_permission", lang),
         )
 
     try:
@@ -473,7 +480,7 @@ async def push_note(
                     await sync_session.close()
                     return NoteSyncResponse(
                         status="conflict",
-                        message=f"NAS에서 더 최근에 수정되었습니다 ({nas_local.strftime('%m/%d %H:%M')}). 강제 푸시하려면 다시 시도하세요.",
+                        message=msg("sync.push_conflict_detail", lang, time=nas_local.strftime('%m/%d %H:%M')),
                     )
 
         from app.synology_gateway.notestation import NoteStationService
@@ -508,6 +515,9 @@ async def push_note(
             note.source_updated_at = datetime.now(UTC)
 
         # Mark as synced and store NAS-format content in DB
+        # Extract data URI images the NAS may have left in the content
+        from app.utils.note_utils import extract_data_uri_images
+        push_content = extract_data_uri_images(push_content)
         note.content_html = push_content
         note.content_text = NoteStationService.extract_text(push_content)
         note.sync_status = "synced"
@@ -524,14 +534,14 @@ async def push_note(
 
         return NoteSyncResponse(
             status="success",
-            message=f"'{note.title}' NAS 동기화 완료",
+            message=msg("sync.push_success_detail", lang, title=note.title),
         )
 
     except Exception as exc:
         logger.exception("Failed to push note %s: %s", note_id, exc)
         return NoteSyncResponse(
             status="error",
-            message=f"동기화 실패: {exc}",
+            message=msg("sync.push_error", lang, detail=str(exc)),
         )
 
     finally:
@@ -546,6 +556,7 @@ async def push_note(
 @router.post("/pull/{note_id}", response_model=NoteSyncResponse)
 async def pull_note(
     note_id: str,
+    request: Request,
     force: bool = False,
     current_user: dict = Depends(get_current_user),  # noqa: B008
     db: AsyncSession = Depends(get_db),  # noqa: B008
@@ -561,30 +572,31 @@ async def pull_note(
     """
     from app.services.activity_log import log_activity
     from app.synology_gateway.notestation import NoteStationService
-    from app.utils.note_utils import rewrite_image_urls
+    from app.utils.note_utils import extract_data_uri_images
 
+    lang = get_language(request)
     username = current_user.get("username", "unknown")
 
     # Fetch the note from local DB
     result = await db.execute(select(Note).where(Note.synology_note_id == note_id))
     note = result.scalar_one_or_none()
     if not note:
-        raise HTTPException(status_code=404, detail="노트를 찾을 수 없습니다.")
+        raise HTTPException(status_code=404, detail=msg("sync.note_not_found", lang))
 
     # Guard: protect local modifications
     if note.local_modified_at and not force:
         return NoteSyncResponse(
             status="conflict",
-            message="로컬에서 수정된 내용이 있습니다. 덮어쓰시겠습니까?",
+            message=msg("sync.pull_conflict_prompt", lang),
         )
 
     try:
         service, sync_session, _write_enabled = await _create_sync_service()
-    except Sync2FARequiredError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+    except Sync2FARequiredError:
+        raise HTTPException(status_code=400, detail=msg("sync.2fa_required", lang))
     except Exception as exc:
         logger.exception("NAS connection failed: %s", exc)
-        raise HTTPException(status_code=502, detail=f"NAS 연결 실패: {exc}")
+        raise HTTPException(status_code=502, detail=msg("sync.nas_connection_failed", lang, detail=str(exc)))
 
     try:
         nas_note = await service._notestation.get_note(note.synology_note_id)
@@ -596,11 +608,13 @@ async def pull_note(
             if nas_dt <= note.source_updated_at:
                 return NoteSyncResponse(
                     status="skipped",
-                    message="NAS에 변경된 내용이 없습니다.",
+                    message=msg("sync.pull_no_changes", lang),
                 )
 
         # Update local note with NAS data
         content_html = nas_note.get("content", "")
+        # Extract data URI images to local files (rehype-raw can't parse huge data URIs)
+        content_html = extract_data_uri_images(content_html)
         note.title = nas_note.get("title", note.title)
         note.content_html = content_html
         note.content_text = NoteStationService.extract_text(content_html)
@@ -642,14 +656,14 @@ async def pull_note(
 
         return NoteSyncResponse(
             status="success",
-            message=f"'{note.title}' NAS에서 가져오기 완료",
+            message=msg("sync.pull_success_detail", lang, title=note.title),
         )
 
     except Exception as exc:
         logger.exception("Failed to pull note %s: %s", note_id, exc)
         return NoteSyncResponse(
             status="error",
-            message=f"가져오기 실패: {exc}",
+            message=msg("sync.pull_error", lang, detail=str(exc)),
         )
 
     finally:

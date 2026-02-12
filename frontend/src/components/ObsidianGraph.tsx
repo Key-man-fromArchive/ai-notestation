@@ -1,5 +1,6 @@
 import { useRef, useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import ForceGraph2D, {
   type ForceGraphMethods,
   type NodeObject,
@@ -69,6 +70,7 @@ export function ObsidianGraph({
   className,
   onAnalyzeCluster,
 }: ObsidianGraphProps) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const containerRef = useRef<HTMLDivElement>(null)
   type GraphMethods = ForceGraphMethods<
@@ -220,7 +222,7 @@ export function ObsidianGraph({
     const seen = new Set<string>()
     const result: { name: string; color: string }[] = []
     for (const node of data.nodes) {
-      const nb = node.notebook ?? '(분류 없음)'
+      const nb = node.notebook ?? t('graph.noCategory')
       if (!seen.has(nb)) {
         seen.add(nb)
         result.push({ name: nb, color: getNotebookColor(node.notebook) })
@@ -386,7 +388,7 @@ export function ObsidianGraph({
     return (
       <div className={cn('flex flex-col items-center justify-center h-full gap-3', className)}>
         <LoadingSpinner size="lg" />
-        <p className="text-sm text-muted-foreground">그래프 데이터를 불러오는 중...</p>
+        <p className="text-sm text-muted-foreground">{t('graph.loading')}</p>
       </div>
     )
   }
@@ -395,7 +397,7 @@ export function ObsidianGraph({
     return (
       <EmptyState
         icon={Search}
-        title="그래프를 불러올 수 없습니다"
+        title={t('graph.loadError')}
         description={error.message}
       />
     )
@@ -405,8 +407,8 @@ export function ObsidianGraph({
     return (
       <EmptyState
         icon={Search}
-        title="인덱싱된 노트가 없습니다"
-        description="Settings에서 노트 인덱싱을 먼저 실행하세요"
+        title={t('graph.noData')}
+        description={t('graph.noDataDesc')}
       />
     )
   }
@@ -419,7 +421,7 @@ export function ObsidianGraph({
           <Search className="h-4 w-4 text-muted-foreground" />
           <input
             type="text"
-            placeholder="의미 검색 (semantic)..."
+            placeholder={t('graph.semanticSearch')}
             value={searchQuery}
             onChange={e => doSearch(e.target.value)}
             className="bg-transparent border-none outline-none text-sm w-52 placeholder:text-muted-foreground"
@@ -437,25 +439,25 @@ export function ObsidianGraph({
           <div className="bg-card/95 backdrop-blur rounded-lg px-3 py-1.5 shadow-lg border border-border text-xs text-muted-foreground">
             {hits.length > 0 ? (
               <span>
-                <span className="font-medium text-amber-400">{hits.length}</span>개 노트 발견
+                <span className="font-medium text-amber-400">{hits.length}</span>{t('graph.notesFound')}
                 {searchNeighborIds.size > 0 && (
-                  <span> + 이웃 {searchNeighborIds.size}개</span>
+                  <span> + {t('graph.neighbors', { count: searchNeighborIds.size })}</span>
                 )}
               </span>
             ) : (
-              <span>검색 결과 없음</span>
+              <span>{t('graph.noResults')}</span>
             )}
           </div>
         )}
 
         <div className="flex gap-1 bg-card/95 backdrop-blur rounded-lg p-1 shadow-lg border border-border">
-          <button onClick={handleZoomIn} className="p-2 rounded hover:bg-accent" title="확대">
+          <button onClick={handleZoomIn} className="p-2 rounded hover:bg-accent" title={t('graph.zoomIn')}>
             <ZoomIn className="h-4 w-4" />
           </button>
-          <button onClick={handleZoomOut} className="p-2 rounded hover:bg-accent" title="축소">
+          <button onClick={handleZoomOut} className="p-2 rounded hover:bg-accent" title={t('graph.zoomOut')}>
             <ZoomOut className="h-4 w-4" />
           </button>
-          <button onClick={handleFit} className="p-2 rounded hover:bg-accent" title="전체 보기">
+          <button onClick={handleFit} className="p-2 rounded hover:bg-accent" title={t('graph.resetZoom')}>
             <Maximize2 className="h-4 w-4" />
           </button>
         </div>
@@ -463,17 +465,17 @@ export function ObsidianGraph({
 
       <div className="absolute top-4 right-4 z-10 bg-card/95 backdrop-blur rounded-lg p-3 shadow-lg border border-border">
         <div className="text-xs text-muted-foreground space-y-1">
-          <div>전체 노트: <span className="font-medium text-foreground">{data.total_notes}</span></div>
-          <div>인덱싱됨: <span className="font-medium text-foreground">{data.indexed_notes}</span></div>
-          <div>표시중: <span className="font-medium text-foreground">{graphData.nodes.length}</span></div>
-          <div>연결: <span className="font-medium text-foreground">{graphData.links.length}</span></div>
+          <div>{t('graph.totalNotes')}: <span className="font-medium text-foreground">{data.total_notes}</span></div>
+          <div>{t('graph.indexed')}: <span className="font-medium text-foreground">{data.indexed_notes}</span></div>
+          <div>{t('graph.showing')}: <span className="font-medium text-foreground">{graphData.nodes.length}</span></div>
+          <div>{t('graph.connections')}: <span className="font-medium text-foreground">{graphData.links.length}</span></div>
           {orphanIds.size > 0 && (
-            <div>고립 노트: <span className="font-medium text-orange-400">{orphanIds.size}</span></div>
+            <div>{t('graph.orphanNotes')}: <span className="font-medium text-orange-400">{orphanIds.size}</span></div>
           )}
           {simulationRunning && (
             <div className="flex items-center gap-1 text-primary">
               <Loader2 className="h-3 w-3 animate-spin" />
-              시뮬레이션 진행중
+              {t('graph.simulationRunning')}
             </div>
           )}
         </div>
@@ -481,7 +483,7 @@ export function ObsidianGraph({
           onClick={() => setShowLegend(!showLegend)}
           className="mt-2 text-xs text-primary hover:underline"
         >
-          {showLegend ? '범례 숨기기' : '범례 보기'}
+          {showLegend ? t('graph.hideLegend') : t('graph.showLegend')}
         </button>
         {showLegend && (
           <div className="mt-2 pt-2 border-t border-border max-h-40 overflow-y-auto space-y-1">
@@ -507,12 +509,12 @@ export function ObsidianGraph({
             </div>
           )}
           <div className="text-xs text-muted-foreground mt-1">
-            연결: {hoveredNode._degree ?? 0}개
+            {t('graph.connections')}: {hoveredNode._degree ?? 0}
           </div>
           <div className="flex items-center gap-2 mt-1">
-            <span className="text-xs text-primary">클릭: 노트 열기</span>
+            <span className="text-xs text-primary">{t('graph.clickToOpen')}</span>
             {onAnalyzeCluster && (hoveredNode._degree ?? 0) > 0 && (
-              <span className="text-xs text-amber-400">우클릭: 클러스터 분석</span>
+              <span className="text-xs text-amber-400">{t('graph.rightClickAnalyze')}</span>
             )}
           </div>
         </div>

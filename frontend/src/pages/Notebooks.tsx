@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { BookOpen, Plus, FileText, Globe, AlertCircle, X } from 'lucide-react'
 import { useNotebooks, useCreateNotebook } from '@/hooks/useNotebooks'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
@@ -8,6 +9,7 @@ import { cn } from '@/lib/utils'
 import type { Notebook } from '@/types/note'
 
 function NotebookCard({ notebook, onClick }: { notebook: Notebook; onClick: () => void }) {
+  const { t } = useTranslation()
   return (
     <button
       onClick={onClick}
@@ -33,7 +35,7 @@ function NotebookCard({ notebook, onClick }: { notebook: Notebook; onClick: () =
       )}
       <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
         <FileText className="h-3.5 w-3.5" />
-        <span>{notebook.note_count}개 노트</span>
+        <span>{t('common.count_notes', { count: notebook.note_count })}</span>
       </div>
     </button>
   )
@@ -46,6 +48,7 @@ function CreateNotebookModal({
   isOpen: boolean
   onClose: () => void
 }) {
+  const { t } = useTranslation()
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const { mutateAsync: createNotebook, isPending } = useCreateNotebook()
@@ -75,11 +78,11 @@ function CreateNotebookModal({
       />
       <div className="relative bg-card rounded-lg shadow-lg w-full max-w-md mx-4 p-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold">새 노트북 만들기</h2>
+          <h2 className="text-lg font-semibold">{t('notebooks.createModalTitle')}</h2>
           <button
             onClick={onClose}
             className="p-1 rounded hover:bg-accent"
-            aria-label="닫기"
+            aria-label={t('common.close')}
           >
             <X className="h-5 w-5" />
           </button>
@@ -89,14 +92,14 @@ function CreateNotebookModal({
           <div className="space-y-4">
             <div>
               <label htmlFor="notebook-name" className="text-sm font-medium">
-                이름
+                {t('notebooks.nameLabel')}
               </label>
               <input
                 id="notebook-name"
                 type="text"
                 value={name}
                 onChange={e => setName(e.target.value)}
-                placeholder="노트북 이름"
+                placeholder={t('notebooks.namePlaceholder')}
                 className="w-full mt-1 px-3 py-2 rounded-md border border-input bg-background focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 required
                 autoFocus
@@ -104,13 +107,13 @@ function CreateNotebookModal({
             </div>
             <div>
               <label htmlFor="notebook-description" className="text-sm font-medium">
-                설명 (선택)
+                {t('notebooks.descLabel')}
               </label>
               <textarea
                 id="notebook-description"
                 value={description}
                 onChange={e => setDescription(e.target.value)}
-                placeholder="노트북 설명"
+                placeholder={t('notebooks.descPlaceholder')}
                 className="w-full mt-1 px-3 py-2 rounded-md border border-input bg-background resize-none focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 rows={3}
               />
@@ -123,7 +126,7 @@ function CreateNotebookModal({
               onClick={onClose}
               className="px-4 py-2 text-sm rounded-md hover:bg-accent"
             >
-              취소
+              {t('common.cancel')}
             </button>
             <button
               type="submit"
@@ -133,7 +136,7 @@ function CreateNotebookModal({
                 'hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed',
               )}
             >
-              {isPending ? '생성 중...' : '만들기'}
+              {isPending ? t('common.creating') : t('common.create')}
             </button>
           </div>
         </form>
@@ -143,6 +146,7 @@ function CreateNotebookModal({
 }
 
 export default function Notebooks() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const { data, isLoading, error } = useNotebooks()
@@ -159,10 +163,10 @@ export default function Notebooks() {
     return (
       <EmptyState
         icon={AlertCircle}
-        title="에러가 발생했습니다"
-        description={error instanceof Error ? error.message : '알 수 없는 오류'}
+        title={t('common.errorOccurred')}
+        description={error instanceof Error ? error.message : t('common.unknownError')}
         action={{
-          label: '다시 시도',
+          label: t('common.retry'),
           onClick: () => window.location.reload(),
         }}
       />
@@ -175,7 +179,7 @@ export default function Notebooks() {
     return (
       <div>
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold">노트북</h1>
+          <h1 className="text-2xl font-bold">{t('notebooks.title')}</h1>
           <button
             onClick={() => setIsCreateOpen(true)}
             className={cn(
@@ -184,16 +188,16 @@ export default function Notebooks() {
             )}
           >
             <Plus className="h-4 w-4" />
-            <span>새 노트북</span>
+            <span>{t('notebooks.newNotebook')}</span>
           </button>
         </div>
 
         <EmptyState
           icon={BookOpen}
-          title="노트북이 없습니다"
-          description="새 노트북을 만들어 노트를 정리해보세요."
+          title={t('notebooks.noNotebooks')}
+          description={t('notebooks.noNotebooksDesc')}
           action={{
-            label: '노트북 만들기',
+            label: t('notebooks.createNotebook'),
             onClick: () => setIsCreateOpen(true),
           }}
         />
@@ -209,7 +213,7 @@ export default function Notebooks() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">노트북</h1>
+        <h1 className="text-2xl font-bold">{t('notebooks.title')}</h1>
         <button
           onClick={() => setIsCreateOpen(true)}
           className={cn(
@@ -218,7 +222,7 @@ export default function Notebooks() {
           )}
         >
           <Plus className="h-4 w-4" />
-          <span>새 노트북</span>
+          <span>{t('notebooks.newNotebook')}</span>
         </button>
       </div>
 

@@ -37,6 +37,7 @@ from app.synology_gateway.client import SynologyApiError, SynologyClient
 from app.synology_gateway.notestation import NoteStationService
 from app.utils.datetime_utils import datetime_to_iso, unix_to_iso
 from app.utils.note_utils import (
+    extract_data_uri_images,
     normalize_db_tags,
     normalize_tags,
     rewrite_image_urls,
@@ -454,8 +455,20 @@ async def get_note(
             except Exception:
                 logger.debug("Could not fetch NAS attachment metadata for note %s", note_id)
 
+        raw_html = db_note.content_html or ""
+
+        # Extract data URI images to local files (lazy migration).
+        # rehype-raw (parse5) cannot handle very large data URI attributes,
+        # so we save them as files and use /api/files/ URLs instead.
+        if "data:image/" in raw_html:
+            raw_html = extract_data_uri_images(raw_html)
+            if raw_html != (db_note.content_html or ""):
+                db_note.content_html = raw_html
+                await db.commit()
+                logger.info("Extracted data URI images for note %s", note_id)
+
         content = rewrite_image_urls(
-            db_note.content_html or "",
+            raw_html,
             note_id,
             attachment_lookup=None,
             image_map=image_map,
@@ -530,7 +543,7 @@ async def get_note(
         created_at=unix_to_iso(note.get("ctime")),
         updated_at=unix_to_iso(note.get("mtime")),
         content=rewrite_image_urls(
-            note.get("content", ""),
+            extract_data_uri_images(note.get("content", "")),
             note_id,
             att_lookup,
             image_map,

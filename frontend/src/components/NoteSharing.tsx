@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { X, Users, UserPlus, Building2, Trash2, Shield, Eye, Edit } from 'lucide-react'
 import { useNoteSharing, NoteAccess } from '@/hooks/useNoteSharing'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
@@ -10,14 +11,18 @@ interface NoteSharingProps {
   onClose: () => void
 }
 
-const PERMISSION_OPTIONS = [
-  { value: 'read', label: '읽기', icon: Eye },
-  { value: 'write', label: '편집', icon: Edit },
-  { value: 'admin', label: '관리', icon: Shield },
-]
+function getPermissionOptions(t: any) {
+  return [
+    { value: 'read', label: t('notebooks.permRead'), icon: Eye },
+    { value: 'write', label: t('notebooks.permWrite'), icon: Edit },
+    { value: 'admin', label: t('notebooks.permAdmin'), icon: Shield },
+  ]
+}
 
 function PermissionBadge({ permission }: { permission: string }) {
-  const option = PERMISSION_OPTIONS.find(o => o.value === permission)
+  const { t } = useTranslation()
+  const options = getPermissionOptions(t)
+  const option = options.find(o => o.value === permission)
   const Icon = option?.icon ?? Eye
 
   return (

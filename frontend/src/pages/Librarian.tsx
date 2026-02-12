@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import DOMPurify from 'dompurify'
 import { useSearch } from '@/hooks/useSearch'
 import { useSearchIndex } from '@/hooks/useSearchIndex'
@@ -23,6 +24,7 @@ const EXAMPLE_QUERIES = [
 ]
 
 export default function Librarian() {
+  const { t } = useTranslation()
   const [searchParams, setSearchParams] = useSearchParams()
   const [query, setQuery] = useState(searchParams.get('q') || '')
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -95,16 +97,16 @@ export default function Librarian() {
         <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 mb-4">
           <BookOpenCheck className="h-7 w-7 text-primary" />
         </div>
-        <h1 className="text-2xl font-bold text-foreground mb-2">AI 사서</h1>
+        <h1 className="text-2xl font-bold text-foreground mb-2">{t('librarian.title')}</h1>
         <p className="text-muted-foreground text-sm max-w-md mx-auto">
-          의미 기반으로 노트를 찾아드립니다. 자연어로 질문하세요.
+          {t('librarian.subtitle')}
         </p>
 
         {/* Index status */}
         <div className="mt-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted/50 text-xs text-muted-foreground">
           <Database className="h-3.5 w-3.5" />
           <span>
-            {indexedNotes.toLocaleString()}/{totalNotes.toLocaleString()} 노트 색인 완료
+            {indexedNotes.toLocaleString()}/{totalNotes.toLocaleString()} {t('settings.indexed')}
           </span>
           {totalNotes > 0 && (
             <div className="w-16 h-1.5 rounded-full bg-muted overflow-hidden">
@@ -119,7 +121,7 @@ export default function Librarian() {
               onClick={() => triggerIndex()}
               className="ml-1 text-primary hover:text-primary/80 font-medium"
             >
-              색인 시작
+              {t('settings.startIndex')}
             </button>
           )}
           {isIndexing && (
@@ -140,7 +142,7 @@ export default function Librarian() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="어떤 내용을 찾고 계신가요?"
+            placeholder={t('librarian.askPlaceholder')}
             rows={2}
             className={cn(
               'w-full resize-none rounded-xl px-4 pt-4 pb-12 text-sm',
@@ -161,7 +163,7 @@ export default function Librarian() {
               )}
             >
               <Sparkles className="h-3.5 w-3.5" />
-              검색
+              {t('common.search')}
             </button>
           </div>
         </div>
@@ -194,10 +196,9 @@ export default function Librarian() {
           <div className="flex items-start gap-3 p-4 rounded-lg bg-amber-50 border border-amber-200 text-sm">
             <AlertCircle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
             <div>
-              <p className="font-medium text-amber-800">색인이 필요합니다</p>
+              <p className="font-medium text-amber-800">{t('settings.searchIndexing')}</p>
               <p className="text-amber-700 mt-0.5">
-                의미 검색을 사용하려면 먼저 노트 임베딩 색인이 필요합니다.
-                설정에서 OpenAI API 키를 등록한 후 색인을 실행해주세요.
+                {t('settings.searchIndexDesc')}
               </p>
             </div>
           </div>
@@ -207,8 +208,8 @@ export default function Librarian() {
         {!query && (
           <EmptyState
             icon={Search}
-            title="자연어로 검색해보세요"
-            description="키워드가 아닌 의미로 찾습니다. 예: '온도에 따른 효소 활성 변화'"
+            title={t('librarian.noConversation')}
+            description={t('librarian.noConversationDesc')}
           />
         )}
 
@@ -216,7 +217,7 @@ export default function Librarian() {
         {isLoading && query && (
           <div className="flex flex-col items-center py-12 gap-3">
             <Loader2 className="h-6 w-6 animate-spin text-primary" />
-            <p className="text-sm text-muted-foreground">노트를 살펴보고 있습니다...</p>
+            <p className="text-sm text-muted-foreground">{t('librarian.thinking')}</p>
           </div>
         )}
 
@@ -224,8 +225,8 @@ export default function Librarian() {
         {isError && query && (
           <EmptyState
             icon={AlertCircle}
-            title="검색 중 오류가 발생했습니다"
-            description={error instanceof Error ? error.message : '알 수 없는 오류'}
+            title={t('common.errorOccurred')}
+            description={error instanceof Error ? error.message : t('common.unknownError')}
           />
         )}
 
@@ -233,8 +234,8 @@ export default function Librarian() {
         {data && allResults.length === 0 && !isLoading && (
           <EmptyState
             icon={FileText}
-            title="관련 노트를 찾지 못했습니다"
-            description="다른 표현으로 다시 검색해보세요"
+            title={t('search.noResults')}
+            description={t('search.noResultsDesc')}
           />
         )}
 
@@ -243,7 +244,7 @@ export default function Librarian() {
           <div>
             <div className="text-sm text-muted-foreground mb-4">
               <Sparkles className="inline h-3.5 w-3.5 mr-1 text-primary" />
-              <span className="font-medium text-foreground">{totalCount}</span>개의 관련 노트
+              {t('search.resultCount', { count: totalCount })}
             </div>
 
             <ul className="space-y-3" role="list">
@@ -282,7 +283,7 @@ export default function Librarian() {
                               result.score >= 0.7 ? 'bg-green-500' :
                               result.score >= 0.4 ? 'bg-amber-500' : 'bg-muted-foreground',
                             )} />
-                            관련도 {(result.score * 100).toFixed(0)}%
+                            {t('search.relevance')} {(result.score * 100).toFixed(0)}%
                           </span>
                         </div>
                       </div>
@@ -298,7 +299,7 @@ export default function Librarian() {
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
               )}
               {!hasNextPage && allResults.length > 0 && (
-                <p className="text-sm text-muted-foreground">모든 결과를 불러왔습니다</p>
+                <p className="text-sm text-muted-foreground">{t('search.results')}</p>
               )}
             </div>
           </div>

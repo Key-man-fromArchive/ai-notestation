@@ -5,6 +5,7 @@
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { FileText, AlertCircle, FolderOpen, Folder, BookOpen, Search, X } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useNotes } from '@/hooks/useNotes'
 import { useNotebooks } from '@/hooks/useNotebooks'
 import { NoteList } from '@/components/NoteList'
@@ -13,6 +14,7 @@ import { EmptyState } from '@/components/EmptyState'
 import { cn } from '@/lib/utils'
 
 export default function Notes() {
+  const { t, i18n } = useTranslation()
   const [searchParams, setSearchParams] = useSearchParams()
   const selectedNotebook = searchParams.get('notebook') || undefined
   const [filterText, setFilterText] = useState('')
@@ -55,9 +57,9 @@ export default function Notes() {
       .sort((a, b) => b.note_count - a.note_count)
     const empty = items
       .filter((nb) => nb.note_count === 0)
-      .sort((a, b) => a.name.localeCompare(b.name, 'ko'))
+      .sort((a, b) => a.name.localeCompare(b.name, i18n.language))
     return { activeNotebooks: active, emptyNotebooks: empty }
-  }, [notebooksData])
+  }, [notebooksData, i18n.language])
 
   // 노트북 필터 변경
   const handleNotebookChange = (notebook: string | null) => {
@@ -82,10 +84,10 @@ export default function Notes() {
     return (
       <EmptyState
         icon={AlertCircle}
-        title="에러가 발생했습니다"
-        description={error instanceof Error ? error.message : '알 수 없는 오류'}
+        title={t('common.errorOccurred')}
+        description={error instanceof Error ? error.message : t('common.unknownError')}
         action={{
-          label: '다시 시도',
+          label: t('common.retry'),
           onClick: () => window.location.reload(),
         }}
       />
@@ -97,8 +99,8 @@ export default function Notes() {
     return (
       <EmptyState
         icon={FileText}
-        title="노트가 없습니다"
-        description="새로운 노트를 작성해보세요."
+        title={t('notes.noNotes')}
+        description={t('notes.noNotesDesc')}
       />
     )
   }
@@ -109,7 +111,7 @@ export default function Notes() {
       <aside className="w-64 border-r border-border flex flex-col overflow-hidden">
         <div className="p-4 pb-2 border-b border-border">
           <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-            노트북
+            {t('notes.notebooks')}
           </h2>
         </div>
 
@@ -127,7 +129,7 @@ export default function Notes() {
             )}
           >
             <BookOpen className="h-4 w-4 flex-shrink-0" aria-hidden="true" />
-            <span className="flex-1 truncate">전체 노트</span>
+            <span className="flex-1 truncate">{t('notes.allNotes')}</span>
             <span className={cn(
               'text-xs font-medium px-1.5 py-0.5 rounded-full min-w-[1.5rem] text-center',
               !selectedNotebook
@@ -186,7 +188,7 @@ export default function Notes() {
                   <div className="my-2 border-t border-border" />
                   <div className="px-3 py-1">
                     <span className="text-[10px] font-medium text-muted-foreground/60 uppercase tracking-wider">
-                      비어있음
+                      {t('common.empty')}
                     </span>
                   </div>
                   {emptyNotebooks.map((notebook) => (
@@ -218,10 +220,10 @@ export default function Notes() {
           <div className="flex items-center gap-3 mb-4">
             <div className="flex items-baseline gap-3 flex-1 min-w-0">
               <h1 className="text-2xl font-bold text-foreground truncate">
-                {selectedNotebook || '모든 노트'}
+                {selectedNotebook || t('notes.allNotes')}
               </h1>
               <span className="text-sm text-muted-foreground shrink-0">
-                {filterText ? `${filteredNotes.length} / ${totalNotes}개` : `${totalNotes}개`}
+                {filterText ? `${filteredNotes.length} / ${t('common.count_items', { count: totalNotes })}` : t('common.count_items', { count: totalNotes })}
               </span>
             </div>
           </div>
@@ -233,7 +235,7 @@ export default function Notes() {
               type="text"
               value={filterText}
               onChange={(e) => setFilterText(e.target.value)}
-              placeholder="노트 필터링..."
+              placeholder={t('notes.filterPlaceholder')}
               className={cn(
                 'flex h-9 w-full rounded-lg border border-input bg-background pl-9 pr-8 py-2',
                 'text-sm text-foreground placeholder:text-muted-foreground',
@@ -245,7 +247,7 @@ export default function Notes() {
               <button
                 onClick={() => setFilterText('')}
                 className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded text-muted-foreground hover:text-foreground transition-colors"
-                aria-label="필터 초기화"
+                aria-label={t('common.clearFilter')}
               >
                 <X className="h-3.5 w-3.5" />
               </button>
@@ -255,20 +257,20 @@ export default function Notes() {
           {allNotes.length === 0 ? (
             <EmptyState
               icon={FileText}
-              title="노트가 없습니다"
-              description={selectedNotebook ? `"${selectedNotebook}" 노트북이 비어 있습니다.` : '새로운 노트를 작성해보세요.'}
+              title={t('notes.noNotes')}
+              description={selectedNotebook ? t('notes.notebookEmpty', { notebook: selectedNotebook }) : t('notes.noNotesDesc')}
               action={selectedNotebook ? {
-                label: '전체 노트 보기',
+                label: t('notes.viewAllNotes'),
                 onClick: () => handleNotebookChange(null),
               } : undefined}
             />
           ) : filteredNotes.length === 0 ? (
             <EmptyState
               icon={Search}
-              title="일치하는 노트가 없습니다"
-              description={`"${filterText}"에 해당하는 노트를 찾을 수 없습니다`}
+              title={t('notes.noMatchingNotes')}
+              description={t('notes.noMatchingNotesDesc', { query: filterText })}
               action={{
-                label: '필터 초기화',
+                label: t('notes.clearFilter'),
                 onClick: () => setFilterText(''),
               }}
             />

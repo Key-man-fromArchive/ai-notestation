@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Save } from 'lucide-react'
 import type { Setting } from './types'
@@ -25,12 +26,18 @@ export function SettingRow({
   onCancel,
   onEditValueChange,
 }: SettingRowProps) {
+  const { t } = useTranslation()
   const isEditing = editingKey === setting.key
+
+  // Check if label is a translation key (starts with 'settings.')
+  const displayLabel = setting.label.startsWith('settings.')
+    ? t(setting.label)
+    : setting.label
 
   return (
     <div className="flex flex-col gap-2">
       <label htmlFor={setting.key} className="text-sm font-medium text-foreground">
-        {setting.label}
+        {displayLabel}
       </label>
       <div className="flex gap-2">
         <input
@@ -62,17 +69,17 @@ export function SettingRow({
                 'transition-colors duration-200',
                 'disabled:opacity-50 disabled:cursor-not-allowed',
               )}
-              aria-label="저장"
+              aria-label={t('common.save')}
             >
               <Save className="h-4 w-4" aria-hidden="true" />
-              저장
+              {t('common.save')}
             </button>
             <button
               onClick={onCancel}
               disabled={isPending}
               className="px-4 py-2 bg-muted text-muted-foreground rounded-md hover:bg-muted/80 transition-colors"
             >
-              취소
+              {t('common.cancel')}
             </button>
           </>
         ) : (
@@ -80,7 +87,7 @@ export function SettingRow({
             onClick={() => onEdit(setting.key, currentValue)}
             className="px-4 py-2 bg-muted text-muted-foreground rounded-md hover:bg-muted/80 transition-colors"
           >
-            수정
+            {t('common.edit')}
           </button>
         )}
       </div>

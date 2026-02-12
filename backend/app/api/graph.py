@@ -4,7 +4,7 @@ import json
 import logging
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select, text
@@ -14,6 +14,8 @@ from app.database import get_db
 from app.models import Note
 from app.services.auth_service import get_current_user
 from app.services.graph_service import compute_graph_analysis
+from app.utils.i18n import get_language
+from app.utils.messages import msg
 
 logger = logging.getLogger(__name__)
 
@@ -334,6 +336,7 @@ class ClusterInsightRequest(BaseModel):
 @router.post("/cluster-insight")
 async def cluster_insight(
     request: ClusterInsightRequest,
+    http_request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[dict, Depends(get_current_user)],
 ) -> StreamingResponse:
@@ -353,6 +356,8 @@ async def cluster_insight(
     from app.api.ai import _inject_oauth_if_available, get_ai_router
     from app.services.oauth_service import OAuthService
 
+    lang = get_language(http_request)
+
     # Fetch note content
     stmt = select(
         Note.id, Note.title, Note.content_text, Note.notebook_name
@@ -362,11 +367,11 @@ async def cluster_insight(
 
     if len(rows) < 2:
         async def not_enough():
-            msg = json.dumps(
-                {"chunk": "분석할 노트가 충분하지 않습니다. 최소 2개의 노트가 필요합니다."},
+            message = json.dumps(
+                {"chunk": msg("graph.cluster_insufficient_notes", lang)},
                 ensure_ascii=False,
             )
-            yield f"data: {msg}\n\n"
+            yield f"data: {message}\n\n"
             yield "data: [DONE]\n\n"
 
         return StreamingResponse(

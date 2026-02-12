@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import {
   LayoutDashboard,
   Database,
@@ -112,11 +113,11 @@ interface ProvidersResponse {
 // ---------------------------------------------------------------------------
 
 const TABS = [
-  { id: 'overview', label: '개요', icon: LayoutDashboard },
-  { id: 'database', label: '데이터베이스', icon: Database },
-  { id: 'users', label: '사용자', icon: Users },
-  { id: 'nas', label: 'NAS', icon: Server },
-  { id: 'providers', label: 'LLM 프로바이더', icon: Brain },
+  { id: 'overview', labelKey: 'admin.overview', icon: LayoutDashboard },
+  { id: 'database', labelKey: 'admin.database', icon: Database },
+  { id: 'users', labelKey: 'admin.users', icon: Users },
+  { id: 'nas', labelKey: 'admin.nas', icon: Server },
+  { id: 'providers', labelKey: 'admin.providers', icon: Brain },
 ] as const
 
 type TabId = (typeof TABS)[number]['id']
@@ -133,6 +134,7 @@ const ROLE_CONFIG: Record<string, { icon: typeof Crown; color: string; label: st
 // ---------------------------------------------------------------------------
 
 export default function Admin() {
+  const { t } = useTranslation()
   const { user } = useAuth()
   const [activeTab, setActiveTab] = useState<TabId>('overview')
 
@@ -144,8 +146,8 @@ export default function Admin() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-bold mb-1">관리자 대시보드</h1>
-        <p className="text-sm text-muted-foreground">시스템 모니터링 및 관리</p>
+        <h1 className="text-2xl font-bold mb-1">{t('admin.title')}</h1>
+        <p className="text-sm text-muted-foreground">{t('admin.systemInfo')}</p>
       </div>
 
       {/* Tab Navigation */}
@@ -164,7 +166,7 @@ export default function Admin() {
               )}
             >
               <Icon className="h-4 w-4" />
-              {tab.label}
+              {t(tab.labelKey)}
             </button>
           )
         })}
@@ -197,6 +199,7 @@ function StorageItem({ label, value, sub }: { label: string; value: string; sub?
 }
 
 function OverviewTab() {
+  const { t } = useTranslation()
   const { data: overview, isLoading: overviewLoading } = useQuery({
     queryKey: ['admin', 'overview'],
     queryFn: () => apiClient.get<OverviewData>('/admin/overview'),
@@ -210,10 +213,10 @@ function OverviewTab() {
   if (overviewLoading || usageLoading) return <LoadingSpinner />
 
   const stats = [
-    { label: '활성 사용자', value: overview?.active_users ?? 0, icon: Users },
-    { label: '전체 노트', value: overview?.total_notes ?? 0, icon: FileText },
-    { label: '임베딩 수', value: overview?.total_embeddings ?? 0, icon: Brain },
-    { label: '조직 수', value: overview?.total_organizations ?? 0, icon: Building2 },
+    { label: t('operations.user'), value: overview?.active_users ?? 0, icon: Users },
+    { label: t('dashboard.totalNotes'), value: overview?.total_notes ?? 0, icon: FileText },
+    { label: t('admin.embeddingCount'), value: overview?.total_embeddings ?? 0, icon: Brain },
+    { label: t('admin.orgSettings'), value: overview?.total_organizations ?? 0, icon: Building2 },
   ]
 
   return (
@@ -243,13 +246,13 @@ function OverviewTab() {
         <div className="p-4 border border-border rounded-lg bg-card">
           <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
             <HardDrive className="h-5 w-5" />
-            스토리지 사용량
+            {t('admin.storageUsed')}
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <StorageItem label="전체" value={usage.storage.total} />
-            <StorageItem label="이미지" value={usage.storage.images.human} sub={`${usage.images.count}개 파일`} />
-            <StorageItem label="내보내기" value={usage.storage.exports.human} />
-            <StorageItem label="업로드" value={usage.storage.uploads.human} />
+            <StorageItem label={t('common.default')} value={usage.storage.total} />
+            <StorageItem label={t('admin.imageCount')} value={usage.storage.images.human} sub={`${usage.images.count} ${t('common.count_items', {count: usage.images.count})}`} />
+            <StorageItem label={t('settings.backup')} value={usage.storage.exports.human} />
+            <StorageItem label={t('common.default')} value={usage.storage.uploads.human} />
           </div>
         </div>
       )}

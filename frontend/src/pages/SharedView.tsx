@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useParams } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import {
   BookOpen,
   FileText,
@@ -12,19 +13,19 @@ import { useSharedContent } from '@/hooks/useSharedContent'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
 import { cn } from '@/lib/utils'
 
-function formatExpiryDate(dateString: string): string {
+function formatExpiryDate(dateString: string, t: (key: string, options?: any) => string): string {
   const expiryDate = new Date(dateString)
   const now = new Date()
   const diffMs = expiryDate.getTime() - now.getTime()
   const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
 
   if (diffDays <= 0) {
-    return '만료됨'
+    return t('sharing.sharedViewExpired')
   }
   if (diffDays === 1) {
-    return '1일 후 만료'
+    return t('sharing.expireIn1Day') || '1일 후 만료'
   }
-  return `${diffDays}일 후 만료`
+  return t('sharing.expireInDays', { days: diffDays }) || `${diffDays}일 후 만료`
 }
 
 function EmailInputModal({
@@ -36,6 +37,7 @@ function EmailInputModal({
   onCancel: () => void
   errorMessage?: string
 }) {
+  const { t } = useTranslation()
   const [email, setEmail] = useState('')
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -53,12 +55,11 @@ function EmailInputModal({
           <div className="p-2 rounded-full bg-primary/10">
             <Mail className="h-5 w-5 text-primary" />
           </div>
-          <h2 className="text-lg font-semibold">이메일 확인</h2>
+          <h2 className="text-lg font-semibold">{t('common.email')}</h2>
         </div>
 
         <p className="text-sm text-muted-foreground mb-4">
-          이 콘텐츠는 특정 이메일 주소로만 접근 가능합니다.
-          이메일 주소를 입력해주세요.
+          {t('sharing.enterPassword')}
         </p>
 
         {errorMessage && (
@@ -83,7 +84,7 @@ function EmailInputModal({
               onClick={onCancel}
               className="flex-1 px-4 py-2 text-sm rounded-lg border hover:bg-accent"
             >
-              취소
+              {t('common.cancel')}
             </button>
             <button
               type="submit"
@@ -94,7 +95,7 @@ function EmailInputModal({
                 'hover:bg-primary/90 disabled:opacity-50',
               )}
             >
-              확인
+              {t('common.confirm')}
             </button>
           </div>
         </form>
@@ -110,31 +111,32 @@ function ErrorState({
   status?: number
   message: string
 }) {
+  const { t } = useTranslation()
   const getErrorContent = () => {
     if (status === 410) {
       return {
         icon: Clock,
-        title: '링크가 만료되었습니다',
-        description: '이 공유 링크는 더 이상 유효하지 않습니다.',
+        title: t('sharing.sharedViewExpired'),
+        description: t('sharing.sharedViewExpired'),
       }
     }
     if (status === 403) {
       return {
         icon: XCircle,
-        title: '접근 권한이 없습니다',
+        title: t('sharing.accessDenied'),
         description: message,
       }
     }
     if (status === 404) {
       return {
         icon: AlertCircle,
-        title: '링크를 찾을 수 없습니다',
-        description: '유효하지 않은 공유 링크입니다.',
+        title: t('sharing.sharedViewNotFound'),
+        description: t('sharing.sharedViewNotFound'),
       }
     }
     return {
       icon: AlertCircle,
-      title: '오류가 발생했습니다',
+      title: t('common.errorOccurred'),
       description: message,
     }
   }
@@ -167,6 +169,7 @@ function NotebookView({
   }
   expiresAt: string | null
 }) {
+  const { t } = useTranslation()
   return (
     <div className="max-w-3xl mx-auto">
       <div className="flex items-start gap-4 mb-6">
@@ -181,7 +184,7 @@ function NotebookView({
           {expiresAt && (
             <p className="mt-2 text-sm text-amber-600 flex items-center gap-1">
               <Clock className="h-4 w-4" />
-              {formatExpiryDate(expiresAt)}
+              {formatExpiryDate(expiresAt, t)}
             </p>
           )}
         </div>
@@ -190,11 +193,11 @@ function NotebookView({
       <div>
         <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
           <FileText className="h-5 w-5" />
-          노트 ({notebook.notes.length}개)
+          {t('notebooks.notes', { count: notebook.notes.length })}
         </h2>
         {notebook.notes.length === 0 ? (
           <p className="text-center py-8 text-muted-foreground">
-            이 노트북에 노트가 없습니다.
+            {t('notes.addNotes')}
           </p>
         ) : (
           <div className="space-y-3">
@@ -228,6 +231,7 @@ function NoteView({
   }
   expiresAt: string | null
 }) {
+  const { t } = useTranslation()
   return (
     <div className="max-w-3xl mx-auto">
       <div className="flex items-start gap-4 mb-6">
@@ -239,7 +243,7 @@ function NoteView({
           {expiresAt && (
             <p className="mt-2 text-sm text-amber-600 flex items-center gap-1">
               <Clock className="h-4 w-4" />
-              {formatExpiryDate(expiresAt)}
+              {formatExpiryDate(expiresAt, t)}
             </p>
           )}
         </div>
@@ -254,6 +258,7 @@ function NoteView({
 }
 
 export default function SharedView() {
+  const { t } = useTranslation()
   const { token } = useParams<{ token: string }>()
   const [email, setEmail] = useState<string>()
   const [showEmailModal, setShowEmailModal] = useState(false)
@@ -291,7 +296,7 @@ export default function SharedView() {
         <EmailInputModal
           onSubmit={handleEmailSubmit}
           onCancel={() => window.history.back()}
-          errorMessage="이메일 주소가 일치하지 않습니다."
+          errorMessage={t('sharing.accessDenied')}
         />
       )
     }
@@ -308,7 +313,7 @@ export default function SharedView() {
       <header className="border-b py-4 px-6 mb-6">
         <div className="max-w-3xl mx-auto flex items-center justify-between">
           <span className="text-sm text-muted-foreground">
-            LabNote AI 공유 콘텐츠
+            {t('sharing.sharedView')}
           </span>
         </div>
       </header>

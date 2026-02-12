@@ -2,6 +2,7 @@
 // @SPEC docs/plans/2026-01-29-labnote-ai-design.md#search-페이지
 
 import { useState, useRef, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useSearchSuggestions } from '@/hooks/useSearchSuggestions'
@@ -22,9 +23,10 @@ interface SearchBarProps {
 export function SearchBar({
   value,
   onChange,
-  placeholder = '노트 검색...',
+  placeholder,
   className,
 }: SearchBarProps) {
+  const { t } = useTranslation()
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState(-1)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -32,6 +34,7 @@ export function SearchBar({
 
   const { data: suggestionsData } = useSearchSuggestions(value)
   const suggestions = suggestionsData?.suggestions ?? []
+  const defaultPlaceholder = placeholder || t('search.placeholder')
 
   // Close suggestions on outside click
   useEffect(() => {
@@ -74,7 +77,7 @@ export function SearchBar({
         ref={inputRef}
         type="search"
         role="searchbox"
-        aria-label="노트 검색"
+        aria-label={t('search.searchLabel')}
         aria-expanded={showSuggestions && suggestions.length > 0}
         aria-autocomplete="list"
         value={value}
@@ -85,7 +88,7 @@ export function SearchBar({
         }}
         onFocus={() => setShowSuggestions(true)}
         onKeyDown={handleKeyDown}
-        placeholder={placeholder}
+        placeholder={defaultPlaceholder}
         className={cn(
           'w-full pl-10 pr-4 py-2',
           'border border-input rounded-md',
