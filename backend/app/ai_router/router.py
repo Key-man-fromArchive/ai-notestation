@@ -116,6 +116,7 @@ class AIRouter:
             **kwargs: Extra keyword arguments forwarded to the provider constructor.
         """
         try:
+            registry_key = name
             if name == "openai":
                 from app.ai_router.providers.chatgpt_codex import (
                     ChatGPTCodexProvider,
@@ -127,10 +128,12 @@ class AIRouter:
                     logger.warning("Cannot extract chatgpt_account_id from token")
                     return
                 provider: AIProvider = ChatGPTCodexProvider(access_token=access_token, account_id=account_id)
+                # Register as separate key to avoid overwriting the API-key provider
+                registry_key = "openai-codex"
             elif name == "anthropic":
                 from app.ai_router.providers.anthropic import AnthropicProvider
 
-                provider = AnthropicProvider(api_key=access_token)
+                provider = AnthropicProvider(auth_token=access_token)
             elif name == "google":
                 from app.ai_router.providers.google import GoogleProvider
 
@@ -139,8 +142,8 @@ class AIRouter:
                 logger.warning("OAuth not supported for provider: %s", name)
                 return
 
-            self._providers[name] = provider
-            logger.info("Registered OAuth provider: %s", name)
+            self._providers[registry_key] = provider
+            logger.info("Registered OAuth provider: %s (key=%s)", name, registry_key)
         except Exception:
             logger.warning("Failed to register OAuth provider: %s", name, exc_info=True)
 

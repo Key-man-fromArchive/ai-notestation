@@ -167,8 +167,9 @@ _SUPPORTED_MODELS: list[ModelInfo] = [
     ),
 ]
 
-# Models that require max_completion_tokens instead of max_tokens
-# and do not support the temperature parameter.
+# Models that require max_completion_tokens instead of max_tokens.
+_MAX_COMPLETION_TOKENS_PREFIXES = ("o1", "o3", "o4", "gpt-5", "gpt-4.1")
+# Reasoning models additionally do not support the temperature parameter.
 _REASONING_MODEL_PREFIXES = ("o1", "o3", "o4")
 
 
@@ -198,13 +199,15 @@ class OpenAIProvider(AIProvider):
     def _normalize_kwargs(model: str, kwargs: dict[str, Any]) -> dict[str, Any]:
         """Remap kwargs for models with non-standard parameter names.
 
-        OpenAI reasoning models (o1, o3, o4-*) require
-        ``max_completion_tokens`` instead of ``max_tokens`` and do not
-        support the ``temperature`` parameter.
+        Newer OpenAI models (GPT-5.x, GPT-4.1, o-series) require
+        ``max_completion_tokens`` instead of ``max_tokens``.
+        Reasoning models (o1, o3, o4) additionally do not support
+        the ``temperature`` parameter.
         """
-        if model.startswith(_REASONING_MODEL_PREFIXES):
+        if model.startswith(_MAX_COMPLETION_TOKENS_PREFIXES):
             if "max_tokens" in kwargs:
                 kwargs["max_completion_tokens"] = kwargs.pop("max_tokens")
+        if model.startswith(_REASONING_MODEL_PREFIXES):
             kwargs.pop("temperature", None)
         return kwargs
 

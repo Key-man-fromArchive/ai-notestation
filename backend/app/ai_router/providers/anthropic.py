@@ -38,7 +38,21 @@ class AnthropicProvider(AIProvider):
     """
 
     # @TASK P3-T3.3 - Constructor with API key validation
-    def __init__(self, api_key: str | None = None) -> None:
+    def __init__(
+        self,
+        api_key: str | None = None,
+        *,
+        auth_token: str | None = None,
+    ) -> None:
+        if auth_token:
+            # OAuth token → Authorization: Bearer header + required beta flag
+            self._client = anthropic.AsyncAnthropic(
+                auth_token=auth_token,
+                default_headers={"anthropic-beta": "oauth-2025-04-20"},
+            )
+            self.is_oauth = True
+            return
+
         resolved_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
         if not resolved_key:
             raise ProviderError(
@@ -49,6 +63,7 @@ class AnthropicProvider(AIProvider):
                 ),
             )
         self._client = anthropic.AsyncAnthropic(api_key=resolved_key)
+        self.is_oauth = False
 
     # ------------------------------------------------------------------
     # Helpers

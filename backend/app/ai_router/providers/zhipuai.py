@@ -32,8 +32,8 @@ _PROVIDER_NAME = "zhipuai"
 
 _AVAILABLE_MODELS = [
     ModelInfo(
-        id="glm-4.7-flash",
-        name="GLM-4.7 Flash",
+        id="glm-5",
+        name="GLM-5",
         provider=_PROVIDER_NAME,
         max_tokens=128000,
         supports_streaming=True,
@@ -41,6 +41,13 @@ _AVAILABLE_MODELS = [
     ModelInfo(
         id="glm-4.7",
         name="GLM-4.7",
+        provider=_PROVIDER_NAME,
+        max_tokens=128000,
+        supports_streaming=True,
+    ),
+    ModelInfo(
+        id="glm-4.7-flash",
+        name="GLM-4.7 Flash",
         provider=_PROVIDER_NAME,
         max_tokens=128000,
         supports_streaming=True,
@@ -156,10 +163,18 @@ class ZhipuAIProvider(AIProvider):
                 message=str(exc),
             ) from exc
 
-        for chunk in sync_iter:
-            content = chunk.choices[0].delta.content
-            if content is not None:
-                yield content
+        try:
+            for chunk in sync_iter:
+                content = chunk.choices[0].delta.content
+                if content is not None:
+                    yield content
+        except ProviderError:
+            raise
+        except Exception as exc:
+            raise ProviderError(
+                provider=_PROVIDER_NAME,
+                message=str(exc),
+            ) from exc
 
     def available_models(self) -> list[ModelInfo]:
         """Return the list of supported GLM models."""

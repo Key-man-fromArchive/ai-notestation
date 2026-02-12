@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 
 _PROVIDER_NAME = "openai-codex"
 _CODEX_BASE_URL = "https://chatgpt.com/backend-api"
+_REASONING_MODEL_PREFIXES = ("o1", "o3", "o4")
 
 _SUPPORTED_MODELS: list[ModelInfo] = [
     ModelInfo(
@@ -58,16 +59,6 @@ _SUPPORTED_MODELS: list[ModelInfo] = [
     ),
     ModelInfo(
         id="o4-mini", name="o4 mini (ChatGPT)", provider=_PROVIDER_NAME, max_tokens=200_000, supports_streaming=True
-    ),
-    ModelInfo(
-        id="gpt-4o", name="GPT-4o (ChatGPT)", provider=_PROVIDER_NAME, max_tokens=128_000, supports_streaming=True
-    ),
-    ModelInfo(
-        id="gpt-4o-mini",
-        name="GPT-4o mini (ChatGPT)",
-        provider=_PROVIDER_NAME,
-        max_tokens=128_000,
-        supports_streaming=True,
     ),
 ]
 
@@ -115,17 +106,31 @@ class ChatGPTCodexProvider(AIProvider):
         }
 
     @staticmethod
-    def _messages_to_input(messages: list[Message]) -> str:
-        """Convert Message list to a single input string for the Responses API."""
-        parts = []
+    def _split_messages(
+        messages: list[Message],
+    ) -> tuple[str, list[dict[str, Any]]]:
+        """Split messages into instructions and Responses API input items.
+
+        The Responses API requires:
+        - ``instructions``: system-level string
+        - ``input``: list of message objects
+
+        Returns:
+            (instructions, input_items) tuple.
+        """
+        instructions_parts: list[str] = []
+        input_items: list[dict[str, Any]] = []
         for m in messages:
             if m.role == "system":
-                parts.append(f"[System]\n{m.content}")
-            elif m.role == "user":
-                parts.append(m.content)
-            elif m.role == "assistant":
-                parts.append(f"[Assistant]\n{m.content}")
-        return "\n\n".join(parts)
+                instructions_parts.append(m.content)
+            else:
+                input_items.append({
+                    "type": "message",
+                    "role": m.role,
+                    "content": [{"type": "input_text", "text": m.content}],
+                })
+        instructions = "\n\n".join(instructions_parts)
+        return instructions, input_items
 
     async def chat(
         self,
@@ -134,12 +139,15 @@ class ChatGPTCodexProvider(AIProvider):
         **kwargs: Any,
     ) -> AIResponse:
         url = f"{_CODEX_BASE_URL}/codex/responses"
+        instructions, input_items = self._split_messages(messages)
         body: dict[str, Any] = {
             "model": model,
-            "input": self._messages_to_input(messages),
+            "instructions": instructions or "You are a helpful assistant.",
+            "input": input_items,
             "stream": False,
         }
-        if "temperature" in kwargs:
+        is_reasoning = model.startswith(_REASONING_MODEL_PREFIXES)
+        if "temperature" in kwargs and not is_reasoning:
             body["temperature"] = kwargs["temperature"]
         if "max_tokens" in kwargs:
             body["max_output_tokens"] = kwargs["max_tokens"]
@@ -189,12 +197,15 @@ class ChatGPTCodexProvider(AIProvider):
         **kwargs: Any,
     ) -> AsyncIterator[str]:
         url = f"{_CODEX_BASE_URL}/codex/responses"
+        instructions, input_items = self._split_messages(messages)
         body: dict[str, Any] = {
             "model": model,
-            "input": self._messages_to_input(messages),
+            "instructions": instructions or "You are a helpful assistant.",
+            "input": input_items,
             "stream": True,
         }
-        if "temperature" in kwargs:
+        is_reasoning = model.startswith(_REASONING_MODEL_PREFIXES)
+        if "temperature" in kwargs and not is_reasoning:
             body["temperature"] = kwargs["temperature"]
         if "max_tokens" in kwargs:
             body["max_output_tokens"] = kwargs["max_tokens"]

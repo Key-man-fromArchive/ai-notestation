@@ -356,9 +356,14 @@ class GoogleProvider(AIProvider):
         except Exception as exc:
             raise ProviderError(provider=_PROVIDER_NAME, message=str(exc)) from exc
 
-        for chunk in response_stream:
-            if chunk.text:
-                yield chunk.text
+        try:
+            for chunk in response_stream:
+                if chunk.text:
+                    yield chunk.text
+        except ProviderError:
+            raise
+        except Exception as exc:
+            raise ProviderError(provider=_PROVIDER_NAME, message=str(exc)) from exc
 
     async def _stream_rest(
         self,

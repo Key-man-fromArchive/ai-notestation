@@ -99,14 +99,9 @@ def _get_oauth_service() -> OAuthService:
 
 _OAUTH_PROVIDER_MODELS: dict[str, list[ModelInfo]] = {
     "anthropic": [
-        ModelInfo(id="claude-opus-4-6", name="Claude Opus 4.6 (OAuth)", provider="anthropic", max_tokens=200_000, supports_streaming=True),
         ModelInfo(id="claude-sonnet-4-5", name="Claude Sonnet 4.5 (OAuth)", provider="anthropic", max_tokens=200_000, supports_streaming=True),
         ModelInfo(id="claude-haiku-4-5", name="Claude Haiku 4.5 (OAuth)", provider="anthropic", max_tokens=200_000, supports_streaming=True),
-        ModelInfo(id="claude-opus-4-5", name="Claude Opus 4.5 (OAuth)", provider="anthropic", max_tokens=200_000, supports_streaming=True),
         ModelInfo(id="claude-sonnet-4-0", name="Claude Sonnet 4 (OAuth)", provider="anthropic", max_tokens=200_000, supports_streaming=True),
-        ModelInfo(id="claude-3-7-sonnet-latest", name="Claude 3.7 Sonnet (OAuth)", provider="anthropic", max_tokens=200_000, supports_streaming=True),
-        ModelInfo(id="claude-3-5-sonnet-20241022", name="Claude 3.5 Sonnet (OAuth)", provider="anthropic", max_tokens=200_000, supports_streaming=True),
-        ModelInfo(id="claude-3-haiku-20240307", name="Claude 3 Haiku (OAuth)", provider="anthropic", max_tokens=200_000, supports_streaming=True),
     ],
     "google": [
         ModelInfo(id="gemini-2.0-flash", name="Gemini 2.0 Flash", provider="google", max_tokens=1_048_576, supports_streaming=True),
@@ -154,7 +149,7 @@ def _resolve_provider_name(model: str | None) -> str | None:
         return None
     if model.startswith("claude"):
         return "anthropic"
-    if model.startswith("gpt-"):
+    if model.startswith("gpt-") or model.startswith(("o1", "o3", "o4")):
         return "openai"
     if model.startswith("gemini"):
         return "google"
@@ -272,7 +267,8 @@ async def _search_and_fetch_notes(
         combined_content: concatenated note texts, capped at 12k chars.
     """
     fts = FullTextSearchEngine(session=db)
-    results = await fts.search(query, limit=limit)
+    search_page = await fts.search(query, limit=limit)
+    results = search_page.results
 
     if not results:
         return [], ""
