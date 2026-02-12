@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { X, TrendingUp, AlertCircle, BarChart3, Layers, Sparkles, Loader2, Square, ChevronDown, ChevronRight, ExternalLink } from 'lucide-react'
 import type { GraphAnalysis, GraphData } from '@/hooks/useGlobalGraph'
@@ -43,22 +43,38 @@ export function GraphAnalysisPanel({
   const [expandedHub, setExpandedHub] = useState<number | null>(null)
   const { network_stats, hub_notes, orphan_notes, orphan_count, cluster_summary } = analysis
 
-  // Build neighbor lookup from graph data
-  const getNeighbors = (noteId: number) => {
-    if (!graphData) return []
-    const neighborIds = new Set<number>()
+  // Pre-built adjacency map + node map (computed once per graphData change)
+  const adjacencyMap = useMemo(() => {
+    const map = new Map<number, Set<number>>()
+    if (!graphData?.links) return map
     for (const link of graphData.links) {
       const src = typeof link.source === 'object' ? (link.source as { id: number }).id : link.source
       const tgt = typeof link.target === 'object' ? (link.target as { id: number }).id : link.target
-      if (src === noteId) neighborIds.add(tgt)
-      if (tgt === noteId) neighborIds.add(src)
+      if (!map.has(src)) map.set(src, new Set())
+      if (!map.has(tgt)) map.set(tgt, new Set())
+      map.get(src)!.add(tgt)
+      map.get(tgt)!.add(src)
     }
-    const nodeMap = new Map(graphData.nodes.map(n => [n.id, n]))
-    return [...neighborIds]
-      .map(id => nodeMap.get(id))
-      .filter(Boolean)
-      .map(n => ({ id: n!.id, note_key: n!.note_key, label: n!.label, notebook: n!.notebook }))
-  }
+    return map
+  }, [graphData?.links])
+
+  const nodeMap = useMemo(() => {
+    if (!graphData?.nodes) return new Map<number, (typeof graphData.nodes)[number]>()
+    return new Map(graphData.nodes.map(n => [n.id, n]))
+  }, [graphData?.nodes])
+
+  // O(degree) lookup instead of O(links) full scan
+  const getNeighbors = useCallback(
+    (noteId: number) => {
+      const neighborIds = adjacencyMap.get(noteId)
+      if (!neighborIds) return []
+      return [...neighborIds]
+        .map(id => nodeMap.get(id))
+        .filter(Boolean)
+        .map(n => ({ id: n!.id, note_key: n!.note_key, label: n!.label, notebook: n!.notebook }))
+    },
+    [adjacencyMap, nodeMap]
+  )
 
   // Switch to insight tab when streaming starts
   if (clusterInsight?.isStreaming && activeTab !== 'insight') {

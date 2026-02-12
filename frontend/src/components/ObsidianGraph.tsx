@@ -49,8 +49,9 @@ function getNotebookColor(notebook: string | null): string {
   return NOTEBOOK_COLORS[notebook]
 }
 
-// Large graph threshold: switch to performance mode
-const LARGE_GRAPH_THRESHOLD = 500
+// Performance mode thresholds
+const LARGE_GRAPH_THRESHOLD = 200
+const HUGE_GRAPH_THRESHOLD = 1000
 
 interface ObsidianGraphProps {
   data: GraphData | undefined
@@ -123,7 +124,9 @@ export function ObsidianGraph({
   // Check if we have cached positions for the current data
   const hasCache = positionCache.size > 0
 
-  const isLargeGraph = (data?.nodes.length ?? 0) > LARGE_GRAPH_THRESHOLD
+  const nodeCount = data?.nodes.length ?? 0
+  const isLargeGraph = nodeCount > LARGE_GRAPH_THRESHOLD
+  const isHugeGraph = nodeCount > HUGE_GRAPH_THRESHOLD
 
   useEffect(() => {
     if (data && data.nodes.length > 0 && graphRef.current && !hasCache) {
@@ -261,6 +264,30 @@ export function ObsidianGraph({
     }
   }, [hasCache, graphData.nodes.length])
 
+  // Stable link color callback — skip typeof checks when search is inactive
+  const linkColor = useCallback(
+    (link: GraphLinkObject) => {
+      if (!isSearchActive) return 'rgba(156, 163, 175, 0.3)'
+      const src = typeof link.source === 'number' ? link.source : (link.source as any).id
+      const tgt = typeof link.target === 'number' ? link.target : (link.target as any).id
+      if (hitMap.has(src) || hitMap.has(tgt)) return 'rgba(251, 191, 36, 0.4)'
+      return 'rgba(100, 100, 100, 0.08)'
+    },
+    [isSearchActive, hitMap]
+  )
+
+  // Stable link width callback — skip typeof checks when search is inactive
+  const linkWidth = useCallback(
+    (link: GraphLinkObject) => {
+      if (!isSearchActive) return Math.max(0.3, link.weight * 1.5)
+      const src = typeof link.source === 'number' ? link.source : (link.source as any).id
+      const tgt = typeof link.target === 'number' ? link.target : (link.target as any).id
+      if (hitMap.has(src) || hitMap.has(tgt)) return Math.max(1, link.weight * 2.5)
+      return 0.2
+    },
+    [isSearchActive, hitMap]
+  )
+
   // Custom node canvas renderer with semantic search highlighting
   const nodeCanvasObject = useCallback(
     (node: GraphNodeObject, ctx: CanvasRenderingContext2D, globalScale: number) => {
@@ -270,9 +297,9 @@ export function ObsidianGraph({
       const isSearchHit = searchScore !== undefined
       const isNeighborOfHit = searchNeighborIds.has(node.id)
 
-      // Size based on degree + search relevance boost
-      const baseSize = isLargeGraph ? 2.5 : 4
-      const sizeBoost = Math.min(degree * 0.5, isLargeGraph ? 6 : 8)
+      // Size based on degree + search relevance boost (3-tier)
+      const baseSize = isHugeGraph ? 2 : isLargeGraph ? 2.5 : 4
+      const sizeBoost = Math.min(degree * 0.5, isHugeGraph ? 4 : isLargeGraph ? 6 : 8)
       let radius = baseSize + sizeBoost
 
       // Search hits get a size boost proportional to score
@@ -334,10 +361,11 @@ export function ObsidianGraph({
         ctx.setLineDash([])
       }
 
-      // Labels: always show for search hits, zoom-based otherwise
+      // Labels: always show for search hits, zoom-based otherwise (3-tier)
+      const labelThreshold = isHugeGraph ? 5.0 : isLargeGraph ? 3.5 : 1.5
       const showLabel = isSearchHit
         ? globalScale > 0.5
-        : globalScale > (isLargeGraph ? 3.5 : 1.5)
+        : globalScale > labelThreshold
 
       if (showLabel) {
         const label = node.label.length > 25 ? node.label.slice(0, 23) + '...' : node.label
@@ -351,7 +379,7 @@ export function ObsidianGraph({
         ctx.fillText(label, x, y + radius + 2)
       }
     },
-    [hitMap, searchNeighborIds, isSearchActive, isLargeGraph]
+    [hitMap, searchNeighborIds, isSearchActive, isLargeGraph, isHugeGraph]
   )
 
   if (isLoading) {
@@ -501,37 +529,25 @@ export function ObsidianGraph({
           nodeCanvasObject={nodeCanvasObject}
           nodePointerAreaPaint={(node: GraphNodeObject, color, ctx) => {
             const degree = node._degree ?? 0
-            const baseSize = isLargeGraph ? 2.5 : 4
+            const baseSize = isHugeGraph ? 2 : isLargeGraph ? 2.5 : 4
             const searchScore = hitMap.get(node.id)
-            let radius = baseSize + Math.min(degree * 0.5, isLargeGraph ? 6 : 8)
+            let radius = baseSize + Math.min(degree * 0.5, isHugeGraph ? 4 : isLargeGraph ? 6 : 8)
             if (searchScore !== undefined) radius += 3 + searchScore * 4
             ctx.beginPath()
             ctx.arc(node.x ?? 0, node.y ?? 0, radius + 2, 0, 2 * Math.PI)
             ctx.fillStyle = color
             ctx.fill()
           }}
-          linkColor={(link: GraphLinkObject) => {
-            if (!isSearchActive) return 'rgba(156, 163, 175, 0.3)'
-            const src = typeof link.source === 'number' ? link.source : (link.source as any).id
-            const tgt = typeof link.target === 'number' ? link.target : (link.target as any).id
-            if (hitMap.has(src) || hitMap.has(tgt)) return 'rgba(251, 191, 36, 0.4)'
-            return 'rgba(100, 100, 100, 0.08)'
-          }}
-          linkWidth={(link: GraphLinkObject) => {
-            if (!isSearchActive) return Math.max(0.3, link.weight * 1.5)
-            const src = typeof link.source === 'number' ? link.source : (link.source as any).id
-            const tgt = typeof link.target === 'number' ? link.target : (link.target as any).id
-            if (hitMap.has(src) || hitMap.has(tgt)) return Math.max(1, link.weight * 2.5)
-            return 0.2
-          }}
+          linkColor={linkColor}
+          linkWidth={linkWidth}
           onNodeClick={handleNodeClick}
           onNodeRightClick={handleNodeRightClick}
           onNodeHover={(node: GraphNodeObject | null) => setHoveredNode(node)}
           onEngineStop={handleEngineStop}
-          cooldownTicks={hasCache ? 0 : (isLargeGraph ? 60 : 100)}
-          d3AlphaDecay={isLargeGraph ? 0.04 : 0.02}
-          d3VelocityDecay={isLargeGraph ? 0.4 : 0.3}
-          warmupTicks={isLargeGraph ? 30 : 0}
+          cooldownTicks={hasCache ? 0 : (isHugeGraph ? 30 : isLargeGraph ? 50 : 80)}
+          d3AlphaDecay={isHugeGraph ? 0.08 : isLargeGraph ? 0.05 : 0.03}
+          d3VelocityDecay={isHugeGraph ? 0.5 : isLargeGraph ? 0.4 : 0.3}
+          warmupTicks={isHugeGraph ? 50 : isLargeGraph ? 30 : 0}
           enableNodeDrag={true}
           enableZoomInteraction={true}
           enablePanInteraction={true}

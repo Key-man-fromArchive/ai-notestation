@@ -10,8 +10,8 @@ import { useClusterInsight } from '@/hooks/useClusterInsight'
 export default function Graph() {
   const [showSettings, setShowSettings] = useState(false)
   const [showAnalysis, setShowAnalysis] = useState(false)
-  const [showAll, setShowAll] = useState(false)
-  const [limit, setLimit] = useState(200)
+  const [showAll, setShowAll] = useState(true)
+  const [limit, setLimit] = useState(500)
   const [threshold, setThreshold] = useState(0.5)
   const [neighborsPerNote, setNeighborsPerNote] = useState(5)
 
