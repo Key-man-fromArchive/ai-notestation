@@ -4,10 +4,11 @@
 
 import { useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { FileText, AlertCircle, FolderOpen, Folder, BookOpen, Search, X, Plus } from 'lucide-react'
+import { FileText, AlertCircle, FolderOpen, Folder, BookOpen, Search, X, Plus, Wand2, Loader2, Tag } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useNotes, useCreateNote } from '@/hooks/useNotes'
 import { useNotebooks } from '@/hooks/useNotebooks'
+import { useAutoTag, useLocalTags } from '@/hooks/useAutoTag'
 import { NoteList } from '@/components/NoteList'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
 import { EmptyState } from '@/components/EmptyState'
@@ -139,8 +140,13 @@ export default function Notes() {
   const { t, i18n } = useTranslation()
   const [searchParams, setSearchParams] = useSearchParams()
   const selectedNotebook = searchParams.get('notebook') || undefined
+  const selectedTag = searchParams.get('tag') || undefined
   const [filterText, setFilterText] = useState('')
   const [isCreateOpen, setIsCreateOpen] = useState(false)
+
+  // 태그 관련 훅
+  const { data: localTags } = useLocalTags()
+  const autoTag = useAutoTag()
 
   // 노트 목록 데이터
   const {
@@ -150,7 +156,7 @@ export default function Notes() {
     hasNextPage,
     isFetchingNextPage,
     fetchNextPage,
-  } = useNotes({ notebook: selectedNotebook })
+  } = useNotes({ notebook: selectedNotebook, tag: selectedTag })
 
   // 노트북 목록 데이터
   const { data: notebooksData, isLoading: isLoadingNotebooks } = useNotebooks()
@@ -186,11 +192,18 @@ export default function Notes() {
 
   // 노트북 필터 변경
   const handleNotebookChange = (notebook: string | null) => {
-    if (notebook) {
-      setSearchParams({ notebook })
-    } else {
-      setSearchParams({})
-    }
+    const params: Record<string, string> = {}
+    if (notebook) params.notebook = notebook
+    if (selectedTag) params.tag = selectedTag
+    setSearchParams(params)
+  }
+
+  // 태그 필터 변경
+  const handleTagChange = (tag: string | null) => {
+    const params: Record<string, string> = {}
+    if (selectedNotebook) params.notebook = selectedNotebook
+    if (tag) params.tag = tag
+    setSearchParams(params)
   }
 
   // 로딩 상태
@@ -373,7 +386,7 @@ export default function Notes() {
           </div>
 
           {/* 빠른 필터 */}
-          <div className="relative mb-4">
+          <div className="relative mb-3">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" aria-hidden="true" />
             <input
               type="text"
@@ -397,6 +410,55 @@ export default function Notes() {
               </button>
             )}
           </div>
+
+          {/* 태그 필터 + 배치 태깅 */}
+          {((localTags && localTags.length > 0) || autoTag.isTagging) && (
+            <div className="flex items-center gap-2 mb-4 flex-wrap">
+              <Tag className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" aria-hidden="true" />
+              {localTags?.slice(0, 10).map((tag) => (
+                <button
+                  key={tag.name}
+                  onClick={() => handleTagChange(selectedTag === tag.name ? null : tag.name)}
+                  className={cn(
+                    'inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium transition-colors',
+                    selectedTag === tag.name
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted text-muted-foreground hover:bg-primary/10 hover:text-primary'
+                  )}
+                >
+                  {tag.name}
+                  <span className="text-[10px] opacity-70">({tag.count})</span>
+                </button>
+              ))}
+              {selectedTag && (
+                <button
+                  onClick={() => handleTagChange(null)}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <X className="h-3 w-3" />
+                  {t('notes.clearTagFilter')}
+                </button>
+              )}
+              <div className="ml-auto flex-shrink-0">
+                <button
+                  onClick={() => autoTag.triggerTag()}
+                  disabled={autoTag.isTagging}
+                  className={cn(
+                    'inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-colors',
+                    'bg-muted text-muted-foreground hover:bg-primary/10 hover:text-primary',
+                    'disabled:opacity-50 disabled:cursor-not-allowed',
+                  )}
+                  title={t('notes.batchAutoTagDesc')}
+                >
+                  {autoTag.isTagging ? (
+                    <><Loader2 className="h-3.5 w-3.5 animate-spin" />{t('notes.batchTagProgress', { tagged: autoTag.tagged, total: autoTag.total })}</>
+                  ) : (
+                    <><Wand2 className="h-3.5 w-3.5" />{t('notes.batchAutoTag')}</>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
 
           {allNotes.length === 0 ? (
             <EmptyState

@@ -18,18 +18,20 @@ Endpoints:
 
 from __future__ import annotations
 
+import asyncio
 import logging
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.database import get_db
+from app.database import async_session_factory, get_db
 from app.models import Note, NoteAttachment, NoteImage
 from app.services.activity_log import get_trigger_name, log_activity
 from app.services.auth_service import get_current_user
@@ -258,6 +260,7 @@ async def list_notes(
     offset: int = Query(0, ge=0, description="Number of notes to skip"),
     limit: int = Query(50, ge=1, le=200, description="Maximum notes to return"),
     notebook: str | None = Query(None, description="Filter by notebook name"),
+    tag: str | None = Query(None, description="Filter by tag name"),
     current_user: dict = Depends(get_current_user),  # noqa: B008
     db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> NoteListResponse:
@@ -269,6 +272,7 @@ async def list_notes(
         offset: Pagination offset.
         limit: Page size (max 200).
         notebook: Optional notebook name to filter by.
+        tag: Optional tag name to filter by (JSONB array contains).
         current_user: Injected authenticated user.
         db: Database session for local notes.
 
@@ -281,6 +285,11 @@ async def list_notes(
     if notebook:
         count_stmt = count_stmt.where(Note.notebook_name == notebook)
         stmt = stmt.where(Note.notebook_name == notebook)
+
+    if tag:
+        tag_filter = Note.tags.contains([tag])
+        count_stmt = count_stmt.where(tag_filter)
+        stmt = stmt.where(tag_filter)
 
     stmt = stmt.order_by(
         Note.source_updated_at.desc().nulls_last(),
@@ -299,6 +308,135 @@ async def list_notes(
         offset=offset,
         limit=limit,
         total=total,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Auto-Tagging State & Endpoints
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class TaggingState:
+    status: str = "idle"
+    is_tagging: bool = False
+    total: int = 0
+    tagged: int = 0
+    failed: int = 0
+    error_message: str | None = None
+
+
+_tagging_state = TaggingState()
+
+
+class TagResponse(BaseModel):
+    tags: list[str]
+
+
+class TaggingTriggerResponse(BaseModel):
+    status: str
+    message: str
+
+
+class TaggingStatusResponse(BaseModel):
+    status: str
+    total: int
+    tagged: int
+    failed: int
+    error_message: str | None = None
+
+
+class LocalTagItem(BaseModel):
+    name: str
+    count: int
+
+
+async def _run_tagging_background(state: TaggingState) -> None:
+    """Background task: auto-tag all untagged notes."""
+    from app.services.auto_tagger import AutoTagger
+
+    state.status = "tagging"
+    state.is_tagging = True
+    state.error_message = None
+    state.tagged = 0
+    state.failed = 0
+
+    try:
+        async with async_session_factory() as session:
+            result = await session.execute(
+                text("""
+                    SELECT id FROM notes
+                    WHERE tags IS NULL OR tags = '[]'::jsonb
+                """)
+            )
+            note_ids = [row[0] for row in result.fetchall()]
+            state.total = len(note_ids)
+
+        if not note_ids:
+            state.status = "completed"
+            state.is_tagging = False
+            return
+
+        tagger = AutoTagger()
+        batch_size = 3
+        for i in range(0, len(note_ids), batch_size):
+            batch = note_ids[i : i + batch_size]
+            for nid in batch:
+                try:
+                    async with async_session_factory() as session:
+                        tags = await tagger.tag_note(nid, session)
+                        await session.commit()
+                        if tags:
+                            state.tagged += 1
+                        else:
+                            state.failed += 1
+                except Exception:
+                    state.failed += 1
+                    logger.exception("Failed to tag note %d", nid)
+            await asyncio.sleep(1.0)
+
+        state.status = "completed"
+
+    except Exception as exc:
+        state.status = "error"
+        state.error_message = str(exc)
+        logger.exception("Batch tagging failed: %s", exc)
+
+    finally:
+        state.is_tagging = False
+
+
+@router.post("/notes/batch-auto-tag", response_model=TaggingTriggerResponse)
+async def trigger_batch_auto_tag(
+    background_tasks: BackgroundTasks,
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+) -> TaggingTriggerResponse:
+    """Trigger batch auto-tagging for all untagged notes."""
+    if _tagging_state.is_tagging:
+        return TaggingTriggerResponse(
+            status="already_tagging",
+            message="Batch auto-tagging is already in progress.",
+        )
+
+    background_tasks.add_task(_run_tagging_background, _tagging_state)
+
+    return TaggingTriggerResponse(
+        status="tagging",
+        message="Batch auto-tagging started.",
+    )
+
+
+@router.get("/notes/batch-auto-tag/status", response_model=TaggingStatusResponse)
+async def get_batch_auto_tag_status(
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+) -> TaggingStatusResponse:
+    """Get the current batch auto-tagging status."""
+    return TaggingStatusResponse(
+        status=_tagging_state.status,
+        total=_tagging_state.total,
+        tagged=_tagging_state.tagged,
+        failed=_tagging_state.failed,
+        error_message=_tagging_state.error_message,
     )
 
 
@@ -406,6 +544,29 @@ async def resolve_conflict(
         attachments=await _load_note_attachments(db, note.id),
         sync_status=note.sync_status,
     )
+
+
+@router.post("/notes/{note_id}/auto-tag", response_model=TagResponse)
+async def auto_tag_note(
+    note_id: str,
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> TagResponse:
+    """Generate AI tags for a single note.
+
+    Requires JWT authentication via Bearer token.
+    """
+    from app.services.auto_tagger import AutoTagger
+
+    result = await db.execute(select(Note).where(Note.synology_note_id == note_id))
+    note = result.scalar_one_or_none()
+    if not note:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Note not found: {note_id}")
+
+    tagger = AutoTagger()
+    tags = await tagger.tag_note(note.id, db)
+    await db.commit()
+    return TagResponse(tags=tags)
 
 
 @router.get("/notes/{note_id}", response_model=NoteDetailResponse)
@@ -839,6 +1000,26 @@ async def list_tags(
         List of tag dicts from NoteStation.
     """
     return await ns_service.list_tags()
+
+
+@router.get("/tags/local", response_model=list[LocalTagItem])
+async def list_local_tags(
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> list[LocalTagItem]:
+    """Retrieve all tags from local DB with counts.
+
+    Returns tags extracted from the JSONB tags column, ordered by count desc.
+    """
+    result = await db.execute(
+        text("""
+            SELECT tag, COUNT(*) as cnt
+            FROM notes, jsonb_array_elements_text(tags) AS tag
+            GROUP BY tag
+            ORDER BY cnt DESC, tag ASC
+        """)
+    )
+    return [LocalTagItem(name=row[0], count=int(row[1])) for row in result.fetchall()]
 
 
 @router.get("/todos")

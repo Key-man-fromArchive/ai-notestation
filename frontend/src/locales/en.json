@@ -174,7 +174,15 @@
     "remoteTitle": "Remote title",
     "keepLocalChanges": "Keep My Changes",
     "keepNoteStation": "Keep NoteStation",
-    "noteList": "Note list"
+    "noteList": "Note list",
+    "autoTag": "Auto Tag",
+    "autoTagging": "Generating tags...",
+    "batchAutoTag": "Batch Auto-Tag",
+    "batchAutoTagDesc": "Auto-generate AI tags for untagged notes",
+    "batchTagProgress": "{{tagged}}/{{total}} tagged",
+    "filterByTag": "Filter by tag",
+    "clearTagFilter": "Clear tag filter",
+    "untaggedNotes": "{{count}} untagged"
   },
   "notebooks": {
     "title": "Notebooks",
@@ -218,6 +226,11 @@
     "semantic": "Semantic",
     "hybrid": "Hybrid",
     "relevance": "Relevance",
+    "matchedBy": "Matched by",
+    "engineFts": "Keyword",
+    "engineSemantic": "Semantic",
+    "engineTrigram": "Fuzzy",
+    "matchedTerms": "Matched terms",
     "askAI": "Ask AI",
     "aiAnswer": "AI Answer",
     "referencedNotes": "Referenced Notes"

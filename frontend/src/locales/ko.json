@@ -174,7 +174,15 @@
     "noteStationRemote": "NoteStation (원격)",
     "remoteTitle": "원격 제목",
     "keepLocalChanges": "내 수정 유지",
-    "keepNoteStation": "NoteStation 유지"
+    "keepNoteStation": "NoteStation 유지",
+    "autoTag": "자동 태그",
+    "autoTagging": "태그 생성 중...",
+    "batchAutoTag": "전체 자동 태깅",
+    "batchAutoTagDesc": "태그가 없는 노트에 AI 태그를 자동 생성합니다",
+    "batchTagProgress": "{{tagged}}/{{total}} 태깅 완료",
+    "filterByTag": "태그로 필터",
+    "clearTagFilter": "태그 필터 해제",
+    "untaggedNotes": "미태깅 {{count}}개"
   },
   "notebooks": {
     "title": "노트북",
@@ -218,6 +226,11 @@
     "semantic": "의미 검색",
     "hybrid": "하이브리드",
     "relevance": "관련도",
+    "matchedBy": "매칭 엔진",
+    "engineFts": "키워드",
+    "engineSemantic": "의미",
+    "engineTrigram": "유사",
+    "matchedTerms": "매칭 키워드",
     "askAI": "AI에게 질문",
     "aiAnswer": "AI 답변",
     "referencedNotes": "참조 노트"

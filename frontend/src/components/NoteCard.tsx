@@ -1,7 +1,7 @@
 // @TASK P5-T5.2 - 노트 카드 컴포넌트
 // @SPEC docs/plans/2026-01-29-labnote-ai-design.md#노트-목록
 
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { FileText, Tag, FolderOpen, Calendar } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { NoteListItem } from '@/types/note'
@@ -18,6 +18,14 @@ interface NoteCardProps {
  * - hover 효과, focus ring (접근성)
  */
 export function NoteCard({ note, className }: NoteCardProps) {
+  const navigate = useNavigate()
+
+  const handleTagClick = (e: React.MouseEvent, tag: string) => {
+    e.stopPropagation()
+    e.preventDefault()
+    navigate(`/notes?tag=${encodeURIComponent(tag)}`)
+  }
+
   const formattedDate = note.updated_at ? new Date(note.updated_at).toLocaleDateString('ko-KR', {
     year: 'numeric',
     month: 'short',
@@ -67,11 +75,21 @@ export function NoteCard({ note, className }: NoteCardProps) {
           </div>
         )}
 
-        {/* 태그 */}
+        {/* 태그 (클릭 가능) */}
         {note.tags.length > 0 && (
           <div className="flex items-center gap-1 min-w-0">
             <Tag className="h-3 w-3 flex-shrink-0" aria-hidden="true" />
-            <span className="truncate">{note.tags.slice(0, 3).join(', ')}</span>
+            {note.tags.slice(0, 3).map((tag, i) => (
+              <span key={tag}>
+                {i > 0 && <span className="text-muted-foreground/50">, </span>}
+                <button
+                  onClick={(e) => handleTagClick(e, tag)}
+                  className="hover:text-primary hover:underline transition-colors"
+                >
+                  {tag}
+                </button>
+              </span>
+            ))}
           </div>
         )}
       </div>

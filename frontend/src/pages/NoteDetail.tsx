@@ -4,7 +4,7 @@
 
 import { useCallback, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Notebook, Tag, Paperclip, Image, File, AlertCircle, Calendar, Share2, AlertTriangle, CloudOff, CloudUpload, CloudDownload, Loader2, Check, Sparkles, X } from 'lucide-react'
+import { ArrowLeft, Notebook, Tag, Paperclip, Image, File, AlertCircle, Calendar, Share2, AlertTriangle, CloudOff, CloudUpload, CloudDownload, Loader2, Check, Sparkles, X, Plus, Wand2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { apiClient } from '@/lib/api'
 import { useNote } from '@/hooks/useNote'
@@ -17,6 +17,7 @@ import { NoteSharing } from '@/components/NoteSharing'
 import { ConflictDialog } from '@/components/ConflictDialog'
 import { useConflicts } from '@/hooks/useConflicts'
 import { useTimezone, formatDateWithTz } from '@/hooks/useTimezone'
+import { useAutoTagNote } from '@/hooks/useAutoTag'
 
 export default function NoteDetail() {
   const { t } = useTranslation()
@@ -32,6 +33,7 @@ export default function NoteDetail() {
   const [pullMessage, setPullMessage] = useState('')
   const { conflicts } = useConflicts()
   const timezone = useTimezone()
+  const autoTagNote = useAutoTagNote()
   const [summarizeState, setSummarizeState] = useState<'idle' | 'loading' | 'preview'>('idle')
   const [suggestedTitle, setSuggestedTitle] = useState('')
   const [suggestedTags, setSuggestedTags] = useState<string[]>([])
@@ -434,20 +436,43 @@ export default function NoteDetail() {
             )}
           </div>
 
-          {/* 태그 - pill 스타일 */}
-          {note.tags.length > 0 && (
-            <div className="flex items-center gap-2 flex-wrap">
-              <Tag className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
-              {note.tags.map((tag) => (
-                <span
-                  key={tag}
-                  className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary"
+          {/* 태그 - pill 스타일 + 자동 태그 버튼 */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {note.tags.length > 0 && (
+              <>
+                <Tag className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+                {note.tags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary"
+                  >
+                    {tag}
+                  </span>
+                ))}
+                <button
+                  onClick={() => autoTagNote.mutate(note.note_id)}
+                  disabled={autoTagNote.isPending}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs text-muted-foreground hover:text-primary hover:bg-primary/5 transition-colors disabled:opacity-50"
+                  title={t('notes.autoTag')}
                 >
-                  {tag}
-                </span>
-              ))}
-            </div>
-          )}
+                  {autoTagNote.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+                </button>
+              </>
+            )}
+            {note.tags.length === 0 && (
+              <button
+                onClick={() => autoTagNote.mutate(note.note_id)}
+                disabled={autoTagNote.isPending}
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
+              >
+                {autoTagNote.isPending ? (
+                  <><Loader2 className="h-3.5 w-3.5 animate-spin" />{t('notes.autoTagging')}</>
+                ) : (
+                  <><Wand2 className="h-3.5 w-3.5" />{t('notes.autoTag')}</>
+                )}
+              </button>
+            )}
+          </div>
         </div>
 
         {/* AI 분석 패널 */}

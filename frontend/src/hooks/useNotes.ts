@@ -15,6 +15,7 @@ interface NoteCreateRequest {
 
 interface UseNotesOptions {
   notebook?: string
+  tag?: string
   limit?: number
 }
 
@@ -23,10 +24,11 @@ interface UseNotesOptions {
  * - TanStack Query useInfiniteQuery
  * - 무한 스크롤 지원
  * - 노트북 필터링
+ * - 태그 필터링
  */
-export function useNotes({ notebook, limit = 20 }: UseNotesOptions = {}) {
+export function useNotes({ notebook, tag, limit = 20 }: UseNotesOptions = {}) {
   return useInfiniteQuery({
-    queryKey: ['notes', { notebook }],
+    queryKey: ['notes', { notebook, tag }],
     queryFn: async ({ pageParam = 0 }) => {
       const params = new URLSearchParams({
         offset: pageParam.toString(),
@@ -35,6 +37,10 @@ export function useNotes({ notebook, limit = 20 }: UseNotesOptions = {}) {
 
       if (notebook) {
         params.append('notebook', notebook)
+      }
+
+      if (tag) {
+        params.append('tag', tag)
       }
 
       return apiClient.get<NotesResponse>(`/notes?${params.toString()}`)
