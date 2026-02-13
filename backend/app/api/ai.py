@@ -223,12 +223,14 @@ class AIChatResponse(BaseModel):
         model: The model that produced the response.
         provider: The provider that served the response.
         usage: Optional token usage statistics.
+        quality: Optional quality evaluation result (when quality gate enabled).
     """
 
     content: str
     model: str
     provider: str
     usage: dict | None = None
+    quality: dict | None = None
 
 
 class ModelListResponse(BaseModel):
@@ -246,6 +248,30 @@ class ProviderListResponse(BaseModel):
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+async def _is_quality_gate_enabled(db: AsyncSession) -> bool:
+    """Check if quality gate is enabled in settings."""
+    from app.api.settings import _load_from_db
+
+    settings = await _load_from_db(db)
+    return bool(settings.get("quality_gate_enabled", False))
+
+
+async def _is_quality_gate_auto_retry(db: AsyncSession) -> bool:
+    """Check if quality gate auto-retry is enabled in settings."""
+    from app.api.settings import _load_from_db
+
+    settings = await _load_from_db(db)
+    return bool(settings.get("quality_gate_auto_retry", True))
+
+
+def _is_quality_gate_enabled_sync() -> bool:
+    """Check quality gate setting from in-memory cache (sync, for streaming)."""
+    from app.api.settings import _get_store
+
+    store = _get_store()
+    return bool(store.get("quality_gate_enabled", False))
 
 
 _SEARCH_CONTENT_MAX_CHARS = 12_000
@@ -474,11 +500,45 @@ async def ai_chat(
             "total_tokens": ai_response.usage.total_tokens,
         }
 
+    # Quality gate evaluation
+    quality_dict = None
+    if await _is_quality_gate_enabled(db):
+        from app.ai_router.quality_gate import QualityGate
+
+        gate = QualityGate(effective_router)
+        quality_result = await gate.evaluate(
+            task=request.feature,
+            original_request=request.content,
+            ai_response=ai_response.content,
+            lang=lang,
+        )
+
+        # Auto-retry once if failed and auto-retry enabled
+        if quality_result and not quality_result.passed and await _is_quality_gate_auto_retry(db):
+            ai_response = await effective_router.chat(ai_request)
+            quality_result = await gate.evaluate(
+                task=request.feature,
+                original_request=request.content,
+                ai_response=ai_response.content,
+                lang=lang,
+            )
+            # Update usage if available
+            if ai_response.usage is not None:
+                usage_dict = {
+                    "prompt_tokens": ai_response.usage.prompt_tokens,
+                    "completion_tokens": ai_response.usage.completion_tokens,
+                    "total_tokens": ai_response.usage.total_tokens,
+                }
+
+        if quality_result:
+            quality_dict = quality_result.model_dump()
+
     return AIChatResponse(
         content=ai_response.content,
         model=ai_response.model,
         provider=ai_response.provider,
         usage=usage_dict,
+        quality=quality_dict,
     )
 
 
@@ -581,12 +641,39 @@ async def ai_stream(
         if notes_metadata:
             yield f"event: metadata\ndata: {json.dumps({'matched_notes': notes_metadata}, ensure_ascii=False)}\n\n"
 
+        accumulated_content = ""
         try:
             async for sse_line in effective_router.stream(ai_request):
                 yield sse_line
+                # Accumulate text chunks for quality evaluation
+                if sse_line.startswith("data: ") and "[DONE]" not in sse_line:
+                    try:
+                        chunk_data = json.loads(sse_line[6:])
+                        accumulated_content += chunk_data.get("chunk", "")
+                    except (json.JSONDecodeError, KeyError):
+                        pass
         except ProviderError as exc:
             logger.error("AI stream error: %s", exc)
             yield f"event: error\ndata: {exc.message}\n\n"
+            return
+
+        # Quality gate evaluation after streaming complete
+        if _is_quality_gate_enabled_sync() and accumulated_content:
+            try:
+                from app.ai_router.quality_gate import QualityGate
+
+                gate = QualityGate(effective_router)
+                quality_result = await gate.evaluate(
+                    task=request.feature,
+                    original_request=request.content,
+                    ai_response=accumulated_content,
+                    lang=lang,
+                )
+                if quality_result:
+                    yield f"event: quality\ndata: {json.dumps(quality_result.model_dump(), ensure_ascii=False)}\n\n"
+            except Exception:
+                logger.exception("Stream quality gate evaluation failed")
+                pass
 
     return StreamingResponse(
         event_generator(),

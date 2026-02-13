@@ -25,6 +25,19 @@ interface MatchedNote {
   score: number
 }
 
+interface QualityCheckItem {
+  question: string
+  passed: boolean | null
+  note: string
+}
+
+export interface QualityResult {
+  passed: boolean
+  score: number
+  details: QualityCheckItem[]
+  summary: string
+}
+
 interface MetadataMessage {
   matched_notes?: MatchedNote[]
 }
@@ -40,6 +53,7 @@ export function useAIStream() {
   const [isStreaming, setIsStreaming] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [matchedNotes, setMatchedNotes] = useState<MatchedNote[]>([])
+  const [qualityResult, setQualityResult] = useState<QualityResult | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
 
   const startStream = useCallback(async (options: StreamOptions) => {
@@ -47,6 +61,7 @@ export function useAIStream() {
     setContent('')
     setError(null)
     setMatchedNotes([])
+    setQualityResult(null)
     setIsStreaming(true)
 
     // AbortController 생성
@@ -124,12 +139,24 @@ export function useAIStream() {
               continue
             }
 
+            // Handle quality event (quality gate evaluation)
+            if (currentEvent === 'quality') {
+              try {
+                const quality: QualityResult = JSON.parse(data)
+                setQualityResult(quality)
+              } catch {
+                console.warn('Failed to parse quality SSE:', data)
+              }
+              currentEvent = ''
+              continue
+            }
+
             currentEvent = ''
 
-            // [DONE] 신호
+            // [DONE] 신호 — 스트리밍 텍스트 완료, quality 이벤트는 이후 도착 가능
             if (data === '[DONE]') {
               setIsStreaming(false)
-              return
+              continue
             }
 
             try {
@@ -178,6 +205,7 @@ export function useAIStream() {
     setContent('')
     setError(null)
     setMatchedNotes([])
+    setQualityResult(null)
     setIsStreaming(false)
   }, [])
 
@@ -186,6 +214,7 @@ export function useAIStream() {
     isStreaming,
     error,
     matchedNotes,
+    qualityResult,
     startStream,
     stopStream,
     reset,

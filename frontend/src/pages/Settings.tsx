@@ -31,6 +31,7 @@ import {
   Globe,
   Sparkles,
   Languages,
+  ShieldCheck,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -155,6 +156,8 @@ export default function Settings() {
         isPending={updateMutation.isPending}
         onSave={(tz) => updateMutation.mutate({ key: 'timezone', value: tz })}
       />
+
+      <QualityGateSection />
 
       <AiModelSection />
 
@@ -1066,6 +1069,102 @@ function LanguageSection() {
         >
           🇺🇸 {t('settings.english')}
         </button>
+      </div>
+    </div>
+  )
+}
+
+function QualityGateSection() {
+  const { t } = useTranslation()
+  const queryClient = useQueryClient()
+  const [saving, setSaving] = useState(false)
+
+  const { data: enabledSetting } = useQuery<SettingResponse>({
+    queryKey: ['settings', 'quality_gate_enabled'],
+    queryFn: () => apiClient.get('/settings/quality_gate_enabled'),
+  })
+
+  const { data: autoRetrySetting } = useQuery<SettingResponse>({
+    queryKey: ['settings', 'quality_gate_auto_retry'],
+    queryFn: () => apiClient.get('/settings/quality_gate_auto_retry'),
+  })
+
+  const isEnabled = enabledSetting?.value === true
+  const isAutoRetry = autoRetrySetting?.value !== false // default true
+
+  const toggleSetting = async (key: string, value: boolean) => {
+    setSaving(true)
+    try {
+      await apiClient.put(`/settings/${key}`, { value })
+      queryClient.invalidateQueries({ queryKey: ['settings', key] })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="p-4 border border-input rounded-md">
+      <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
+        <ShieldCheck className="h-5 w-5" aria-hidden="true" />
+        {t('settings.qualityGate')}
+      </h3>
+      <p className="text-sm text-muted-foreground mb-4">
+        {t('settings.qualityGateDesc')}
+      </p>
+
+      <div className="space-y-4">
+        <label className="flex items-center justify-between cursor-pointer">
+          <span className="text-sm font-medium">{t('settings.qualityGateEnabled')}</span>
+          <button
+            onClick={() => toggleSetting('quality_gate_enabled', !isEnabled)}
+            disabled={saving}
+            className={cn(
+              'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              'disabled:cursor-not-allowed disabled:opacity-50',
+              isEnabled ? 'bg-primary' : 'bg-input',
+            )}
+            role="switch"
+            aria-checked={isEnabled}
+          >
+            <span
+              className={cn(
+                'pointer-events-none inline-block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform',
+                isEnabled ? 'translate-x-5' : 'translate-x-0',
+              )}
+            />
+          </button>
+        </label>
+
+        {isEnabled && (
+          <div className="pl-1">
+            <label className="flex items-center justify-between cursor-pointer">
+              <div>
+                <span className="text-sm font-medium">{t('settings.qualityGateAutoRetry')}</span>
+                <p className="text-xs text-muted-foreground mt-0.5">{t('settings.qualityGateAutoRetryDesc')}</p>
+              </div>
+              <button
+                onClick={() => toggleSetting('quality_gate_auto_retry', !isAutoRetry)}
+                disabled={saving}
+                className={cn(
+                  'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                  'disabled:cursor-not-allowed disabled:opacity-50',
+                  isAutoRetry ? 'bg-primary' : 'bg-input',
+                )}
+                role="switch"
+                aria-checked={isAutoRetry}
+              >
+                <span
+                  className={cn(
+                    'pointer-events-none inline-block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform',
+                    isAutoRetry ? 'translate-x-5' : 'translate-x-0',
+                  )}
+                />
+              </button>
+            </label>
+          </div>
+        )}
       </div>
     </div>
   )

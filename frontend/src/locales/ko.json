@@ -345,7 +345,14 @@
     "newConversation": "새 대화",
     "loadingModels": "모델 로딩 중...",
     "noModelsAvailable": "사용 가능한 모델이 없습니다",
-    "selectModel": "AI 모델 선택"
+    "selectModel": "AI 모델 선택",
+    "qualityScore": "품질 {{score}}%",
+    "qualityPassed": "품질 검증 통과",
+    "qualityFailed": "품질 검증 미달",
+    "qualityChecklist": "체크리스트 상세",
+    "qualityItemPassed": "충족",
+    "qualityItemFailed": "미달",
+    "qualityItemPartial": "부분 충족"
   },
   "settings": {
     "title": "설정",
@@ -453,7 +460,12 @@
     "nsxNotesCount": "노트: {{count}}개",
     "nsxImagesCount": "이미지: {{count}}개",
     "nsxShowWarnings": "경고 {{count}}건 보기",
-    "nsxUploadFailed": "업로드에 실패했습니다"
+    "nsxUploadFailed": "업로드에 실패했습니다",
+    "qualityGate": "AI 품질 검증",
+    "qualityGateDesc": "AI 응답을 체크리스트로 자동 평가합니다. 활성화하면 응답 생성 후 품질 점수가 표시됩니다.",
+    "qualityGateEnabled": "품질 검증 활성화",
+    "qualityGateAutoRetry": "자동 재생성",
+    "qualityGateAutoRetryDesc": "품질 미달 시 자동으로 1회 재생성합니다"
   },
   "members": {
     "title": "멤버",

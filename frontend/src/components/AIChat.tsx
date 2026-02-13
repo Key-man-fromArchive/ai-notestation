@@ -7,7 +7,7 @@ import { useAIStream } from '@/hooks/useAIStream'
 import { MarkdownRenderer } from './MarkdownRenderer'
 import { LoadingSpinner } from './LoadingSpinner'
 import { cn } from '@/lib/utils'
-import { Send, Square, Copy, Check, FileText } from 'lucide-react'
+import { Send, Square, Copy, Check, FileText, ShieldCheck, CheckCircle2, XCircle, AlertCircle } from 'lucide-react'
 
 interface AIChatProps {
   feature: 'insight' | 'search_qa' | 'writing' | 'spellcheck' | 'template'
@@ -31,9 +31,10 @@ const TEMPLATE_TYPES = [
 
 export function AIChat({ feature, model, className }: AIChatProps) {
   const { t } = useTranslation()
-  const { content, isStreaming, error, matchedNotes, startStream, stopStream, reset } =
+  const { content, isStreaming, error, matchedNotes, qualityResult, startStream, stopStream, reset } =
     useAIStream()
   const [copied, setCopied] = useState(false)
+  const [qualityExpanded, setQualityExpanded] = useState(false)
   const [templateType, setTemplateType] = useState<(typeof TEMPLATE_TYPES)[number]>(TEMPLATE_TYPES[0])
 
   const isSearchMode = feature === 'insight'
@@ -213,6 +214,43 @@ export function AIChat({ feature, model, className }: AIChatProps) {
               <MarkdownRenderer content={content} className="text-sm" />
               {isStreaming && (
                 <span className="inline-block w-1.5 h-5 ml-1 bg-primary animate-pulse rounded-sm" />
+              )}
+
+              {/* Quality badge */}
+              {qualityResult && !isStreaming && (
+                <div className="mt-3 border-t border-border pt-3">
+                  <button
+                    onClick={() => setQualityExpanded(!qualityExpanded)}
+                    className={cn(
+                      'inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-full transition-colors',
+                      qualityResult.passed
+                        ? 'bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20'
+                        : 'bg-amber-500/10 text-amber-600 hover:bg-amber-500/20'
+                    )}
+                  >
+                    <ShieldCheck className="h-3.5 w-3.5" />
+                    {t('ai.qualityScore', { score: (qualityResult.score * 100).toFixed(0) })}
+                  </button>
+
+                  {qualityExpanded && (
+                    <div className="mt-2 space-y-1.5">
+                      <p className="text-xs text-muted-foreground">{qualityResult.summary}</p>
+                      <ul className="space-y-1">
+                        {qualityResult.details.map((item, idx) => (
+                          <li key={idx} className="text-xs flex items-start gap-1.5">
+                            {item.passed === true && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 mt-0.5 shrink-0" />}
+                            {item.passed === false && <XCircle className="h-3.5 w-3.5 text-red-500 mt-0.5 shrink-0" />}
+                            {item.passed === null && <AlertCircle className="h-3.5 w-3.5 text-amber-500 mt-0.5 shrink-0" />}
+                            <span>
+                              <span className="font-medium">{item.question}</span>
+                              {item.note && <span className="text-muted-foreground"> — {item.note}</span>}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           )}

@@ -19,6 +19,10 @@ import {
   Send,
   Square,
   FileText,
+  ShieldCheck,
+  CheckCircle2,
+  XCircle,
+  AlertCircle,
 } from 'lucide-react'
 
 type AIFeature = 'insight' | 'spellcheck' | 'writing' | 'search_qa' | 'template'
@@ -37,7 +41,8 @@ export function NoteAIPanel({ noteId, noteContent, noteTitle }: NoteAIPanelProps
   const [selectedModel, setSelectedModel] = useState('')
   const [activePanel, setActivePanel] = useState<'search_qa' | 'template' | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
-  const { content, isStreaming, error, matchedNotes, startStream, stopStream, reset } = useAIStream()
+  const { content, isStreaming, error, matchedNotes, qualityResult, startStream, stopStream, reset } = useAIStream()
+  const [qualityExpanded, setQualityExpanded] = useState(false)
 
   /** Quick actions: send note content immediately */
   const quickActions: { id: AIFeature; icon: typeof Lightbulb }[] = [
@@ -335,6 +340,43 @@ export function NoteAIPanel({ noteId, noteContent, noteTitle }: NoteAIPanelProps
             <MarkdownRenderer content={content} className="text-sm" />
             {isStreaming && (
               <span className="inline-block w-1.5 h-4 ml-0.5 bg-primary animate-pulse rounded-sm" />
+            )}
+
+            {/* Quality badge */}
+            {qualityResult && !isStreaming && (
+              <div className="mt-3 border-t border-border pt-3">
+                <button
+                  onClick={() => setQualityExpanded(!qualityExpanded)}
+                  className={cn(
+                    'inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-full transition-colors',
+                    qualityResult.passed
+                      ? 'bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20'
+                      : 'bg-amber-500/10 text-amber-600 hover:bg-amber-500/20'
+                  )}
+                >
+                  <ShieldCheck className="h-3.5 w-3.5" />
+                  {t('ai.qualityScore', { score: (qualityResult.score * 100).toFixed(0) })}
+                </button>
+
+                {qualityExpanded && (
+                  <div className="mt-2 space-y-1.5">
+                    <p className="text-xs text-muted-foreground">{qualityResult.summary}</p>
+                    <ul className="space-y-1">
+                      {qualityResult.details.map((item, idx) => (
+                        <li key={idx} className="text-xs flex items-start gap-1.5">
+                          {item.passed === true && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 mt-0.5 shrink-0" />}
+                          {item.passed === false && <XCircle className="h-3.5 w-3.5 text-red-500 mt-0.5 shrink-0" />}
+                          {item.passed === null && <AlertCircle className="h-3.5 w-3.5 text-amber-500 mt-0.5 shrink-0" />}
+                          <span>
+                            <span className="font-medium">{item.question}</span>
+                            {item.note && <span className="text-muted-foreground"> — {item.note}</span>}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         )}

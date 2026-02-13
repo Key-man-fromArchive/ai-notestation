@@ -101,6 +101,8 @@ _SETTING_DESCRIPTIONS: dict[str, str] = {
     "max_search_results": "Maximum number of search results returned",
     "timezone": "Display timezone (e.g. Asia/Seoul, UTC)",
     "search_params": "검색 알고리즘 파라미터 (RRF 가중치, 제목 부스트, 유사도 임계값)",
+    "quality_gate_enabled": "AI 응답 품질 검증 활성화 (체크리스트 기반)",
+    "quality_gate_auto_retry": "품질 미달 시 자동 재생성",
 }
 
 
@@ -124,6 +126,8 @@ def _get_default_settings() -> dict[str, Any]:
         "max_search_results": 20,
         "timezone": "Asia/Seoul",
         "search_params": dict(DEFAULT_SEARCH_PARAMS),
+        "quality_gate_enabled": False,
+        "quality_gate_auto_retry": True,
     }
 
 

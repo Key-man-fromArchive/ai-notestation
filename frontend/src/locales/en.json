@@ -345,7 +345,14 @@
     "newConversation": "New conversation",
     "loadingModels": "Loading models...",
     "noModelsAvailable": "No models available",
-    "selectModel": "Select AI model"
+    "selectModel": "Select AI model",
+    "qualityScore": "Quality {{score}}%",
+    "qualityPassed": "Quality check passed",
+    "qualityFailed": "Quality check failed",
+    "qualityChecklist": "Checklist details",
+    "qualityItemPassed": "Passed",
+    "qualityItemFailed": "Failed",
+    "qualityItemPartial": "Partial"
   },
   "settings": {
     "title": "Settings",
@@ -453,7 +460,12 @@
     "nsxNotesCount": "Notes: {{count}}",
     "nsxImagesCount": "Images: {{count}}",
     "nsxShowWarnings": "Show {{count}} warnings",
-    "nsxUploadFailed": "Upload failed"
+    "nsxUploadFailed": "Upload failed",
+    "qualityGate": "AI Quality Gate",
+    "qualityGateDesc": "Automatically evaluate AI responses with a checklist. When enabled, a quality score is shown after each response.",
+    "qualityGateEnabled": "Enable quality gate",
+    "qualityGateAutoRetry": "Auto-regenerate",
+    "qualityGateAutoRetryDesc": "Automatically regenerate once if quality check fails"
   },
   "members": {
     "title": "Members",
