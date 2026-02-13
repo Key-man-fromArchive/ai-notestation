@@ -3,15 +3,15 @@
 """Tests for ZhipuAI Provider implementation.
 
 Covers:
-- chat success with mocked ZhipuAI client
+- chat success with mocked ZaiClient
 - chat TokenUsage conversion
 - stream success with mocked streaming response
-- available_models verification (GLM-4.7, GLM-4.7 Flash, GLM-4 Plus)
+- available_models verification (10 GLM models + glm-ocr)
 - API key missing raises ProviderError
 - SDK error converted to ProviderError
 
-Note: All tests mock the ZhipuAI SDK client so no real API calls are made.
-The zhipuai module is injected as a mock via sys.modules to avoid environment
+Note: All tests mock the zai-sdk client so no real API calls are made.
+The zai module is injected as a mock via sys.modules to avoid environment
 issues with the cryptography/PyO3 stack when pytest-cov is enabled.
 """
 
@@ -105,22 +105,22 @@ def _make_provider(mock_sdk: MagicMock, api_key: str = "test-key"):
 
 @pytest.fixture(autouse=True)
 def _mock_zhipuai_sdk():
-    """Pre-populate sys.modules with a mock 'zhipuai' package.
+    """Pre-populate sys.modules with a mock 'zai' package.
 
-    This prevents the real zhipuai SDK (and its heavy cryptography deps)
+    This prevents the real zai-sdk (and its heavy cryptography deps)
     from being imported during tests, making the test suite resilient to
     environment issues like PyO3 double-init under pytest-cov.
     """
-    mock_zhipuai = MagicMock()
-    mock_zhipuai.ZhipuAI = MagicMock()
+    mock_zai = MagicMock()
+    mock_zai.ZaiClient = MagicMock()
 
-    # Save and remove any existing zhipuai modules
+    # Save and remove any existing zai modules
     saved = {}
     for mod_name in list(sys.modules.keys()):
-        if mod_name == "zhipuai" or mod_name.startswith("zhipuai."):
+        if mod_name == "zai" or mod_name.startswith("zai."):
             saved[mod_name] = sys.modules.pop(mod_name)
 
-    sys.modules["zhipuai"] = mock_zhipuai
+    sys.modules["zai"] = mock_zai
 
     # Clear cached import of our provider module so it reimports with mock
     provider_mod_name = "app.ai_router.providers.zhipuai"
@@ -128,10 +128,10 @@ def _mock_zhipuai_sdk():
     providers_init = "app.ai_router.providers"
     saved_providers_init = sys.modules.pop(providers_init, None)
 
-    yield mock_zhipuai
+    yield mock_zai
 
     # Restore original modules
-    sys.modules.pop("zhipuai", None)
+    sys.modules.pop("zai", None)
     sys.modules.pop(provider_mod_name, None)
     sys.modules.pop(providers_init, None)
     for mod_name, mod in saved.items():
@@ -155,7 +155,9 @@ class TestZhipuAIProvider:
     def test_init_with_explicit_api_key(self, _mock_zhipuai_sdk: MagicMock) -> None:
         """Provider accepts an explicit API key."""
         provider = _make_provider(_mock_zhipuai_sdk, api_key="test-key")
-        _mock_zhipuai_sdk.ZhipuAI.assert_called_with(api_key="test-key")
+        call_kwargs = _mock_zhipuai_sdk.ZaiClient.call_args
+        assert call_kwargs.kwargs["api_key"] == "test-key"
+        assert "base_url" in call_kwargs.kwargs
         assert provider is not None
 
     def test_init_with_env_api_key(self, _mock_zhipuai_sdk: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -163,7 +165,8 @@ class TestZhipuAIProvider:
         monkeypatch.setenv("ZHIPUAI_API_KEY", "env-key")
         cls = _get_provider_class()
         provider = cls()  # no explicit api_key -- should fall back to env
-        _mock_zhipuai_sdk.ZhipuAI.assert_called_with(api_key="env-key")
+        call_kwargs = _mock_zhipuai_sdk.ZaiClient.call_args
+        assert call_kwargs.kwargs["api_key"] == "env-key"
         assert provider is not None
 
     def test_init_no_api_key_raises_provider_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -184,7 +187,7 @@ class TestZhipuAIProvider:
 
         mock_client = MagicMock()
         mock_client.chat.completions.create.return_value = mock_response
-        _mock_zhipuai_sdk.ZhipuAI.return_value = mock_client
+        _mock_zhipuai_sdk.ZaiClient.return_value = mock_client
 
         provider = _make_provider(_mock_zhipuai_sdk)
 
@@ -218,7 +221,7 @@ class TestZhipuAIProvider:
 
         mock_client = MagicMock()
         mock_client.chat.completions.create.return_value = mock_response
-        _mock_zhipuai_sdk.ZhipuAI.return_value = mock_client
+        _mock_zhipuai_sdk.ZaiClient.return_value = mock_client
 
         provider = _make_provider(_mock_zhipuai_sdk)
         messages = [Message(role="user", content="Count tokens")]
@@ -235,7 +238,7 @@ class TestZhipuAIProvider:
         """SDK exceptions are wrapped in ProviderError."""
         mock_client = MagicMock()
         mock_client.chat.completions.create.side_effect = Exception("SDK boom")
-        _mock_zhipuai_sdk.ZhipuAI.return_value = mock_client
+        _mock_zhipuai_sdk.ZaiClient.return_value = mock_client
 
         provider = _make_provider(_mock_zhipuai_sdk)
         messages = [Message(role="user", content="fail")]
@@ -254,7 +257,7 @@ class TestZhipuAIProvider:
 
         mock_client = MagicMock()
         mock_client.chat.completions.create.return_value = iter(chunks)
-        _mock_zhipuai_sdk.ZhipuAI.return_value = mock_client
+        _mock_zhipuai_sdk.ZaiClient.return_value = mock_client
 
         provider = _make_provider(_mock_zhipuai_sdk)
         messages = [Message(role="user", content="Stream test")]
@@ -275,7 +278,7 @@ class TestZhipuAIProvider:
         """SDK exceptions during streaming are wrapped in ProviderError."""
         mock_client = MagicMock()
         mock_client.chat.completions.create.side_effect = Exception("Stream SDK error")
-        _mock_zhipuai_sdk.ZhipuAI.return_value = mock_client
+        _mock_zhipuai_sdk.ZaiClient.return_value = mock_client
 
         provider = _make_provider(_mock_zhipuai_sdk)
         messages = [Message(role="user", content="fail stream")]
@@ -293,19 +296,27 @@ class TestZhipuAIProvider:
         models = provider.available_models()
 
         assert isinstance(models, list)
-        assert len(models) == 3
+        assert len(models) == 11  # 10 chat/vision models + glm-ocr
 
         model_ids = {m.id for m in models}
-        assert model_ids == {"glm-4.7", "glm-4.7-flash", "glm-4-plus"}
+        expected_ids = {
+            "glm-5", "glm-4.7", "glm-4.6", "glm-4.5",
+            "glm-4.7-flash", "glm-4.5-flash", "glm-4.5-air",
+            "glm-4.6v-flash", "glm-4.6v", "glm-4.5v",
+            "glm-ocr",
+        }
+        assert model_ids == expected_ids
 
         for m in models:
             assert isinstance(m, ModelInfo)
             assert m.provider == "zhipuai"
-            assert m.max_tokens == 128000
-            assert m.supports_streaming is True
 
-        # Check names
+        # Chat models support streaming; glm-ocr does not
         model_map = {m.id: m for m in models}
-        assert model_map["glm-4.7"].name == "GLM-4.7"
-        assert model_map["glm-4.7-flash"].name == "GLM-4.7 Flash"
-        assert model_map["glm-4-plus"].name == "GLM-4 Plus"
+        assert model_map["glm-4.7"].supports_streaming is True
+        assert model_map["glm-ocr"].supports_streaming is False
+
+        # Check a few names
+        assert model_map["glm-5"].name == "GLM-5"
+        assert model_map["glm-4.7-flash"].name == "GLM-4.7 Flash (Free)"
+        assert model_map["glm-ocr"].name == "GLM-OCR (Layout Parsing)"

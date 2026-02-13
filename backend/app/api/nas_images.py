@@ -17,17 +17,22 @@ This endpoint maps:
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import time
 from io import BytesIO
+from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.database import get_db
-from app.models import Note
+from app.models import Note, NoteImage
+
+settings = get_settings()
 
 logger = logging.getLogger(__name__)
 
@@ -210,3 +215,94 @@ async def proxy_nas_image(
             "Cache-Control": "public, max-age=86400",
         },
     )
+
+
+@router.post("/{note_id}/{att_key}/{filename}/ocr")
+async def ocr_nas_image(
+    note_id: str,
+    att_key: str,
+    filename: str,
+    background_tasks: BackgroundTasks,
+    current_user: dict = Depends(_get_user_flexible),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+):
+    """Trigger OCR for a NAS inline image.
+
+    If a NoteImage record already exists (matched by note_id + name),
+    returns its status. Otherwise downloads the image from NAS,
+    creates a NoteImage record, and schedules background OCR.
+    """
+    from app.api.files import _run_image_ocr
+
+    # Check if NoteImage already exists for this image
+    stmt = select(NoteImage).where(
+        NoteImage.synology_note_id == note_id,
+        NoteImage.name == filename,
+    )
+    result = await db.execute(stmt)
+    existing = result.scalar_one_or_none()
+
+    if existing:
+        if existing.extraction_status == "completed":
+            return {"image_id": existing.id, "status": "already_completed"}
+        if existing.extraction_status == "pending":
+            return {"image_id": existing.id, "status": "pending"}
+        # failed or None — re-trigger
+        existing.extraction_status = "pending"
+        await db.commit()
+        background_tasks.add_task(_run_image_ocr, existing.id)
+        return {"image_id": existing.id, "status": "pending"}
+
+    # Look up note for NAS path construction
+    note_result = await db.execute(
+        select(Note).where(Note.synology_note_id == note_id)
+    )
+    note = note_result.scalar_one_or_none()
+    if not note or not note.link_id or not note.nas_ver:
+        raise HTTPException(status_code=404, detail="Note or NAS metadata not found")
+
+    # Download image from NAS
+    async with _NAS_FETCH_SEMAPHORE:
+        try:
+            client = await _get_shared_nas_client()
+            nas_path = f"/note/ns/dv/{note.link_id}/{note.nas_ver}/{att_key}/{filename}"
+            image_bytes, content_type = await client.fetch_binary(nas_path)
+        except Exception as exc:
+            global _shared_client  # noqa: PLW0603
+            _shared_client = None
+            logger.exception("Failed to fetch NAS image for OCR: %s", exc)
+            raise HTTPException(status_code=502, detail="NAS 이미지 다운로드 실패") from exc
+
+    if not image_bytes or (content_type and "text/html" in content_type):
+        raise HTTPException(status_code=404, detail="Image not found on NAS")
+
+    # Save image to local storage
+    md5_hash = hashlib.md5(image_bytes).hexdigest()  # noqa: S324
+    ext = Path(filename).suffix or ".png"
+    output_dir = Path(settings.NSX_IMAGES_PATH) / note_id
+    output_dir.mkdir(parents=True, exist_ok=True)
+    file_path = output_dir / f"{md5_hash}{ext}"
+    file_path.write_bytes(image_bytes)
+
+    # Guess mime type from content_type or extension
+    mime_type = content_type or "image/png"
+    if ";" in mime_type:
+        mime_type = mime_type.split(";")[0].strip()
+
+    # Create NoteImage record
+    note_image = NoteImage(
+        synology_note_id=note_id,
+        ref=att_key,
+        name=filename,
+        file_path=str(file_path),
+        md5=md5_hash,
+        mime_type=mime_type,
+        extraction_status="pending",
+    )
+    db.add(note_image)
+    await db.commit()
+    await db.refresh(note_image)
+
+    background_tasks.add_task(_run_image_ocr, note_image.id)
+
+    return {"image_id": note_image.id, "status": "pending"}

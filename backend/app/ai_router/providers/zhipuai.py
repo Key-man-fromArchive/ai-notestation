@@ -2,7 +2,7 @@
 # @SPEC docs/plans/2026-01-29-labnote-ai-design.md#AI-Router
 """ZhipuAI (Z.ai) provider for GLM models.
 
-Integrates with the ZhipuAI SDK (OpenAI-compatible interface) to provide
+Integrates with the zai-sdk (OpenAI-compatible interface) to provide
 access to GLM model series. The SDK is sync-only, so all blocking calls
 are wrapped with ``asyncio.to_thread``.
 
@@ -22,7 +22,7 @@ import os
 from collections.abc import AsyncIterator
 from typing import Any
 
-from zhipuai import ZhipuAI
+from zai import ZaiClient
 
 from app.ai_router.providers.base import AIProvider
 from app.ai_router.schemas import AIResponse, Message, ModelInfo, ProviderError, TokenUsage
@@ -108,14 +108,23 @@ _AVAILABLE_MODELS = [
         max_tokens=128000,
         supports_streaming=True,
     ),
+    # -- OCR (layout_parsing API, not chat completions) --
+    ModelInfo(
+        id="glm-ocr",
+        name="GLM-OCR (Layout Parsing)",
+        provider=_PROVIDER_NAME,
+        max_tokens=4096,
+        supports_streaming=False,
+    ),
 ]
 
 
 class ZhipuAIProvider(AIProvider):
-    """AI provider backed by the ZhipuAI SDK.
+    """AI provider backed by the zai-sdk.
 
     The SDK exposes an OpenAI-compatible ``chat.completions.create`` interface,
-    so no message format conversion is needed.
+    so no message format conversion is needed.  Additionally, it provides a
+    ``layout_parsing.create`` endpoint for the GLM-OCR model.
 
     Args:
         api_key: ZhipuAI API key. Falls back to the ``ZHIPUAI_API_KEY``
@@ -133,7 +142,7 @@ class ZhipuAIProvider(AIProvider):
                 message="API key is required. Pass api_key or set ZHIPUAI_API_KEY environment variable.",
             )
         base_url = os.environ.get("ZHIPUAI_BASE_URL", _DEFAULT_BASE_URL)
-        self._client: ZhipuAI = ZhipuAI(api_key=resolved_key, base_url=base_url)
+        self._client: ZaiClient = ZaiClient(api_key=resolved_key, base_url=base_url)
 
     # -- helpers ------------------------------------------------------------
 
@@ -230,6 +239,32 @@ class ZhipuAIProvider(AIProvider):
                 content = chunk.choices[0].delta.content
                 if content is not None:
                     yield content
+        except ProviderError:
+            raise
+        except Exception as exc:
+            raise ProviderError(
+                provider=_PROVIDER_NAME,
+                message=str(exc),
+            ) from exc
+
+    async def layout_parsing(self, file: str, **kwargs: Any) -> dict:
+        """Call the GLM-OCR layout parsing API.
+
+        Args:
+            file: URL or base64 data-URI of the document/image to parse.
+            **kwargs: Extra arguments forwarded to ``layout_parsing.create``.
+
+        Returns:
+            Raw response dict from the layout parsing API.
+        """
+        try:
+            response = await asyncio.to_thread(
+                self._client.layout_parsing.create,
+                model="glm-ocr",
+                file=file,
+                **kwargs,
+            )
+            return response
         except ProviderError:
             raise
         except Exception as exc:

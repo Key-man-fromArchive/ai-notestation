@@ -110,12 +110,50 @@ class PaddleOCRVLEngine:
         return OCRResult(text=text, confidence=confidence, method="paddleocr-vl")
 
 
+class GlmOcrEngine:
+    """GLM-OCR engine using the zai-sdk layout_parsing API.
+
+    Calls ZhipuAIProvider.layout_parsing() with a base64 data-URI and
+    extracts markdown text from the ``md_results`` field in the response.
+    """
+
+    async def extract(self, image_bytes: bytes, mime_type: str) -> OCRResult:
+        from app.ai_router.providers.zhipuai import ZhipuAIProvider
+        from app.ai_router.schemas import ProviderError
+
+        b64 = base64.b64encode(image_bytes).decode("ascii")
+        data_uri = f"data:{mime_type};base64,{b64}"
+
+        try:
+            provider = ZhipuAIProvider()
+        except ProviderError:
+            raise RuntimeError(
+                "GLM-OCR requires ZHIPUAI_API_KEY to be set."
+            )
+
+        logger.info("Running OCR with GLM-OCR (layout_parsing API)")
+        response = await provider.layout_parsing(file=data_uri)
+
+        # Extract text from response — layout_parsing returns an object
+        # with md_results containing the parsed markdown text.
+        text = ""
+        if hasattr(response, "md_results"):
+            text = response.md_results or ""
+        elif isinstance(response, dict):
+            text = response.get("md_results", "")
+
+        text = text.strip()
+        confidence = 0.85 if text else 0.0
+        return OCRResult(text=text, confidence=confidence, method="glm-ocr")
+
+
 class OCRService:
     """OCR service dispatching to the configured engine.
 
     Engine selection is based on the ``ocr_engine`` setting:
     - ``"ai_vision"`` (default): cloud AI Vision models via AIRouter
     - ``"paddleocr_vl"``: local PaddleOCR-VL on CPU
+    - ``"glm_ocr"``: GLM-OCR via zai-sdk layout_parsing API
     """
 
     async def _get_engine_setting(self) -> str:
@@ -149,6 +187,21 @@ class OCRService:
             RuntimeError: If all engines fail or no model is available.
         """
         engine = await self._get_engine_setting()
+
+        if engine == "glm_ocr":
+            try:
+                return await GlmOcrEngine().extract(image_bytes, mime_type)
+            except Exception as exc:
+                logger.warning("GLM-OCR failed: %s — falling back to AI Vision", exc)
+
+            # Fallback to cloud AI Vision
+            try:
+                return await self._ai_vision_extract(image_bytes, mime_type)
+            except Exception as fallback_exc:
+                raise RuntimeError(
+                    f"GLM-OCR and AI Vision both failed. "
+                    f"AI Vision error: {fallback_exc}"
+                ) from fallback_exc
 
         if engine == "paddleocr_vl":
             try:

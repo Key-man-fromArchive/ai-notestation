@@ -51,6 +51,7 @@ const sanitizeSchema = {
 interface MarkdownRendererProps {
   content: string
   className?: string
+  onImageContextMenu?: (e: React.MouseEvent, imageInfo: { src: string; alt?: string }) => void
 }
 
 const NOTESTATION_IMAGE_PREFIX = 'notestation-image:'
@@ -116,11 +117,13 @@ function NoteStationImage({
   alt,
   width,
   height,
+  onContextMenu,
 }: {
   src: string
   alt?: string
   width?: string | number
   height?: string | number
+  onContextMenu?: (e: React.MouseEvent) => void
 }) {
   const [status, setStatus] = React.useState<'loading' | 'loaded' | 'error'>('loading')
   const retryCount = React.useRef(0)
@@ -142,7 +145,7 @@ function NoteStationImage({
   }, [src])
 
   return (
-    <span className="relative inline-block my-3">
+    <span className="relative inline-block my-3" onContextMenu={onContextMenu}>
       {status === 'loading' && (
         <span className="absolute inset-0 flex items-center justify-center bg-muted/50 rounded-lg">
           <span className="animate-pulse text-muted-foreground text-sm">Loading...</span>
@@ -174,64 +177,72 @@ function NoteStationImage({
 }
 
 /**
- * Custom img component that renders NoteStation image placeholders
- * as styled cards with filename and dimensions.
+ * Factory that creates markdown components, optionally wiring up
+ * an image context-menu handler for inline NAS/API images.
  */
-const markdownComponents: Components = {
-  // Wrap tables in a scrollable container to handle wide NoteStation tables
-  table: ({ children, ...props }) => (
-    <div className="overflow-x-auto my-4 not-prose">
-      <table
-        className="min-w-full border-collapse border border-border text-sm"
+function createMarkdownComponents(
+  onImageContextMenu?: (e: React.MouseEvent, imageInfo: { src: string; alt?: string }) => void,
+): Components {
+  return {
+    // Wrap tables in a scrollable container to handle wide NoteStation tables
+    table: ({ children, ...props }) => (
+      <div className="overflow-x-auto my-4 not-prose">
+        <table
+          className="min-w-full border-collapse border border-border text-sm"
+          {...props}
+        >
+          {children}
+        </table>
+      </div>
+    ),
+    td: ({ children, style, ...props }) => (
+      <td
+        className="border border-border px-2 py-1.5 text-foreground align-top"
+        style={style}
         {...props}
       >
         {children}
-      </table>
-    </div>
-  ),
-  td: ({ children, style, ...props }) => (
-    <td
-      className="border border-border px-2 py-1.5 text-foreground align-top"
-      style={style}
-      {...props}
-    >
-      {children}
-    </td>
-  ),
-  th: ({ children, style, ...props }) => (
-    <th
-      className="border border-border px-2 py-1.5 bg-muted font-semibold text-foreground align-top"
-      style={style}
-      {...props}
-    >
-      {children}
-    </th>
-  ),
-  img: ({ alt, width, height, src, ...props }) => {
-    // Check if this is a NoteStation embedded image placeholder
-    if (alt?.startsWith(NOTESTATION_IMAGE_PREFIX)) {
-      const filename = alt.slice(NOTESTATION_IMAGE_PREFIX.length)
-      return <ImagePlaceholder filename={filename} width={width} height={height} />
-    }
+      </td>
+    ),
+    th: ({ children, style, ...props }) => (
+      <th
+        className="border border-border px-2 py-1.5 bg-muted font-semibold text-foreground align-top"
+        style={style}
+        {...props}
+      >
+        {children}
+      </th>
+    ),
+    img: ({ alt, width, height, src, ...props }) => {
+      // Check if this is a NoteStation embedded image placeholder
+      if (alt?.startsWith(NOTESTATION_IMAGE_PREFIX)) {
+        const filename = alt.slice(NOTESTATION_IMAGE_PREFIX.length)
+        return <ImagePlaceholder filename={filename} width={width} height={height} />
+      }
 
-    // Check if this is an API-served NoteStation image (local or NAS proxy)
-    if (src?.startsWith('/api/images/') || src?.startsWith('/api/nas-images/')) {
-      // Append auth token for <img> tags (browser can't send Authorization header)
-      const token = apiClient.getToken()
-      const authedSrc = token ? `${src}${src.includes('?') ? '&' : '?'}token=${token}` : src
-      return (
-        <NoteStationImage
-          src={authedSrc}
-          alt={alt}
-          width={width}
-          height={height}
-        />
-      )
-    }
+      // Check if this is an API-served NoteStation image (local or NAS proxy)
+      if (src?.startsWith('/api/images/') || src?.startsWith('/api/nas-images/')) {
+        // Append auth token for <img> tags (browser can't send Authorization header)
+        const token = apiClient.getToken()
+        const authedSrc = token ? `${src}${src.includes('?') ? '&' : '?'}token=${token}` : src
+        const handleCtx = onImageContextMenu && src
+          ? (e: React.MouseEvent) => onImageContextMenu(e, { src, alt })
+          : undefined
+        return (
+          <NoteStationImage
+            src={authedSrc}
+            alt={alt}
+            width={width}
+            height={height}
+            onContextMenu={handleCtx}
+          />
+        )
+      }
 
-    // Regular image
-    return <img alt={alt} width={width} height={height} src={src} {...props} />
-  },
+      // Regular image
+      return <img alt={alt} width={width} height={height} src={src} {...props} />
+    },
+  }
 }
 
 /**
@@ -251,8 +262,9 @@ function stripOuterCodeFence(text: string): string {
   return match ? match[1] : text
 }
 
-export function MarkdownRenderer({ content, className }: MarkdownRendererProps) {
+export function MarkdownRenderer({ content, className, onImageContextMenu }: MarkdownRendererProps) {
   const processed = React.useMemo(() => stripOuterCodeFence(content), [content])
+  const components = React.useMemo(() => createMarkdownComponents(onImageContextMenu), [onImageContextMenu])
 
   return (
     <div
@@ -274,7 +286,7 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
     >
       <ReactMarkdown
         rehypePlugins={[rehypeRaw, [rehypeSanitize, sanitizeSchema]]}
-        components={markdownComponents}
+        components={components}
       >
         {processed}
       </ReactMarkdown>

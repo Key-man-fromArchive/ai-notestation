@@ -27,6 +27,11 @@ COPY pyproject.toml .
 # Install Python dependencies (editable mode for development)
 RUN pip install --no-cache-dir -e ".[dev]"
 
+# Pin numpy<2.4 — PaddleOCR-VL crashes with numpy>=2.4 due to
+# "only 0-dimensional arrays can be converted to Python scalars"
+# See: https://github.com/PaddlePaddle/PaddleOCR/issues/17462
+RUN pip install --no-cache-dir "numpy<2.4"
+
 # Copy application code
 COPY . .
 

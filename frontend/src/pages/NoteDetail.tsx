@@ -53,6 +53,7 @@ export default function NoteDetail() {
     name: string
     isPdf: boolean
     pageCount?: number | null
+    nasImage?: { noteId: string; attKey: string; filename: string }
   } | null>(null)
   const [textModal, setTextModal] = useState<{ title: string; text: string; pageCount?: number } | null>(null)
 
@@ -118,6 +119,82 @@ export default function NoteDetail() {
     }
   }
 
+  const [extractingNasImage, setExtractingNasImage] = useState<string | null>(null) // "noteId/attKey/filename"
+
+  const handleExtractNasImage = async (noteId: string, attKey: string, filename: string) => {
+    const key = `${noteId}/${attKey}/${filename}`
+    setExtractingNasImage(key)
+    try {
+      const res = await apiClient.post<{ image_id: number; status: string }>(
+        `/nas-images/${noteId}/${attKey}/${filename}/ocr`
+      )
+      if (res.status === 'already_completed') {
+        // Image already has OCR, refresh note to show it
+        setExtractingNasImage(null)
+        queryClient.invalidateQueries({ queryKey: ['note', id] })
+        return
+      }
+      // Poll for completion
+      const imageId = res.image_id
+      const poll = setInterval(async () => {
+        try {
+          const result = await apiClient.get<{ extraction_status: string; text: string }>(`/images/${imageId}/text`)
+          if (result.extraction_status === 'completed' || result.extraction_status === 'failed') {
+            clearInterval(poll)
+            setExtractingNasImage(null)
+            queryClient.invalidateQueries({ queryKey: ['note', id] })
+          }
+        } catch {
+          clearInterval(poll)
+          setExtractingNasImage(null)
+        }
+      }, 2000)
+    } catch {
+      setExtractingNasImage(null)
+    }
+  }
+
+  const handleInlineImageContextMenu = useCallback((e: React.MouseEvent) => {
+    // Check if the target (or a parent) is an <img> with a NAS/API image src
+    const target = e.target as HTMLElement
+    const img = target.tagName === 'IMG' ? target as HTMLImageElement : target.closest('img')
+    if (!img) return
+
+    // Get the original src (strip token query params)
+    const rawSrc = img.getAttribute('src') || ''
+    const src = rawSrc.replace(/[?&]token=[^&]*/, '').replace(/[?&]_retry=\d+/, '').replace(/\?$/, '')
+
+    // Parse NAS image URL: /api/nas-images/{noteId}/{attKey}/{filename}
+    const nasMatch = src.match(/^\/api\/nas-images\/([^/]+)\/([^/]+)\/(.+)$/)
+    if (nasMatch) {
+      e.preventDefault()
+      const [, noteId, attKey, filename] = nasMatch
+      // Check if a NoteImage already exists for this image
+      const existingImg = note?.images?.find(img => img.name === filename)
+      if (existingImg) {
+        const imgStatus = existingImg.extraction_status ?? (extractingImageId === existingImg.id ? 'pending' : null)
+        setContextMenu({ x: e.clientX, y: e.clientY, type: 'image', id: existingImg.id, status: imgStatus, name: existingImg.name, isPdf: false })
+      } else {
+        const nasKey = `${noteId}/${attKey}/${filename}`
+        const isExtracting = extractingNasImage === nasKey
+        setContextMenu({ x: e.clientX, y: e.clientY, type: 'image', id: 0, status: isExtracting ? 'pending' : null, name: filename, isPdf: false, nasImage: { noteId, attKey, filename } })
+      }
+      return
+    }
+
+    // Parse local image URL: /api/images/{noteId}/{ref}
+    const localMatch = src.match(/^\/api\/images\/([^/]+)\/(.+)$/)
+    if (localMatch && note?.images) {
+      const [, , ref] = localMatch
+      const existingImg = note.images.find(img => img.ref === ref)
+      if (existingImg) {
+        e.preventDefault()
+        const imgStatus = existingImg.extraction_status ?? (extractingImageId === existingImg.id ? 'pending' : null)
+        setContextMenu({ x: e.clientX, y: e.clientY, type: 'image', id: existingImg.id, status: imgStatus, name: existingImg.name, isPdf: false })
+      }
+    }
+  }, [note, extractingImageId, extractingNasImage])
+
   const handleAttachmentContextMenu = (
     e: React.MouseEvent,
     opts: { type: 'attachment' | 'image'; id: string | number; status: string | null; name: string; isPdf: boolean; pageCount?: number | null }
@@ -161,6 +238,14 @@ export default function NoteDetail() {
       }]
     }
     // No extraction yet
+    if (contextMenu.nasImage) {
+      const { noteId, attKey, filename } = contextMenu.nasImage
+      return [{
+        icon: <ScanText className="h-4 w-4" />,
+        label: t('ocr.extractText'),
+        onClick: () => handleExtractNasImage(noteId, attKey, filename),
+      }]
+    }
     return [{
       icon: <ScanText className="h-4 w-4" />,
       label: isPdf ? t('files.extractText') : t('ocr.extractText'),
@@ -613,7 +698,7 @@ export default function NoteDetail() {
         </div>
 
         {/* 에디터 (항상 편집 가능) */}
-        <article className="mb-8">
+        <article className="mb-8" onContextMenu={handleInlineImageContextMenu}>
           <NoteEditor
             noteId={note.note_id}
             initialContent={note.content}
