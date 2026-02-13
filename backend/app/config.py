@@ -59,6 +59,7 @@ class Settings(BaseSettings):
     NSX_IMAGES_PATH: str = "/data/nsx_images"  # Path to store extracted images
     NSX_EXPORTS_PATH: str = "/data/nsx_exports"  # Path for NSX export files
     UPLOADS_PATH: str = "/data/uploads"  # Path for user-uploaded files
+    TRASH_PATH: str = "/data/trash"  # Path for trash backup data
 
     @property
     def async_database_url(self) -> str:

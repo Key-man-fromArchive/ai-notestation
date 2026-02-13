@@ -27,6 +27,8 @@ import {
   FileX,
   CheckCircle,
   AlertCircle,
+  RotateCcw,
+  X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { apiClient } from '@/lib/api'
@@ -115,6 +117,33 @@ interface ProvidersResponse {
   providers: ProviderData[]
   api_keys: Record<string, boolean>
   total_models: number
+}
+
+interface TrashItem {
+  id: number
+  operation_type: string
+  description: string
+  item_count: number
+  size_bytes: number
+  size_pretty: string
+  created_at: string | null
+  triggered_by: string | null
+}
+
+interface TrashListResponse {
+  items: TrashItem[]
+  total_count: number
+  total_size_bytes: number
+  total_size_pretty: string
+}
+
+const OPERATION_ICON: Record<string, typeof FileX> = {
+  activity_logs: FileX,
+  orphan_files: HardDrive,
+  export_files: Trash2,
+  embeddings: Search,
+  vision_data: Eye,
+  notes_reset: Database,
 }
 
 // ---------------------------------------------------------------------------
@@ -784,6 +813,14 @@ function StorageTab() {
         </div>
       </div>
 
+      {/* Trash Section */}
+      <TrashSection
+        confirm={confirm}
+        exec={exec}
+        processing={processing}
+        result={result}
+      />
+
       {/* Data reset actions (dangerous) */}
       <div className="border border-destructive/30 rounded-lg bg-card">
         <div className="px-4 py-3 bg-destructive/5 border-b border-destructive/20">
@@ -924,6 +961,182 @@ function StorageTab() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Trash Section
+// ---------------------------------------------------------------------------
+
+function TrashSection({
+  confirm,
+  exec,
+  processing,
+  result,
+}: {
+  confirm: (title: string, desc: string, onConfirm: () => Promise<void>) => void
+  exec: (key: string, action: () => Promise<unknown>) => Promise<void>
+  processing: string | null
+  result: { key: string; ok: boolean; msg: string } | null
+}) {
+  const { t } = useTranslation()
+  const queryClient = useQueryClient()
+
+  const { data: trash, isLoading } = useQuery({
+    queryKey: ['admin', 'trash'],
+    queryFn: () => apiClient.get<TrashListResponse>('/admin/trash'),
+  })
+
+  const items = trash?.items ?? []
+  const totalSize = trash?.total_size_pretty ?? '0 B'
+
+  const opLabel = (type: string) => {
+    const map: Record<string, string> = {
+      activity_logs: t('admin.trashOpActivityLogs'),
+      orphan_files: t('admin.trashOpOrphanFiles'),
+      export_files: t('admin.trashOpExportFiles'),
+      embeddings: t('admin.trashOpEmbeddings'),
+      vision_data: t('admin.trashOpVisionData'),
+      notes_reset: t('admin.trashOpNotesReset'),
+    }
+    return map[type] ?? type
+  }
+
+  return (
+    <div className="border border-border rounded-lg bg-card">
+      <div className="px-4 py-3 bg-muted/50 border-b border-border flex items-center justify-between">
+        <h3 className="font-semibold flex items-center gap-2">
+          <Trash2 className="h-4 w-4" />
+          {t('admin.trash')}
+          {items.length > 0 && (
+            <span className="text-xs font-normal bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+              {items.length}
+            </span>
+          )}
+          {items.length > 0 && (
+            <span className="text-xs font-normal text-muted-foreground">
+              {t('admin.trashSize', { size: totalSize })}
+            </span>
+          )}
+        </h3>
+        {items.length > 0 && (
+          <button
+            onClick={() =>
+              confirm(
+                t('admin.trashEmptyConfirmTitle'),
+                t('admin.trashEmptyConfirmDesc'),
+                () => exec('trash-empty', () =>
+                  apiClient.delete('/admin/trash?confirm=true'),
+                ),
+              )
+            }
+            disabled={processing === 'trash-empty'}
+            className="text-xs px-3 py-1.5 rounded-md border border-destructive/30 text-destructive hover:bg-destructive/5 transition-colors disabled:opacity-50"
+          >
+            {t('admin.trashEmptyAll')}
+          </button>
+        )}
+      </div>
+
+      {isLoading ? (
+        <div className="px-4 py-6 flex justify-center">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </div>
+      ) : items.length === 0 ? (
+        <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+          <Trash2 className="h-8 w-8 mx-auto mb-2 opacity-30" />
+          {t('admin.trashEmpty')}
+        </div>
+      ) : (
+        <div className="divide-y divide-border">
+          {items.map((item) => {
+            const Icon = OPERATION_ICON[item.operation_type] ?? Trash2
+            const restoreKey = `trash-restore-${item.id}`
+            const purgeKey = `trash-purge-${item.id}`
+            return (
+              <div key={item.id} className="flex items-center justify-between px-4 py-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground shrink-0">
+                      <Icon className="h-4 w-4" />
+                    </span>
+                    <span className="text-sm font-medium">{item.description}</span>
+                    <span className="text-xs bg-muted px-1.5 py-0.5 rounded text-muted-foreground">
+                      {opLabel(item.operation_type)}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3 ml-6 mt-0.5">
+                    <span className="text-xs text-muted-foreground">
+                      {t('common.count_items', { count: item.item_count })}
+                    </span>
+                    <span className="text-xs text-muted-foreground">{item.size_pretty}</span>
+                    {item.created_at && (
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(item.created_at).toLocaleString('ko-KR')}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0 ml-4">
+                  {processing === restoreKey || processing === purgeKey ? (
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  ) : (
+                    <>
+                      <button
+                        onClick={() =>
+                          confirm(
+                            t('admin.trashRestoreConfirmTitle'),
+                            t('admin.trashRestoreConfirmDesc'),
+                            () => exec(restoreKey, async () => {
+                              const res = await apiClient.post<{ restored_count: number; needs_reindex: boolean }>(
+                                `/admin/trash/${item.id}/restore?confirm=true`, {}
+                              )
+                              if (res.needs_reindex) {
+                                // Show a note to user about re-indexing
+                                queryClient.invalidateQueries({ queryKey: ['admin'] })
+                              }
+                            }),
+                          )
+                        }
+                        className="text-xs px-2.5 py-1 rounded-md border border-input hover:bg-muted transition-colors flex items-center gap-1"
+                      >
+                        <RotateCcw className="h-3 w-3" />
+                        {t('admin.trashRestore')}
+                      </button>
+                      <button
+                        onClick={() =>
+                          confirm(
+                            t('admin.trashPurgeConfirmTitle'),
+                            t('admin.trashPurgeConfirmDesc'),
+                            () => exec(purgeKey, () =>
+                              apiClient.delete(`/admin/trash/${item.id}?confirm=true`),
+                            ),
+                          )
+                        }
+                        className="text-xs px-2.5 py-1 rounded-md border border-destructive/30 text-destructive hover:bg-destructive/5 transition-colors flex items-center gap-1"
+                      >
+                        <X className="h-3 w-3" />
+                        {t('admin.trashPurge')}
+                      </button>
+                    </>
+                  )}
+                  {result?.key === restoreKey && (
+                    result.ok
+                      ? <CheckCircle className="h-4 w-4 text-green-600" />
+                      : <AlertCircle className="h-4 w-4 text-destructive" />
+                  )}
+                  {result?.key === purgeKey && (
+                    result.ok
+                      ? <CheckCircle className="h-4 w-4 text-green-600" />
+                      : <AlertCircle className="h-4 w-4 text-destructive" />
+                  )}
+                </div>
+              </div>
+            )
+          })}
         </div>
       )}
     </div>

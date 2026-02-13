@@ -5,6 +5,7 @@ from datetime import datetime
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     CheckConstraint,
     DateTime,
@@ -394,3 +395,24 @@ class ActivityLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
 
     __table_args__ = (Index("idx_activity_log_op_created", "operation", "created_at"),)
+
+
+class TrashOperation(Base):
+    """Trash operation record for soft-delete / restore / purge."""
+
+    __tablename__ = "trash_operations"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    operation_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    item_count: Mapped[int] = mapped_column(Integer, server_default="0")
+    size_bytes: Mapped[int] = mapped_column(BigInteger, server_default="0")
+    backup_path: Mapped[str] = mapped_column(String(500), nullable=False)
+    manifest: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    triggered_by: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    status: Mapped[str] = mapped_column(String(20), server_default="active")
+    restored_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    purged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (Index("idx_trash_operations_status", "status"),)

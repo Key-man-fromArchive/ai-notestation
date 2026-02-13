@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import contextlib
-import shutil
+import logging
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -16,8 +16,12 @@ from app.api.settings import _load_from_db as load_settings_from_db
 from app.config import get_settings
 from app.constants import MemberRole
 from app.database import get_db
+from app.models import TrashOperation
+from app.services import trash_service
 from app.services.activity_log import get_trigger_name, log_activity
 from app.services.auth_service import get_current_user
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -70,15 +74,14 @@ class UserUpdateRequest(BaseModel):
 
 # --- Overview ---
 
+
 @router.get("/overview")
 async def get_admin_overview(
     admin: dict = Depends(require_admin),  # noqa: B008
     db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> dict:
     """Dashboard overview with key metrics."""
-    user_result = await db.execute(
-        text("SELECT COUNT(*) FROM users WHERE is_active = true")
-    )
+    user_result = await db.execute(text("SELECT COUNT(*) FROM users WHERE is_active = true"))
     active_users = user_result.scalar() or 0
 
     note_result = await db.execute(text("SELECT COUNT(*) FROM notes"))
@@ -100,25 +103,20 @@ async def get_admin_overview(
 
 # --- Database Stats ---
 
+
 @router.get("/db/stats")
 async def get_db_stats(
     admin: dict = Depends(require_admin),  # noqa: B008
     db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> dict:
     """Database statistics: sizes, row counts, connections."""
-    size_result = await db.execute(
-        text("SELECT pg_size_pretty(pg_database_size(current_database()))")
-    )
+    size_result = await db.execute(text("SELECT pg_size_pretty(pg_database_size(current_database()))"))
     database_size = size_result.scalar() or "unknown"
 
-    size_bytes_result = await db.execute(
-        text("SELECT pg_database_size(current_database())")
-    )
+    size_bytes_result = await db.execute(text("SELECT pg_database_size(current_database())"))
     database_size_bytes = size_bytes_result.scalar() or 0
 
-    conn_result = await db.execute(
-        text("SELECT count(*) FROM pg_stat_activity WHERE state = 'active'")
-    )
+    conn_result = await db.execute(text("SELECT count(*) FROM pg_stat_activity WHERE state = 'active'"))
     active_connections = conn_result.scalar() or 0
 
     total_conn_result = await db.execute(
@@ -162,6 +160,7 @@ async def get_db_stats(
 
 # --- Data Usage ---
 
+
 @router.get("/data/usage")
 async def get_data_usage(
     admin: dict = Depends(require_admin),  # noqa: B008
@@ -191,9 +190,7 @@ async def get_data_usage(
     )
     embed_row = embed_result.fetchone()
 
-    images_result = await db.execute(
-        text("SELECT COUNT(*) AS count FROM note_images")
-    )
+    images_result = await db.execute(text("SELECT COUNT(*) AS count FROM note_images"))
     images_count = images_result.scalar() or 0
 
     notebooks_result = await db.execute(text("SELECT COUNT(*) FROM notebooks"))
@@ -260,6 +257,7 @@ async def get_data_usage(
 
 # --- User Management ---
 
+
 @router.get("/users")
 async def list_users(
     admin: dict = Depends(require_admin),  # noqa: B008
@@ -309,8 +307,8 @@ async def list_users(
 async def update_user(
     user_id: int,
     body: UserUpdateRequest,
-    admin: dict = Depends(require_admin),   # noqa: B008
-    db: AsyncSession = Depends(get_db),     # noqa: B008
+    admin: dict = Depends(require_admin),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> dict:
     """Update user active status."""
     if user_id == admin["user_id"] and body.is_active is False:
@@ -326,10 +324,7 @@ async def update_user(
         )
 
     result = await db.execute(
-        text(
-            "UPDATE users SET is_active = :is_active, updated_at = NOW() "
-            "WHERE id = :user_id RETURNING id"
-        ),
+        text("UPDATE users SET is_active = :is_active, updated_at = NOW() WHERE id = :user_id RETURNING id"),
         {"is_active": body.is_active, "user_id": user_id},
     )
     row = result.fetchone()
@@ -342,7 +337,8 @@ async def update_user(
 
     await db.commit()
     await log_activity(
-        "admin", "completed",
+        "admin",
+        "completed",
         message=f"사용자 상태 변경: user_id={user_id}",
         details={"user_id": user_id, "is_active": body.is_active},
         triggered_by=get_trigger_name(admin),
@@ -351,6 +347,7 @@ async def update_user(
 
 
 # --- NAS Status ---
+
 
 @router.get("/nas/status")
 async def get_nas_status(
@@ -365,19 +362,11 @@ async def get_nas_status(
 
     configured = bool(nas_url and nas_user)
 
-    sync_result = await db.execute(
-        text("SELECT MAX(synced_at) AS last_sync FROM notes WHERE synced_at IS NOT NULL")
-    )
+    sync_result = await db.execute(text("SELECT MAX(synced_at) AS last_sync FROM notes WHERE synced_at IS NOT NULL"))
     last_sync_row = sync_result.fetchone()
-    last_sync = (
-        last_sync_row.last_sync.isoformat()
-        if last_sync_row and last_sync_row.last_sync
-        else None
-    )
+    last_sync = last_sync_row.last_sync.isoformat() if last_sync_row and last_sync_row.last_sync else None
 
-    synced_count = await db.execute(
-        text("SELECT COUNT(*) FROM notes WHERE synced_at IS NOT NULL")
-    )
+    synced_count = await db.execute(text("SELECT COUNT(*) FROM notes WHERE synced_at IS NOT NULL"))
 
     return {
         "configured": configured,
@@ -388,6 +377,7 @@ async def get_nas_status(
 
 
 # --- LLM Providers ---
+
 
 @router.get("/providers")
 async def get_providers(
@@ -403,28 +393,32 @@ async def get_providers(
         try:
             provider = ai_router.get_provider(name)
             models = provider.available_models()
-            providers.append({
-                "name": name,
-                "status": "active",
-                "model_count": len(models),
-                "models": [
-                    {
-                        "id": m.id,
-                        "name": m.name,
-                        "max_tokens": m.max_tokens,
-                        "supports_streaming": m.supports_streaming,
-                    }
-                    for m in models
-                ],
-            })
+            providers.append(
+                {
+                    "name": name,
+                    "status": "active",
+                    "model_count": len(models),
+                    "models": [
+                        {
+                            "id": m.id,
+                            "name": m.name,
+                            "max_tokens": m.max_tokens,
+                            "supports_streaming": m.supports_streaming,
+                        }
+                        for m in models
+                    ],
+                }
+            )
         except Exception as e:
-            providers.append({
-                "name": name,
-                "status": "error",
-                "error": str(e),
-                "model_count": 0,
-                "models": [],
-            })
+            providers.append(
+                {
+                    "name": name,
+                    "status": "error",
+                    "error": str(e),
+                    "model_count": 0,
+                    "models": [],
+                }
+            )
 
     # Include OAuth-connected providers not already registered via API key
     from app.models import OAuthToken
@@ -439,25 +433,25 @@ async def get_providers(
         )
         result = await db.execute(stmt)
         if result.scalar_one_or_none():
-            providers.append({
-                "name": oauth_provider,
-                "status": "active",
-                "source": "oauth",
-                "model_count": len(oauth_models),
-                "models": [
-                    {
-                        "id": m.id,
-                        "name": m.name,
-                        "max_tokens": m.max_tokens,
-                        "supports_streaming": m.supports_streaming,
-                    }
-                    for m in oauth_models
-                ],
-            })
+            providers.append(
+                {
+                    "name": oauth_provider,
+                    "status": "active",
+                    "source": "oauth",
+                    "model_count": len(oauth_models),
+                    "models": [
+                        {
+                            "id": m.id,
+                            "name": m.name,
+                            "max_tokens": m.max_tokens,
+                            "supports_streaming": m.supports_streaming,
+                        }
+                        for m in oauth_models
+                    ],
+                }
+            )
 
-    key_result = await db.execute(
-        text("SELECT key, value FROM settings WHERE key LIKE '%_api_key'")
-    )
+    key_result = await db.execute(text("SELECT key, value FROM settings WHERE key LIKE '%_api_key'"))
     api_keys = {}
     for row in key_result.fetchall():
         api_keys[row.key] = bool(row.value)
@@ -486,38 +480,24 @@ async def reset_notes(
     admin: dict = Depends(require_admin),  # noqa: B008
     db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> dict:
-    """Delete all notes, notebooks, embeddings, and image metadata."""
+    """Move all notes, notebooks, embeddings, and image metadata to trash."""
     _require_confirm(confirm)
 
-    settings = get_settings()
+    try:
+        op = await trash_service.trash_notes_reset(db, get_trigger_name(admin))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
-    counts = {}
-    for table, key in [
-        ("note_embeddings", "embeddings"),
-        ("note_images", "images"),
-        ("notes", "notes"),
-        ("notebooks", "notebooks"),
-    ]:
-        result = await db.execute(text(f"SELECT COUNT(*) FROM {table}"))  # noqa: S608
-        counts[key] = result.scalar() or 0
-
-    await db.execute(text("TRUNCATE notes CASCADE"))
-    await db.execute(text("TRUNCATE notebooks CASCADE"))
     await db.commit()
 
-    # Clean image files
-    images_path = Path(settings.NSX_IMAGES_PATH)
-    if images_path.exists():
-        shutil.rmtree(images_path, ignore_errors=True)
-        images_path.mkdir(parents=True, exist_ok=True)
-
     await log_activity(
-        "admin", "completed",
-        message="노트 전체 초기화",
-        details=counts,
+        "admin",
+        "completed",
+        message="노트 전체 초기화 (휴지통으로 이동)",
+        details={"trash_operation_id": op.id, "counts": op.manifest},
         triggered_by=get_trigger_name(admin),
     )
-    return {"status": "ok", "deleted": counts}
+    return {"status": "ok", "deleted": op.manifest.get("counts", {}), "trash_operation_id": op.id}
 
 
 @router.post("/db/clear-embeddings")
@@ -526,22 +506,24 @@ async def clear_embeddings(
     admin: dict = Depends(require_admin),  # noqa: B008
     db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> dict:
-    """Delete all note embeddings and reset embedding status."""
+    """Move all note embeddings to trash."""
     _require_confirm(confirm)
 
-    count_result = await db.execute(text("SELECT COUNT(*) FROM note_embeddings"))
-    count = count_result.scalar() or 0
+    try:
+        op = await trash_service.trash_embeddings(db, get_trigger_name(admin))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
-    await db.execute(text("DELETE FROM note_embeddings"))
     await db.commit()
 
     await log_activity(
-        "admin", "completed",
-        message="임베딩 전체 삭제",
-        details={"deleted_embeddings": count},
+        "admin",
+        "completed",
+        message="임베딩 전체 삭제 (휴지통으로 이동)",
+        details={"deleted_embeddings": op.item_count, "trash_operation_id": op.id},
         triggered_by=get_trigger_name(admin),
     )
-    return {"status": "ok", "deleted_embeddings": count}
+    return {"status": "ok", "deleted_embeddings": op.item_count, "trash_operation_id": op.id}
 
 
 @router.post("/db/clear-activity-logs")
@@ -551,32 +533,25 @@ async def clear_activity_logs(
     admin: dict = Depends(require_admin),  # noqa: B008
     db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> dict:
-    """Delete activity logs, optionally only older than N days."""
+    """Move activity logs to trash, optionally only older than N days."""
     _require_confirm(confirm)
 
-    if older_than_days is not None:
-        result = await db.execute(
-            text(
-                "DELETE FROM activity_logs "
-                "WHERE created_at < NOW() - MAKE_INTERVAL(days => :days) "
-                "RETURNING id"
-            ),
-            {"days": older_than_days},
-        )
-    else:
-        result = await db.execute(text("DELETE FROM activity_logs RETURNING id"))
+    try:
+        op = await trash_service.trash_activity_logs(db, get_trigger_name(admin), older_than_days=older_than_days)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
-    count = len(result.fetchall())
     await db.commit()
 
     msg = f"활동 로그 삭제 ({older_than_days}일 이전)" if older_than_days else "활동 로그 전체 삭제"
     await log_activity(
-        "admin", "completed",
-        message=msg,
-        details={"deleted_logs": count, "older_than_days": older_than_days},
+        "admin",
+        "completed",
+        message=f"{msg} (휴지통으로 이동)",
+        details={"deleted_logs": op.item_count, "older_than_days": older_than_days, "trash_operation_id": op.id},
         triggered_by=get_trigger_name(admin),
     )
-    return {"status": "ok", "deleted_logs": count}
+    return {"status": "ok", "deleted_logs": op.item_count, "trash_operation_id": op.id}
 
 
 @router.post("/db/clear-vision-data")
@@ -585,33 +560,24 @@ async def clear_vision_data(
     admin: dict = Depends(require_admin),  # noqa: B008
     db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> dict:
-    """Reset OCR and Vision analysis results for all images."""
+    """Move OCR and Vision analysis results to trash."""
     _require_confirm(confirm)
 
-    result = await db.execute(
-        text("""
-            UPDATE note_images
-            SET extracted_text = NULL,
-                vision_description = NULL,
-                extraction_status = NULL,
-                vision_status = NULL
-            WHERE extracted_text IS NOT NULL
-               OR vision_description IS NOT NULL
-               OR extraction_status IS NOT NULL
-               OR vision_status IS NOT NULL
-            RETURNING id
-        """)
-    )
-    count = len(result.fetchall())
+    try:
+        op = await trash_service.trash_vision_data(db, get_trigger_name(admin))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
     await db.commit()
 
     await log_activity(
-        "admin", "completed",
-        message="Vision/OCR 데이터 초기화",
-        details={"reset_images": count},
+        "admin",
+        "completed",
+        message="Vision/OCR 데이터 초기화 (휴지통으로 이동)",
+        details={"reset_images": op.item_count, "trash_operation_id": op.id},
         triggered_by=get_trigger_name(admin),
     )
-    return {"status": "ok", "reset_images": count}
+    return {"status": "ok", "reset_images": op.item_count, "trash_operation_id": op.id}
 
 
 @router.post("/storage/clean-orphans")
@@ -620,62 +586,29 @@ async def clean_orphan_files(
     admin: dict = Depends(require_admin),  # noqa: B008
     db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> dict:
-    """Delete files on disk that have no matching DB record."""
+    """Move orphan files to trash."""
     _require_confirm(confirm)
 
-    settings = get_settings()
-    deleted_count = 0
-    freed_bytes = 0
+    try:
+        op = await trash_service.trash_orphan_files(db, get_trigger_name(admin))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
-    # Clean orphan images
-    images_path = Path(settings.NSX_IMAGES_PATH)
-    if images_path.exists():
-        # Get all image file_paths from DB
-        db_result = await db.execute(text("SELECT file_path FROM note_images"))
-        db_paths = {row.file_path for row in db_result.fetchall() if row.file_path}
-
-        for f in images_path.rglob("*"):
-            if not f.is_file():
-                continue
-            # Check if any DB path ends with this filename or matches
-            rel = str(f)
-            if rel not in db_paths and f.name not in {Path(p).name for p in db_paths}:
-                with contextlib.suppress(OSError):
-                    size = f.stat().st_size
-                    f.unlink()
-                    deleted_count += 1
-                    freed_bytes += size
-
-    # Clean orphan uploads
-    uploads_path = Path(settings.UPLOADS_PATH)
-    if uploads_path.exists():
-        db_result = await db.execute(
-            text("SELECT file_id FROM note_attachments")
-        )
-        db_file_ids = {row.file_id for row in db_result.fetchall()}
-
-        for f in uploads_path.rglob("*"):
-            if not f.is_file():
-                continue
-            # file_id is stored as the stem or full filename
-            if f.stem not in db_file_ids and f.name not in db_file_ids:
-                with contextlib.suppress(OSError):
-                    size = f.stat().st_size
-                    f.unlink()
-                    deleted_count += 1
-                    freed_bytes += size
+    await db.commit()
 
     await log_activity(
-        "admin", "completed",
-        message="고아 파일 정리",
-        details={"deleted_files": deleted_count, "freed_bytes": freed_bytes},
+        "admin",
+        "completed",
+        message="고아 파일 정리 (휴지통으로 이동)",
+        details={"deleted_files": op.item_count, "freed_bytes": op.size_bytes, "trash_operation_id": op.id},
         triggered_by=get_trigger_name(admin),
     )
     return {
         "status": "ok",
-        "deleted_files": deleted_count,
-        "freed_bytes": freed_bytes,
-        "freed_size": _human_size(freed_bytes),
+        "deleted_files": op.item_count,
+        "freed_bytes": op.size_bytes,
+        "freed_size": _human_size(op.size_bytes),
+        "trash_operation_id": op.id,
     }
 
 
@@ -683,35 +616,164 @@ async def clean_orphan_files(
 async def clean_exports(
     confirm: bool = Query(False),  # noqa: B008
     admin: dict = Depends(require_admin),  # noqa: B008
-    db: AsyncSession = Depends(get_db),  # noqa: ARG001, B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> dict:
-    """Delete all export files."""
+    """Move all export files to trash."""
     _require_confirm(confirm)
 
-    settings = get_settings()
-    exports_path = Path(settings.NSX_EXPORTS_PATH)
+    try:
+        op = await trash_service.trash_export_files(db, get_trigger_name(admin))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
-    deleted_count = 0
-    freed_bytes = 0
-
-    if exports_path.exists():
-        for f in exports_path.rglob("*"):
-            if f.is_file():
-                with contextlib.suppress(OSError):
-                    freed_bytes += f.stat().st_size
-                    deleted_count += 1
-        shutil.rmtree(exports_path, ignore_errors=True)
-        exports_path.mkdir(parents=True, exist_ok=True)
+    await db.commit()
 
     await log_activity(
-        "admin", "completed",
-        message="내보내기 파일 삭제",
-        details={"deleted_files": deleted_count, "freed_bytes": freed_bytes},
+        "admin",
+        "completed",
+        message="내보내기 파일 삭제 (휴지통으로 이동)",
+        details={"deleted_files": op.item_count, "freed_bytes": op.size_bytes, "trash_operation_id": op.id},
         triggered_by=get_trigger_name(admin),
     )
     return {
         "status": "ok",
-        "deleted_files": deleted_count,
-        "freed_bytes": freed_bytes,
-        "freed_size": _human_size(freed_bytes),
+        "deleted_files": op.item_count,
+        "freed_bytes": op.size_bytes,
+        "freed_size": _human_size(op.size_bytes),
+        "trash_operation_id": op.id,
     }
+
+
+# --- Trash Management ---
+
+
+def _human_size_value(size_bytes: int) -> str:
+    return _human_size(size_bytes)
+
+
+@router.get("/trash")
+async def list_trash(
+    admin: dict = Depends(require_admin),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> dict:
+    """List active trash operations with total size."""
+    result = await db.execute(
+        text("""
+            SELECT id, operation_type, description, item_count, size_bytes,
+                   backup_path, manifest, triggered_by, created_at, status
+            FROM trash_operations
+            WHERE status = 'active'
+            ORDER BY created_at DESC
+        """)
+    )
+    items = []
+    total_size = 0
+    for row in result.fetchall():
+        total_size += row.size_bytes or 0
+        items.append(
+            {
+                "id": row.id,
+                "operation_type": row.operation_type,
+                "description": row.description,
+                "item_count": row.item_count,
+                "size_bytes": row.size_bytes,
+                "size_pretty": _human_size(row.size_bytes or 0),
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+                "triggered_by": row.triggered_by,
+            }
+        )
+
+    return {
+        "items": items,
+        "total_count": len(items),
+        "total_size_bytes": total_size,
+        "total_size_pretty": _human_size(total_size),
+    }
+
+
+@router.post("/trash/{op_id}/restore")
+async def restore_trash(
+    op_id: int,
+    confirm: bool = Query(False),  # noqa: B008
+    admin: dict = Depends(require_admin),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> dict:
+    """Restore a trash operation."""
+    _require_confirm(confirm)
+
+    result = await db.execute(
+        select(TrashOperation).where(TrashOperation.id == op_id, TrashOperation.status == "active")
+    )
+    op = result.scalar_one_or_none()
+    if not op:
+        raise HTTPException(status_code=404, detail="Trash operation not found or not active")
+
+    restored_count = await trash_service.restore_operation(db, op)
+    await db.commit()
+
+    needs_reindex = op.operation_type in ("embeddings", "notes_reset")
+
+    await log_activity(
+        "admin",
+        "completed",
+        message=f"휴지통 복원: {op.description}",
+        details={"trash_operation_id": op.id, "restored_count": restored_count},
+        triggered_by=get_trigger_name(admin),
+    )
+    return {
+        "status": "ok",
+        "restored_count": restored_count,
+        "needs_reindex": needs_reindex,
+    }
+
+
+@router.delete("/trash/{op_id}")
+async def purge_trash_item(
+    op_id: int,
+    confirm: bool = Query(False),  # noqa: B008
+    admin: dict = Depends(require_admin),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> dict:
+    """Permanently delete a single trash operation."""
+    _require_confirm(confirm)
+
+    result = await db.execute(
+        select(TrashOperation).where(TrashOperation.id == op_id, TrashOperation.status == "active")
+    )
+    op = result.scalar_one_or_none()
+    if not op:
+        raise HTTPException(status_code=404, detail="Trash operation not found or not active")
+
+    await trash_service.purge_operation(db, op)
+    await db.commit()
+
+    await log_activity(
+        "admin",
+        "completed",
+        message=f"휴지통 영구 삭제: {op.description}",
+        details={"trash_operation_id": op.id},
+        triggered_by=get_trigger_name(admin),
+    )
+    return {"status": "ok"}
+
+
+@router.delete("/trash")
+async def purge_all_trash(
+    confirm: bool = Query(False),  # noqa: B008
+    admin: dict = Depends(require_admin),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> dict:
+    """Permanently delete all active trash operations."""
+    _require_confirm(confirm)
+
+    count = await trash_service.purge_all(db)
+    await db.commit()
+
+    await log_activity(
+        "admin",
+        "completed",
+        message="휴지통 전체 비우기",
+        details={"purged_count": count},
+        triggered_by=get_trigger_name(admin),
+    )
+    return {"status": "ok", "purged_count": count}
