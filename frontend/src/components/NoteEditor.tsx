@@ -521,6 +521,7 @@ export function NoteEditor({ noteId, initialContent, onAutoSave }: NoteEditorPro
           'prose-code:text-foreground prose-code:bg-muted prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm',
           'prose-pre:bg-muted prose-pre:border prose-pre:border-border',
           'prose-blockquote:border-l-primary prose-blockquote:text-muted-foreground',
+          'prose-table:text-foreground',
           'prose-ul:text-foreground prose-ol:text-foreground',
           'prose-li:text-foreground prose-li:marker:text-muted-foreground',
           'prose-img:rounded-lg prose-img:border prose-img:border-border',
