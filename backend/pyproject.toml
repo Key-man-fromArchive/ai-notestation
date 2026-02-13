@@ -8,7 +8,7 @@ version = "1.2.0"
 description = "LabNote AI - Synology NoteStation enhanced with AI"
 readme = "README.md"
 requires-python = ">=3.12"
-license = { text = "MIT" }
+license = { text = "AGPL-3.0-or-later" }
 authors = [{ name = "LabNote AI Team" }]
 
 dependencies = [
