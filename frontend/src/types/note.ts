@@ -48,6 +48,8 @@ export interface NoteImage {
   mime_type: string
   extraction_status?: string | null
   extracted_text?: string | null
+  vision_status?: string | null
+  vision_description?: string | null
 }
 
 /**
