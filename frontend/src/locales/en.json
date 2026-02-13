@@ -253,8 +253,7 @@
     "askAI": "Ask AI",
     "aiAnswer": "AI Answer",
     "referencedNotes": "Referenced Notes",
-    "strategy_fts_only": "Keyword",
-    "strategy_semantic_only": "Semantic",
+    "strategy_fts_only": "FTS ⚡",
     "strategy_hybrid": "Hybrid",
     "refineTitle": "Find more with AI",
     "refineBroaden": "Broaden",
@@ -797,7 +796,8 @@
     "extractionFailed": "Recognition failed",
     "viewExtractedText": "View recognized text",
     "extractedText": "Recognized text",
-    "ocrMethod": "Recognition method"
+    "ocrMethod": "Recognition method",
+    "noTextFound": "No text found"
   },
   "vision": {
     "analyze": "Describe image (Vision)",

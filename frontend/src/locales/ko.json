@@ -253,8 +253,7 @@
     "askAI": "AI에게 질문",
     "aiAnswer": "AI 답변",
     "referencedNotes": "참조 노트",
-    "strategy_fts_only": "키워드 검색",
-    "strategy_semantic_only": "의미 검색",
+    "strategy_fts_only": "FTS ⚡",
     "strategy_hybrid": "하이브리드",
     "refineTitle": "AI로 더 찾기",
     "refineBroaden": "범위 넓히기",
@@ -797,7 +796,8 @@
     "extractionFailed": "인식 실패",
     "viewExtractedText": "인식된 텍스트 보기",
     "extractedText": "인식된 텍스트",
-    "ocrMethod": "인식 방법"
+    "ocrMethod": "인식 방법",
+    "noTextFound": "텍스트 없음"
   },
   "vision": {
     "analyze": "이미지 설명(Vision)",

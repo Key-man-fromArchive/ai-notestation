@@ -289,6 +289,9 @@ export default function NoteDetail() {
     const imageId = id as number
     if (status === 'completed') {
       items.push({ icon: <Eye className="h-4 w-4" />, label: t('ocr.viewExtractedText'), onClick: () => handleShowOcrText(imageId, name) })
+    } else if (status === 'empty') {
+      items.push({ icon: <ScanText className="h-4 w-4" />, label: t('ocr.noTextFound'), disabled: true, onClick: () => {} })
+      items.push({ icon: <RotateCcw className="h-4 w-4" />, label: `${t('ocr.extractText')} (${t('common.retry')})`, onClick: () => handleExtractImage(imageId) })
     } else if (status === 'pending' || ocrQueue.has(imageId)) {
       items.push({ icon: <ScanText className="h-4 w-4" />, label: t('ocr.extracting'), disabled: true, loading: true, onClick: () => {} })
     } else if (status === 'failed') {
@@ -899,6 +902,9 @@ export default function NoteDetail() {
                       {/* OCR status */}
                       {imgStatus === 'completed' && (
                         <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-green-600" title={t('ocr.viewExtractedText')} />
+                      )}
+                      {imgStatus === 'empty' && (
+                        <ScanText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" title={t('ocr.noTextFound')} />
                       )}
                       {imgStatus === 'pending' && (
                         <Loader2 className="h-3.5 w-3.5 shrink-0 text-amber-600 animate-spin" title={t('ocr.extracting')} />

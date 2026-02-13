@@ -50,7 +50,9 @@ class ImageAnalysisService:
         async with async_session_factory() as db:
             total = await db.scalar(select(func.count()).select_from(NoteImage))
             ocr_done = await db.scalar(
-                select(func.count()).select_from(NoteImage).where(NoteImage.extraction_status == "completed")
+                select(func.count()).select_from(NoteImage).where(
+                    NoteImage.extraction_status.in_(["completed", "empty"])
+                )
             )
             vision_done = await db.scalar(
                 select(func.count()).select_from(NoteImage).where(NoteImage.vision_status == "completed")
@@ -84,7 +86,7 @@ class ImageAnalysisService:
         async with async_session_factory() as db:
             # Find images needing OCR or Vision
             stmt = select(NoteImage.id).where(
-                (NoteImage.extraction_status != "completed") | (NoteImage.vision_status != "completed")
+                (~NoteImage.extraction_status.in_(["completed", "empty"])) | (NoteImage.vision_status != "completed")
             )
             result = await db.execute(stmt)
             image_ids = [row[0] for row in result.fetchall()]
@@ -144,7 +146,7 @@ class ImageAnalysisService:
             mime_type = img.mime_type or "image/png"
 
             # Step 1: OCR if needed
-            if img.extraction_status != "completed":
+            if img.extraction_status not in ("completed", "empty"):
                 ocr_ok = await self._run_ocr(db, img, image_bytes, mime_type)
                 if ocr_ok:
                     result["ocr"] = True
@@ -174,9 +176,9 @@ class ImageAnalysisService:
                 ocr_result = await service.extract_text(image_bytes, mime_type)
 
                 img.extracted_text = ocr_result.text
-                img.extraction_status = "completed"
+                img.extraction_status = "completed" if ocr_result.text and ocr_result.text.strip() else "empty"
                 await db.flush()
-                logger.debug("OCR completed for image %d", img.id)
+                logger.debug("OCR %s for image %d", img.extraction_status, img.id)
                 return True
             except Exception as exc:
                 logger.warning("OCR failed for image %d: %s", img.id, exc)

@@ -115,7 +115,7 @@ async def extract_file_text(
     if not attachment:
         raise HTTPException(status_code=404, detail="Attachment not found")
 
-    if attachment.extraction_status == "completed":
+    if attachment.extraction_status in ("completed", "empty"):
         return {"status": "already_completed", "page_count": attachment.page_count}
 
     attachment.extraction_status = "pending"
@@ -298,7 +298,7 @@ async def _run_ocr_extraction(file_id: str, file_path: str) -> None:
             ocr_result = await ocr.extract_text_from_file(file_path)
 
             attachment.extracted_text = ocr_result.text
-            attachment.extraction_status = "completed"
+            attachment.extraction_status = "completed" if ocr_result.text and ocr_result.text.strip() else "empty"
             await db.commit()
 
             await _reindex_note(attachment.note_id, db)
@@ -327,7 +327,7 @@ async def _run_image_ocr(image_id: int) -> None:
             ocr_result = await ocr.extract_text_from_file(image.file_path)
 
             image.extracted_text = ocr_result.text
-            image.extraction_status = "completed"
+            image.extraction_status = "completed" if ocr_result.text and ocr_result.text.strip() else "empty"
             await db.commit()
 
             # Find the note by synology_note_id to reindex
