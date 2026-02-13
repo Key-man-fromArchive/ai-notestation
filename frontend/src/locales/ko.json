@@ -249,7 +249,10 @@
     "matchedTerms": "매칭 키워드",
     "askAI": "AI에게 질문",
     "aiAnswer": "AI 답변",
-    "referencedNotes": "참조 노트"
+    "referencedNotes": "참조 노트",
+    "strategy_fts_only": "키워드 검색",
+    "strategy_semantic_only": "의미 검색",
+    "strategy_hybrid": "하이브리드"
   },
   "ai": {
     "title": "AI 분석",

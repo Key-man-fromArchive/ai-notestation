@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from collections.abc import AsyncIterator
 from datetime import datetime
 
@@ -29,6 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Note, NoteEmbedding
 from app.search.embeddings import EmbeddingError, EmbeddingService
+from app.search.judge import SearchJudge, SearchStrategy
 from app.search.params import get_search_params
 from app.search.query_preprocessor import QueryAnalysis, analyze_query
 
@@ -38,6 +40,39 @@ logger = logging.getLogger(__name__)
 def _dt_to_iso(dt: datetime | None) -> str | None:
     """Convert a datetime to ISO 8601 string, or None."""
     return dt.isoformat() if dt else None
+
+
+class EngineContribution(BaseModel):
+    """A single engine's contribution to a search result's score."""
+
+    engine: str  # "fts", "semantic", "trigram"
+    rank: int  # rank within that engine (0-based)
+    raw_score: float  # engine's original score
+    rrf_score: float  # RRF contribution: weight * 1/(k+rank)
+
+
+class MatchExplanation(BaseModel):
+    """Explains why a search result matched."""
+
+    engines: list[EngineContribution]
+    matched_terms: list[str] = []  # keywords extracted from <b> tags
+    combined_score: float  # final RRF combined score
+
+
+_BOLD_TAG_RE = re.compile(r"<b>(.*?)</b>", re.IGNORECASE)
+
+
+def _extract_matched_terms(snippet: str) -> list[str]:
+    """Extract unique matched keywords from <b> tags in a snippet."""
+    terms = _BOLD_TAG_RE.findall(snippet)
+    seen: set[str] = set()
+    unique: list[str] = []
+    for term in terms:
+        lower = term.lower().strip()
+        if lower and lower not in seen:
+            seen.add(lower)
+            unique.append(term.strip())
+    return unique
 
 
 class SearchResult(BaseModel):
@@ -58,13 +93,24 @@ class SearchResult(BaseModel):
     search_type: str = Field(default="fts")
     created_at: str | None = None
     updated_at: str | None = None
+    match_explanation: MatchExplanation | None = None
 
+
+
+class JudgeInfo(BaseModel):
+    """Metadata about the adaptive search strategy decision."""
+
+    strategy: str
+    engines: list[str]
+    skip_reason: str | None = None
+    confidence: float = 0.0
 
 class SearchPage(BaseModel):
     """Paginated search results with total count."""
 
     results: list[SearchResult]
     total: int
+    judge_info: JudgeInfo | None = None
 
 
 class FullTextSearchEngine:
@@ -166,8 +212,13 @@ class FullTextSearchEngine:
                 search_type="fts",
                 created_at=_dt_to_iso(row.source_created_at),
                 updated_at=_dt_to_iso(row.source_updated_at),
+                match_explanation=MatchExplanation(
+                    engines=[EngineContribution(engine="fts", rank=rank, raw_score=float(row.score), rrf_score=float(row.score))],
+                    matched_terms=_extract_matched_terms(row.snippet or ""),
+                    combined_score=float(row.score),
+                ),
             )
-            for row in rows
+            for rank, row in enumerate(rows)
         ]
         return SearchPage(results=results, total=total)
 
@@ -304,8 +355,13 @@ class TrigramSearchEngine:
                 search_type="trigram",
                 created_at=_dt_to_iso(row.source_created_at),
                 updated_at=_dt_to_iso(row.source_updated_at),
+                match_explanation=MatchExplanation(
+                    engines=[EngineContribution(engine="trigram", rank=rank, raw_score=float(row.score), rrf_score=float(row.score))],
+                    matched_terms=[],
+                    combined_score=float(row.score),
+                ),
             )
-            for row in rows
+            for rank, row in enumerate(rows)
         ]
         return SearchPage(results=results, total=total)
 
@@ -358,8 +414,13 @@ class TrigramSearchEngine:
                 search_type="trigram",
                 created_at=_dt_to_iso(row.source_created_at),
                 updated_at=_dt_to_iso(row.source_updated_at),
+                match_explanation=MatchExplanation(
+                    engines=[EngineContribution(engine="trigram", rank=rank, raw_score=float(row.score), rrf_score=float(row.score))],
+                    matched_terms=[],
+                    combined_score=float(row.score),
+                ),
             )
-            for row in rows
+            for rank, row in enumerate(rows)
         ]
         return SearchPage(results=results, total=total)
 
@@ -454,18 +515,25 @@ class SemanticSearchEngine:
         rows = result.fetchall()
 
         total = rows[0].total_count if rows else 0
-        results = [
-            SearchResult(
-                note_id=row.note_id,
-                title=row.title,
-                snippet=self._truncate_snippet(row.chunk_text),
-                score=round(1.0 - float(row.cosine_distance), 10),
-                search_type="semantic",
-                created_at=_dt_to_iso(row.source_created_at),
-                updated_at=_dt_to_iso(row.source_updated_at),
+        results = []
+        for rank, row in enumerate(rows):
+            raw_score = round(1.0 - float(row.cosine_distance), 10)
+            results.append(
+                SearchResult(
+                    note_id=row.note_id,
+                    title=row.title,
+                    snippet=self._truncate_snippet(row.chunk_text),
+                    score=raw_score,
+                    search_type="semantic",
+                    created_at=_dt_to_iso(row.source_created_at),
+                    updated_at=_dt_to_iso(row.source_updated_at),
+                    match_explanation=MatchExplanation(
+                        engines=[EngineContribution(engine="semantic", rank=rank, raw_score=raw_score, rrf_score=raw_score)],
+                        matched_terms=[],
+                        combined_score=raw_score,
+                    ),
+                )
             )
-            for row in rows
-        ]
         return SearchPage(results=results, total=total)
 
     def _truncate_snippet(self, text: str) -> str:
@@ -513,6 +581,7 @@ class HybridSearchEngine:
     ) -> None:
         self._fts_engine = fts_engine
         self._semantic_engine = semantic_engine
+        self._judge = SearchJudge()
 
     async def search(
         self,
@@ -528,17 +597,43 @@ class HybridSearchEngine:
             return SearchPage(results=[], total=0)
 
         analysis = analyze_query(query)
+        strategy = self._judge.judge(analysis)
         k, fts_weight, sem_weight = self._compute_rrf_params(analysis)
 
+        judge_info = JudgeInfo(
+            strategy=strategy.strategy_name,
+            engines=strategy.engines,
+            skip_reason=strategy.skip_reason,
+            confidence=strategy.confidence,
+        )
+
+        filter_kwargs = {
+            "notebook_name": notebook_name,
+            "date_from": date_from,
+            "date_to": date_to,
+        }
+
+        # Adaptive: skip engines the judge deems unnecessary
+        if strategy.strategy_name == "fts_only":
+            fts_page = await self._safe_search(
+                self._fts_engine, query, limit=limit, offset=offset, label="FTS", **filter_kwargs,
+            )
+            return SearchPage(results=fts_page.results, total=fts_page.total, judge_info=judge_info)
+
+        if strategy.strategy_name == "semantic_only":
+            sem_page = await self._safe_search(
+                self._semantic_engine, query, limit=limit, offset=offset, label="Semantic", **filter_kwargs,
+            )
+            return SearchPage(results=sem_page.results, total=sem_page.total, judge_info=judge_info)
+
+        # Full hybrid path
         fts_page, sem_page = await self._gather_results(
-            query, limit=limit, offset=offset,
-            notebook_name=notebook_name, date_from=date_from, date_to=date_to,
+            query, limit=limit, offset=offset, **filter_kwargs,
         )
 
         merged = self.rrf_merge(fts_page.results, sem_page.results, k=k, fts_weight=fts_weight, semantic_weight=sem_weight)
-        # Total is the count of unique notes across both engines
         total = max(fts_page.total, sem_page.total)
-        return SearchPage(results=merged, total=total)
+        return SearchPage(results=merged, total=total, judge_info=judge_info)
 
     async def search_progressive(
         self,
@@ -551,8 +646,8 @@ class HybridSearchEngine:
         Phase 2: Yields weighted RRF-merged results after semantic completes
                  (search_type="hybrid").
 
-        Designed for SSE streaming where the frontend displays FTS results
-        instantly and then re-renders with the full merged ranking.
+        When the adaptive judge decides semantic is unnecessary, Phase 2
+        is skipped entirely (only Phase 1 is yielded).
 
         Args:
             query: The search query string.
@@ -560,13 +655,25 @@ class HybridSearchEngine:
 
         Yields:
             Phase 1: list[SearchResult] from FTS (search_type="fts").
-            Phase 2: list[SearchResult] from weighted RRF merge (search_type="hybrid").
+            Phase 2: list[SearchResult] from weighted RRF merge (search_type="hybrid"),
+                     only if the judge selects hybrid strategy.
         """
         if not query or not query.strip():
             return
 
         analysis = analyze_query(query)
+        strategy = self._judge.judge(analysis)
         k, fts_weight, sem_weight = self._compute_rrf_params(analysis)
+
+        # Semantic-only: skip FTS phase, yield semantic directly
+        if strategy.strategy_name == "semantic_only":
+            try:
+                semantic_results = await self._semantic_engine.search(query, limit=limit, offset=0)
+            except Exception:
+                logger.warning("Semantic engine failed during progressive search")
+                semantic_results = []
+            yield semantic_results
+            return
 
         # Phase 1: FTS results immediately
         try:
@@ -576,6 +683,10 @@ class HybridSearchEngine:
             fts_results = []
 
         yield fts_results
+
+        # FTS-only: skip semantic phase
+        if strategy.strategy_name == "fts_only":
+            return
 
         # Phase 2: Semantic search, then weighted RRF merge
         try:
@@ -638,18 +749,28 @@ class HybridSearchEngine:
         scores: dict[str, float] = {}
         # note_id -> (title, snippet, created_at, updated_at)
         metadata: dict[str, tuple[str, str, str | None, str | None]] = {}
+        contributions: dict[str, list[EngineContribution]] = {}
+        matched_terms_map: dict[str, list[str]] = {}
 
         for rank, result in enumerate(fts_results):
             rrf_score = fts_weight * (1.0 / (k + rank))
             scores[result.note_id] = scores.get(result.note_id, 0.0) + rrf_score
             if result.note_id not in metadata:
                 metadata[result.note_id] = (result.title, result.snippet, result.created_at, result.updated_at)
+            contributions.setdefault(result.note_id, []).append(
+                EngineContribution(engine="fts", rank=rank, raw_score=result.score, rrf_score=rrf_score)
+            )
+            if result.note_id not in matched_terms_map:
+                matched_terms_map[result.note_id] = _extract_matched_terms(result.snippet)
 
         for rank, result in enumerate(semantic_results):
             rrf_score = semantic_weight * (1.0 / (k + rank))
             scores[result.note_id] = scores.get(result.note_id, 0.0) + rrf_score
             if result.note_id not in metadata:
                 metadata[result.note_id] = (result.title, result.snippet, result.created_at, result.updated_at)
+            contributions.setdefault(result.note_id, []).append(
+                EngineContribution(engine="semantic", rank=rank, raw_score=result.score, rrf_score=rrf_score)
+            )
 
         merged: list[SearchResult] = []
         for note_id, rrf_score in sorted(scores.items(), key=lambda item: item[1], reverse=True):
@@ -663,6 +784,11 @@ class HybridSearchEngine:
                     search_type="hybrid",
                     created_at=created_at,
                     updated_at=updated_at,
+                    match_explanation=MatchExplanation(
+                        engines=contributions.get(note_id, []),
+                        matched_terms=matched_terms_map.get(note_id, []),
+                        combined_score=rrf_score,
+                    ),
                 )
             )
 
@@ -785,18 +911,28 @@ class UnifiedSearchEngine:
         scores: dict[str, float] = {}
         # note_id -> (title, snippet, created_at, updated_at)
         metadata: dict[str, tuple[str, str, str | None, str | None]] = {}
+        contributions: dict[str, list[EngineContribution]] = {}
+        matched_terms_map: dict[str, list[str]] = {}
 
         for rank, result in enumerate(fts_results):
             rrf_score = fts_weight * (1.0 / (k + rank))
             scores[result.note_id] = scores.get(result.note_id, 0.0) + rrf_score
             if result.note_id not in metadata:
                 metadata[result.note_id] = (result.title, result.snippet, result.created_at, result.updated_at)
+            contributions.setdefault(result.note_id, []).append(
+                EngineContribution(engine="fts", rank=rank, raw_score=result.score, rrf_score=rrf_score)
+            )
+            if result.note_id not in matched_terms_map:
+                matched_terms_map[result.note_id] = _extract_matched_terms(result.snippet)
 
         for rank, result in enumerate(trigram_results):
             rrf_score = trigram_weight * (1.0 / (k + rank))
             scores[result.note_id] = scores.get(result.note_id, 0.0) + rrf_score
             if result.note_id not in metadata:
                 metadata[result.note_id] = (result.title, result.snippet, result.created_at, result.updated_at)
+            contributions.setdefault(result.note_id, []).append(
+                EngineContribution(engine="trigram", rank=rank, raw_score=result.score, rrf_score=rrf_score)
+            )
 
         merged: list[SearchResult] = []
         for note_id, rrf_score in sorted(scores.items(), key=lambda item: item[1], reverse=True):
@@ -810,6 +946,11 @@ class UnifiedSearchEngine:
                     search_type="search",
                     created_at=created_at,
                     updated_at=updated_at,
+                    match_explanation=MatchExplanation(
+                        engines=contributions.get(note_id, []),
+                        matched_terms=matched_terms_map.get(note_id, []),
+                        combined_score=rrf_score,
+                    ),
                 )
             )
 

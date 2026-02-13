@@ -249,7 +249,10 @@
     "matchedTerms": "Matched terms",
     "askAI": "Ask AI",
     "aiAnswer": "AI Answer",
-    "referencedNotes": "Referenced Notes"
+    "referencedNotes": "Referenced Notes",
+    "strategy_fts_only": "Keyword",
+    "strategy_semantic_only": "Semantic",
+    "strategy_hybrid": "Hybrid"
   },
   "ai": {
     "title": "AI Analysis",

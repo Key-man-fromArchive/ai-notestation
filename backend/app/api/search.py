@@ -39,6 +39,7 @@ from app.search.engine import (
     ExactMatchSearchEngine,
     FullTextSearchEngine,
     HybridSearchEngine,
+    JudgeInfo,
     SearchPage,
     SearchResult,
     SemanticSearchEngine,
@@ -73,6 +74,23 @@ class SearchType(str, Enum):
     trigram = "trigram"
 
 
+class EngineContributionResponse(BaseModel):
+    """A single engine's contribution to a search result."""
+
+    engine: str
+    rank: int
+    raw_score: float
+    rrf_score: float
+
+
+class MatchExplanationResponse(BaseModel):
+    """Explains why a search result matched."""
+
+    engines: list[EngineContributionResponse]
+    matched_terms: list[str] = []
+    combined_score: float
+
+
 class SearchResultResponse(BaseModel):
     """A single search result in the API response."""
 
@@ -83,7 +101,17 @@ class SearchResultResponse(BaseModel):
     search_type: str
     created_at: str | None = None
     updated_at: str | None = None
+    match_explanation: MatchExplanationResponse | None = None
 
+
+
+class JudgeInfoResponse(BaseModel):
+    """Adaptive search strategy decision metadata."""
+
+    strategy: str
+    engines: list[str]
+    skip_reason: str | None = None
+    confidence: float = 0.0
 
 class SearchResponse(BaseModel):
     """Search API response containing results and metadata."""
@@ -92,6 +120,7 @@ class SearchResponse(BaseModel):
     query: str
     search_type: str
     total: int
+    judge_info: JudgeInfoResponse | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -305,12 +334,31 @@ async def search(
                 search_type=r.search_type,
                 created_at=r.created_at,
                 updated_at=r.updated_at,
+                match_explanation=MatchExplanationResponse(
+                    engines=[
+                        EngineContributionResponse(
+                            engine=e.engine,
+                            rank=e.rank,
+                            raw_score=e.raw_score,
+                            rrf_score=e.rrf_score,
+                        )
+                        for e in r.match_explanation.engines
+                    ],
+                    matched_terms=r.match_explanation.matched_terms,
+                    combined_score=r.match_explanation.combined_score,
+                ) if r.match_explanation else None,
             )
             for r in results
         ],
         query=q,
         search_type=type.value,
         total=page.total,
+        judge_info=JudgeInfoResponse(
+            strategy=page.judge_info.strategy,
+            engines=page.judge_info.engines,
+            skip_reason=page.judge_info.skip_reason,
+            confidence=page.judge_info.confidence,
+        ) if page.judge_info else None,
     )
 
 

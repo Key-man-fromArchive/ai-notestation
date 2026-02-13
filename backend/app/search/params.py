@@ -32,6 +32,10 @@ DEFAULT_SEARCH_PARAMS: dict[str, float | int] = {
     # Unified search
     "unified_fts_weight": 0.65,
     "unified_trigram_weight": 0.35,
+    # Adaptive search strategy
+    "adaptive_enabled": 1,
+    "adaptive_semantic_min_words": 3,
+    "adaptive_short_query_max_words": 2,
 }
 
 

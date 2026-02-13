@@ -12,7 +12,7 @@ import { SearchBar } from '@/components/SearchBar'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
 import { EmptyState } from '@/components/EmptyState'
 import { useSearchIndex } from '@/hooks/useSearchIndex'
-import { Search as SearchIcon, FileText, AlertCircle, Loader2, Filter, X, Sparkles, TextSearch, Calendar } from 'lucide-react'
+import { Search as SearchIcon, FileText, AlertCircle, Loader2, Filter, X, Sparkles, TextSearch, Calendar, Zap, Brain, Layers } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useTimezone } from '@/hooks/useTimezone'
 
@@ -103,6 +103,7 @@ export default function Search() {
   // Flatten all pages into a single results array
   const allResults = data?.pages.flatMap((page) => page.results) ?? []
   const totalCount = data?.pages[0]?.total ?? 0
+  const judgeInfo = data?.pages[0]?.judge_info
 
   return (
     <div className="flex flex-col gap-6">
@@ -316,8 +317,24 @@ export default function Search() {
         {/* 검색 결과 */}
         {allResults.length > 0 && (
           <div>
-            <div className="text-sm text-muted-foreground mb-4">
-              {t('search.resultCount', { count: totalCount })}
+            <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
+              <span>{t('search.resultCount', { count: totalCount })}</span>
+              {judgeInfo && (
+                <span
+                  className={cn(
+                    'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium',
+                    judgeInfo.strategy === 'fts_only' && 'bg-blue-100 text-blue-700',
+                    judgeInfo.strategy === 'semantic_only' && 'bg-purple-100 text-purple-700',
+                    judgeInfo.strategy === 'hybrid' && 'bg-emerald-100 text-emerald-700',
+                  )}
+                  title={judgeInfo.skip_reason || undefined}
+                >
+                  {judgeInfo.strategy === 'fts_only' && <Zap className="h-3 w-3" />}
+                  {judgeInfo.strategy === 'semantic_only' && <Brain className="h-3 w-3" />}
+                  {judgeInfo.strategy === 'hybrid' && <Layers className="h-3 w-3" />}
+                  {t(`search.strategy_${judgeInfo.strategy}`)}
+                </span>
+              )}
             </div>
 
             <ul className="space-y-3" role="list">
@@ -356,6 +373,22 @@ export default function Search() {
                             />
                             {(result.score * 100).toFixed(0)}%
                           </span>
+                          {result.match_explanation?.engines?.map((e) => (
+                            <span
+                              key={e.engine}
+                              className={cn(
+                                'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium',
+                                e.engine === 'fts' && 'bg-blue-100 text-blue-700',
+                                e.engine === 'semantic' && 'bg-purple-100 text-purple-700',
+                                e.engine === 'trigram' && 'bg-amber-100 text-amber-700',
+                              )}
+                            >
+                              {e.engine === 'fts' ? t('search.engineFts') :
+                               e.engine === 'semantic' ? t('search.engineSemantic') :
+                               t('search.engineTrigram')}
+                              {' #'}{e.rank + 1}
+                            </span>
+                          ))}
                           {result.created_at && (
                             <span className="inline-flex items-center gap-1">
                               <Calendar className="h-3 w-3" />
@@ -368,6 +401,12 @@ export default function Search() {
                             </span>
                           )}
                         </div>
+                        {result.match_explanation?.matched_terms && result.match_explanation.matched_terms.length > 0 && (
+                          <div className="mt-1 text-[11px] text-muted-foreground">
+                            <span className="font-medium">{t('search.matchedTerms')}:</span>{' '}
+                            {result.match_explanation.matched_terms.join(', ')}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </Link>

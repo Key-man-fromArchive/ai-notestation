@@ -18,6 +18,9 @@ interface SearchParams {
   trigram_title_weight: number
   unified_fts_weight: number
   unified_trigram_weight: number
+  adaptive_enabled: number
+  adaptive_semantic_min_words: number
+  adaptive_short_query_max_words: number
 }
 
 interface SearchParamsResponse {
@@ -39,6 +42,9 @@ const DEFAULT_PARAMS: SearchParams = {
   trigram_title_weight: 3.0,
   unified_fts_weight: 0.65,
   unified_trigram_weight: 0.35,
+  adaptive_enabled: 1,
+  adaptive_semantic_min_words: 3,
+  adaptive_short_query_max_words: 2,
 }
 
 export function SearchParamsSection() {
@@ -273,6 +279,39 @@ export function SearchParamsSection() {
               step={0.05}
               description="통합 검색에서 트라이그램 가중치"
               onChange={(v) => updateParam('unified_trigram_weight', v)}
+            />
+          </div>
+        </div>
+
+        {/* Group 5: Adaptive Search Strategy */}
+        <div>
+          <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+            적응형 검색 전략 (Adaptive)
+          </h4>
+          <div className="space-y-4">
+            <ToggleParam
+              label="적응형 검색 활성화"
+              checked={localParams.adaptive_enabled === 1}
+              description="쿼리 특성에 따라 검색 엔진을 자동 선택하여 비용 절감 및 속도 향상"
+              onChange={(checked) => updateParam('adaptive_enabled', checked ? 1 : 0)}
+            />
+            <SliderParam
+              label="시맨틱 검색 최소 단어 수"
+              value={localParams.adaptive_semantic_min_words}
+              min={1}
+              max={10}
+              step={1}
+              description="이 단어 수 이상이어야 시맨틱 검색을 실행"
+              onChange={(v) => updateParam('adaptive_semantic_min_words', v)}
+            />
+            <SliderParam
+              label="짧은 쿼리 기준 단어 수"
+              value={localParams.adaptive_short_query_max_words}
+              min={1}
+              max={5}
+              step={1}
+              description="이 단어 수 이하면 FTS 전용 (시맨틱 스킵)"
+              onChange={(v) => updateParam('adaptive_short_query_max_words', v)}
             />
           </div>
         </div>
@@ -548,6 +587,41 @@ function SearchParamsHelpModal({ onClose }: { onClose: () => void }) {
             {t('common.close')}
           </button>
         </div>
+      </div>
+    </div>
+  )
+}
+
+interface ToggleParamProps {
+  label: string
+  checked: boolean
+  description: string
+  onChange: (checked: boolean) => void
+}
+
+function ToggleParam({ label, checked, description, onChange }: ToggleParamProps) {
+  return (
+    <div className="flex items-start gap-3">
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        onClick={() => onChange(!checked)}
+        className={cn(
+          'relative mt-0.5 inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors',
+          checked ? 'bg-primary' : 'bg-muted',
+        )}
+      >
+        <span
+          className={cn(
+            'pointer-events-none inline-block h-4 w-4 rounded-full bg-background shadow-sm ring-0 transition-transform',
+            checked ? 'translate-x-4' : 'translate-x-0',
+          )}
+        />
+      </button>
+      <div className="min-w-0">
+        <span className="text-sm font-medium">{label}</span>
+        <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
       </div>
     </div>
   )

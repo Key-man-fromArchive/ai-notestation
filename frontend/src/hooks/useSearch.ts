@@ -6,6 +6,19 @@ import { useInfiniteQuery } from '@tanstack/react-query'
 import { apiClient } from '@/lib/api'
 import { useEffect, useState } from 'react'
 
+interface EngineContribution {
+  engine: string
+  rank: number
+  raw_score: number
+  rrf_score: number
+}
+
+interface MatchExplanation {
+  engines: EngineContribution[]
+  matched_terms: string[]
+  combined_score: number
+}
+
 interface SearchResult {
   note_id: string
   title: string
@@ -14,6 +27,14 @@ interface SearchResult {
   search_type: string
   created_at: string | null
   updated_at: string | null
+  match_explanation?: MatchExplanation | null
+}
+
+interface JudgeInfo {
+  strategy: string
+  engines: string[]
+  skip_reason: string | null
+  confidence: number
 }
 
 interface SearchResponse {
@@ -21,6 +42,7 @@ interface SearchResponse {
   query: string
   search_type: string
   total: number
+  judge_info?: JudgeInfo | null
 }
 
 type SearchType = 'search' | 'semantic' | 'hybrid' | 'exact'
