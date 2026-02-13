@@ -85,13 +85,13 @@
 - [x] Frontend: 태그 필터 (Notes, Search 페이지)
 - [x] Frontend: 배치 태깅 UI (진행률 표시)
 
-### 3-2. 노트 간 관계 발견 `★★★ 난이도`
-- [ ] Backend: RelatedNotesService (`services/related_notes.py`)
-- [ ] Backend: pgvector 코사인 유사도 검색
-- [ ] Backend: GET /notes/{id}/related 엔드포인트
-- [ ] Backend: graph_service에 유사도 기반 엣지 추가
-- [ ] Frontend: NoteDetail 관련 노트 패널
-- [ ] Frontend: DiscoveryGraph 유사도 엣지 시각화
+### 3-2. 노트 간 관계 발견 `★★★ 난이도` ✅ 완료
+- [x] Backend: RelatedNotesService (`services/related_notes.py`)
+- [x] Backend: pgvector 코사인 유사도 검색
+- [x] Backend: GET /notes/{id}/related 엔드포인트
+- [x] Backend: graph_service에 유사도 기반 엣지 추가
+- [x] Frontend: NoteDetail 관련 노트 패널
+- [x] Frontend: DiscoveryGraph 유사도 엣지 시각화
 
 ### 3-3. 잊혀진 노트 재발견 `★★☆ 난이도` ⚡ Quick Win ✅ 완료
 - [x] Backend: RediscoveryService (`services/rediscovery.py`)
