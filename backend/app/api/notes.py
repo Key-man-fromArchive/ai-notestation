@@ -1014,7 +1014,10 @@ async def list_local_tags(
     result = await db.execute(
         text("""
             SELECT tag, COUNT(*) as cnt
-            FROM notes, jsonb_array_elements_text(tags) AS tag
+            FROM (
+                SELECT id, tags FROM notes
+                WHERE tags IS NOT NULL AND jsonb_typeof(tags) = 'array'
+            ) n, jsonb_array_elements_text(n.tags) AS tag
             GROUP BY tag
             ORDER BY cnt DESC, tag ASC
         """)
