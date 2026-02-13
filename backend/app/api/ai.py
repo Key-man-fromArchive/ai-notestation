@@ -661,24 +661,69 @@ async def ai_stream(
         if notes_metadata:
             yield f"event: metadata\ndata: {json.dumps({'matched_notes': notes_metadata}, ensure_ascii=False)}\n\n"
 
+        # StreamMonitor initialization (only when quality gate enabled)
+        quality_gate_on = _is_quality_gate_enabled_sync()
+        stream_monitor = None
+        if quality_gate_on:
+            from app.ai_router.stream_monitor import StreamAction, StreamMonitor
+
+            stream_monitor = StreamMonitor(task=request.feature, lang=lang)
+
         accumulated_content = ""
-        try:
-            async for sse_line in effective_router.stream(ai_request):
-                yield sse_line
-                # Accumulate text chunks for quality evaluation
-                if sse_line.startswith("data: ") and "[DONE]" not in sse_line:
-                    try:
-                        chunk_data = json.loads(sse_line[6:])
-                        accumulated_content += chunk_data.get("chunk", "")
-                    except (json.JSONDecodeError, KeyError):
-                        pass
-        except ProviderError as exc:
-            logger.error("AI stream error: %s", exc)
-            yield f"event: error\ndata: {exc.message}\n\n"
-            return
+        retry_count = 0
+        max_retries = 1
+
+        while True:
+            accumulated_content = ""
+            should_retry = False
+
+            try:
+                async for sse_line in effective_router.stream(ai_request):
+                    yield sse_line
+                    # Accumulate text chunks for quality evaluation
+                    if sse_line.startswith("data: ") and "[DONE]" not in sse_line:
+                        try:
+                            chunk_data = json.loads(sse_line[6:])
+                            chunk_text = chunk_data.get("chunk", "")
+                            accumulated_content += chunk_text
+
+                            # Mid-stream quality check
+                            if stream_monitor:
+                                check = stream_monitor.process_chunk(chunk_text)
+
+                                if check.action == StreamAction.WARN:
+                                    warn_data = json.dumps(
+                                        {"reason": check.reason, "issue_type": check.issue_type},
+                                        ensure_ascii=False,
+                                    )
+                                    yield f"event: stream_warning\ndata: {warn_data}\n\n"
+
+                                elif check.action == StreamAction.ABORT and retry_count < max_retries:
+                                    retry_data = json.dumps(
+                                        {"reason": check.reason, "issue_type": check.issue_type},
+                                        ensure_ascii=False,
+                                    )
+                                    yield f"event: retry\ndata: {retry_data}\n\n"
+                                    should_retry = True
+                                    retry_count += 1
+                                    break
+                        except (json.JSONDecodeError, KeyError):
+                            pass
+            except ProviderError as exc:
+                logger.error("AI stream error: %s", exc)
+                yield f"event: error\ndata: {exc.message}\n\n"
+                return
+
+            if should_retry:
+                # Reset monitor for retry attempt
+                if stream_monitor:
+                    stream_monitor = StreamMonitor(task=request.feature, lang=lang)
+                continue
+
+            break
 
         # Quality gate evaluation after streaming complete
-        if _is_quality_gate_enabled_sync() and accumulated_content:
+        if quality_gate_on and accumulated_content:
             try:
                 from app.ai_router.quality_gate import QualityGate
 

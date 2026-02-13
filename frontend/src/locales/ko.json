@@ -362,7 +362,13 @@
     "qaSourceCited": "인용됨",
     "qaSourceNotCited": "미인용",
     "qaGroundingIssues": "근거 이슈",
-    "qaNoIssues": "근거 문제 없음"
+    "qaNoIssues": "근거 문제 없음",
+    "retryingBetterResponse": "품질 미달로 다시 생성 중...",
+    "streamWarning": "스트리밍 경고",
+    "languageMismatchWarning": "응답 언어 불일치",
+    "repetitionDetected": "반복 패턴 감지",
+    "formatWarning": "형식 미충족",
+    "lengthAnomaly": "비정상적인 길이"
   },
   "settings": {
     "title": "설정",

@@ -54,6 +54,11 @@ export interface SearchQAEvaluation {
   summary: string
 }
 
+export interface StreamWarning {
+  reason: string
+  issueType: 'language_mismatch' | 'repetition' | 'format' | 'length'
+}
+
 interface MetadataMessage {
   matched_notes?: MatchedNote[]
 }
@@ -71,6 +76,8 @@ export function useAIStream() {
   const [matchedNotes, setMatchedNotes] = useState<MatchedNote[]>([])
   const [qualityResult, setQualityResult] = useState<QualityResult | null>(null)
   const [qaEvaluation, setQaEvaluation] = useState<SearchQAEvaluation | null>(null)
+  const [retryReason, setRetryReason] = useState<string | null>(null)
+  const [streamWarnings, setStreamWarnings] = useState<StreamWarning[]>([])
   const abortControllerRef = useRef<AbortController | null>(null)
 
   const startStream = useCallback(async (options: StreamOptions) => {
@@ -80,6 +87,8 @@ export function useAIStream() {
     setMatchedNotes([])
     setQualityResult(null)
     setQaEvaluation(null)
+    setRetryReason(null)
+    setStreamWarnings([])
     setIsStreaming(true)
 
     // AbortController 생성
@@ -181,6 +190,34 @@ export function useAIStream() {
               continue
             }
 
+            // Handle retry event (stream monitor abort + regeneration)
+            if (currentEvent === 'retry') {
+              try {
+                const retryData = JSON.parse(data)
+                setRetryReason(retryData.reason)
+                setContent('')
+              } catch {
+                console.warn('Failed to parse retry SSE:', data)
+              }
+              currentEvent = ''
+              continue
+            }
+
+            // Handle stream_warning event (mid-stream quality concern)
+            if (currentEvent === 'stream_warning') {
+              try {
+                const warning = JSON.parse(data)
+                setStreamWarnings(prev => [...prev, {
+                  reason: warning.reason,
+                  issueType: warning.issue_type,
+                }])
+              } catch {
+                console.warn('Failed to parse stream_warning SSE:', data)
+              }
+              currentEvent = ''
+              continue
+            }
+
             currentEvent = ''
 
             // [DONE] 신호 — 스트리밍 텍스트 완료, quality 이벤트는 이후 도착 가능
@@ -237,6 +274,8 @@ export function useAIStream() {
     setMatchedNotes([])
     setQualityResult(null)
     setQaEvaluation(null)
+    setRetryReason(null)
+    setStreamWarnings([])
     setIsStreaming(false)
   }, [])
 
@@ -247,6 +286,8 @@ export function useAIStream() {
     matchedNotes,
     qualityResult,
     qaEvaluation,
+    retryReason,
+    streamWarnings,
     startStream,
     stopStream,
     reset,

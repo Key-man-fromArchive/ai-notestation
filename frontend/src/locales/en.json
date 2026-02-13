@@ -362,7 +362,13 @@
     "qaSourceCited": "Cited",
     "qaSourceNotCited": "Not cited",
     "qaGroundingIssues": "Grounding issues",
-    "qaNoIssues": "No grounding issues"
+    "qaNoIssues": "No grounding issues",
+    "retryingBetterResponse": "Regenerating for better quality...",
+    "streamWarning": "Streaming warning",
+    "languageMismatchWarning": "Response language mismatch",
+    "repetitionDetected": "Repetition pattern detected",
+    "formatWarning": "Format not met",
+    "lengthAnomaly": "Abnormal length"
   },
   "settings": {
     "title": "Settings",

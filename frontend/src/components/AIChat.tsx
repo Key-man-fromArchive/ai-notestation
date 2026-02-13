@@ -7,7 +7,7 @@ import { useAIStream } from '@/hooks/useAIStream'
 import { MarkdownRenderer } from './MarkdownRenderer'
 import { LoadingSpinner } from './LoadingSpinner'
 import { cn } from '@/lib/utils'
-import { Send, Square, Copy, Check, FileText, ShieldCheck, CheckCircle2, XCircle, AlertCircle, AlertTriangle, AlertOctagon } from 'lucide-react'
+import { Send, Square, Copy, Check, FileText, ShieldCheck, CheckCircle2, XCircle, AlertCircle, AlertTriangle, AlertOctagon, RefreshCw } from 'lucide-react'
 
 interface AIChatProps {
   feature: 'insight' | 'search_qa' | 'writing' | 'spellcheck' | 'template'
@@ -31,7 +31,7 @@ const TEMPLATE_TYPES = [
 
 export function AIChat({ feature, model, className }: AIChatProps) {
   const { t } = useTranslation()
-  const { content, isStreaming, error, matchedNotes, qualityResult, qaEvaluation, startStream, stopStream, reset } =
+  const { content, isStreaming, error, matchedNotes, qualityResult, qaEvaluation, retryReason, streamWarnings, startStream, stopStream, reset } =
     useAIStream()
   const [copied, setCopied] = useState(false)
   const [qualityExpanded, setQualityExpanded] = useState(false)
@@ -215,6 +215,29 @@ export function AIChat({ feature, model, className }: AIChatProps) {
               <MarkdownRenderer content={content} className="text-sm" />
               {isStreaming && (
                 <span className="inline-block w-1.5 h-5 ml-1 bg-primary animate-pulse rounded-sm" />
+              )}
+
+              {/* Retry notification */}
+              {retryReason && isStreaming && (
+                <div className="flex items-center gap-2 text-amber-600 text-sm bg-amber-500/10 px-3 py-2 rounded-md mt-3 animate-pulse">
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                  <div className="flex-1">
+                    <p className="font-medium">{t('ai.retryingBetterResponse')}</p>
+                    <p className="text-xs text-amber-700">{retryReason}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Stream warnings */}
+              {!isStreaming && streamWarnings.length > 0 && (
+                <div className="mt-2 space-y-1">
+                  {streamWarnings.map((warning, idx) => (
+                    <div key={idx} className="flex items-center gap-2 text-amber-600 text-xs bg-amber-500/10 px-2 py-1 rounded">
+                      <AlertTriangle className="h-3 w-3 flex-shrink-0" />
+                      <span>{warning.reason}</span>
+                    </div>
+                  ))}
+                </div>
               )}
 
               {/* Quality badge */}

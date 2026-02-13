@@ -65,11 +65,11 @@
 - [x] Backend: qa_evaluation SSE 이벤트
 - [x] Frontend: 신뢰도 뱃지 (높음/보통/낮음) + 소스 커버리지 + 근거 이슈
 
-### 2-3. 스트리밍 중간 품질 체크 `★★★★ 난이도`
-- [ ] Backend: StreamMonitor (`ai_router/stream_monitor.py`)
-- [ ] Backend: 휴리스틱 체크 (언어 불일치, 반복 감지, 형식 체크)
-- [ ] Backend: AIRouter.stream()에 모니터 통합
-- [ ] Frontend: retry 이벤트 핸들링
+### 2-3. 스트리밍 중간 품질 체크 `★★★★ 난이도` ✅ 완료
+- [x] Backend: StreamMonitor (`ai_router/stream_monitor.py`)
+- [x] Backend: 휴리스틱 체크 (언어 불일치, 반복 감지, 형식 체크)
+- [x] Backend: `/stream` event_generator()에 모니터 통합 + retry 루프
+- [x] Frontend: retry/stream_warning 이벤트 핸들링 + 재시도 알림 UI
 
 ---
 
