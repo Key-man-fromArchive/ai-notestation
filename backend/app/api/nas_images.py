@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from io import BytesIO
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -35,6 +36,55 @@ router = APIRouter(prefix="/nas-images", tags=["nas-images"])
 # Limit concurrent NAS image fetches to prevent overwhelming the NAS
 # when notes have hundreds of images (e.g. 260 images in one note).
 _NAS_FETCH_SEMAPHORE = asyncio.Semaphore(8)
+
+# Shared NAS client — reuse a single authenticated session instead of
+# creating + logging in for every image request (260 images = 260 logins!).
+_shared_client: "SynologyClient | None" = None
+_shared_client_lock = asyncio.Lock()
+_shared_client_created_at: float = 0.0
+_SHARED_CLIENT_MAX_AGE = 600  # Re-create after 10 minutes
+
+
+async def _get_shared_nas_client():
+    """Get or create a shared, authenticated SynologyClient for image proxy.
+
+    The client is cached and reused across requests.  It is re-created
+    if older than ``_SHARED_CLIENT_MAX_AGE`` seconds or if ``_sid`` has
+    been invalidated.
+    """
+    from app.synology_gateway.client import SynologyClient
+
+    global _shared_client, _shared_client_created_at  # noqa: PLW0603
+
+    async with _shared_client_lock:
+        now = time.monotonic()
+        if (
+            _shared_client is not None
+            and _shared_client._sid is not None
+            and (now - _shared_client_created_at) < _SHARED_CLIENT_MAX_AGE
+        ):
+            return _shared_client
+
+        # Close stale client if any
+        if _shared_client is not None:
+            try:
+                await _shared_client.close()
+            except Exception:
+                pass
+
+        from app.api.settings import get_nas_config
+
+        nas = get_nas_config()
+        client = SynologyClient(
+            url=nas["url"],
+            user=nas["user"],
+            password=nas["password"],
+        )
+        await client.login()
+        _shared_client = client
+        _shared_client_created_at = now
+        logger.info("Created shared NAS client for image proxy")
+        return _shared_client
 
 # 1x1 transparent GIF that NoteStation returns for deleted/empty attachments.
 # GIF89a header (47 49 46 38 39 61), 1x1 pixel, 43 bytes total.
@@ -112,30 +162,32 @@ async def proxy_nas_image(
     # Throttle concurrent NAS fetches to prevent overload
     async with _NAS_FETCH_SEMAPHORE:
         try:
-            from app.api.sync import _create_sync_service
+            client = await _get_shared_nas_client()
 
-            service, session, _ = await _create_sync_service()
-            try:
-                # Try with stored version first
-                nas_path = f"/note/ns/dv/{note.link_id}/{note.nas_ver}/{att_key}/{filename}"
-                image_bytes, content_type = await service._notestation._client.fetch_binary(nas_path)
+            # Try with stored version first
+            nas_path = f"/note/ns/dv/{note.link_id}/{note.nas_ver}/{att_key}/{filename}"
+            image_bytes, content_type = await client.fetch_binary(nas_path)
 
-                # If NAS returns HTML, the version is likely stale — refresh and retry
-                if content_type and "text/html" in content_type:
-                    logger.info("Stale nas_ver for note %s, fetching latest from NAS", note_id)
-                    try:
-                        nas_note = await service._notestation.get_note(note_id)
-                        latest_ver = nas_note.get("ver", "")
-                        if latest_ver and latest_ver != note.nas_ver:
-                            note.nas_ver = latest_ver
-                            await db.commit()
-                            nas_path = f"/note/ns/dv/{note.link_id}/{latest_ver}/{att_key}/{filename}"
-                            image_bytes, content_type = await service._notestation._client.fetch_binary(nas_path)
-                    except Exception:
-                        logger.debug("Could not refresh nas_ver for note %s", note_id)
-            finally:
-                await session.close()
+            # If NAS returns HTML, the version is likely stale — refresh and retry
+            if content_type and "text/html" in content_type:
+                logger.info("Stale nas_ver for note %s, fetching latest from NAS", note_id)
+                try:
+                    from app.synology_gateway.notestation import NoteStationService
+
+                    ns = NoteStationService(client)
+                    nas_note = await ns.get_note(note_id)
+                    latest_ver = nas_note.get("ver", "")
+                    if latest_ver and latest_ver != note.nas_ver:
+                        note.nas_ver = latest_ver
+                        await db.commit()
+                        nas_path = f"/note/ns/dv/{note.link_id}/{latest_ver}/{att_key}/{filename}"
+                        image_bytes, content_type = await client.fetch_binary(nas_path)
+                except Exception:
+                    logger.debug("Could not refresh nas_ver for note %s", note_id)
         except Exception as exc:
+            # Invalidate shared client on failure so it re-creates on next attempt
+            global _shared_client  # noqa: PLW0603
+            _shared_client = None
             logger.exception("Failed to fetch NAS image: %s", exc)
             raise HTTPException(status_code=502, detail="NAS 이미지 로드 실패") from exc
 

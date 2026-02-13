@@ -12,13 +12,13 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      testIgnore: /fullsuite\.spec\.ts|auth\.setup\.ts/,
+      testIgnore: /fullsuite\.spec\.ts|ocr\.spec\.ts|auth\.setup\.ts/,
       use: { browserName: 'chromium' },
     },
     { name: 'setup', testMatch: /auth\.setup\.ts/ },
     {
       name: 'authenticated',
-      testMatch: /fullsuite\.spec\.ts/,
+      testMatch: /fullsuite\.spec\.ts|ocr\.spec\.ts/,
       dependencies: ['setup'],
       use: { storageState: 'e2e/.auth/user.json' },
     },
