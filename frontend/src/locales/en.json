@@ -352,7 +352,17 @@
     "qualityChecklist": "Checklist details",
     "qualityItemPassed": "Passed",
     "qualityItemFailed": "Failed",
-    "qualityItemPartial": "Partial"
+    "qualityItemPartial": "Partial",
+    "qaCorrectness": "Correctness",
+    "qaUtility": "Utility",
+    "qaConfidenceHigh": "High confidence",
+    "qaConfidenceMedium": "Medium confidence",
+    "qaConfidenceLow": "Low confidence",
+    "qaSourceCoverage": "Source coverage",
+    "qaSourceCited": "Cited",
+    "qaSourceNotCited": "Not cited",
+    "qaGroundingIssues": "Grounding issues",
+    "qaNoIssues": "No grounding issues"
   },
   "settings": {
     "title": "Settings",

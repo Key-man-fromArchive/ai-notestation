@@ -502,7 +502,8 @@ async def ai_chat(
 
     # Quality gate evaluation
     quality_dict = None
-    if await _is_quality_gate_enabled(db):
+    quality_gate_on = await _is_quality_gate_enabled(db)
+    if quality_gate_on:
         from app.ai_router.quality_gate import QualityGate
 
         gate = QualityGate(effective_router)
@@ -532,6 +533,25 @@ async def ai_chat(
 
         if quality_result:
             quality_dict = quality_result.model_dump()
+
+    # Search QA specific evaluation (correctness + utility)
+    if request.feature == "search_qa" and quality_gate_on:
+        from app.ai_router.search_qa_evaluator import SearchQAEvaluator
+
+        eval_context = effective_options.get("context_notes", [])
+        eval_notes = [str(n) for n in eval_context] if isinstance(eval_context, list) else []
+        evaluator = SearchQAEvaluator(effective_router)
+        qa_result = await evaluator.evaluate(
+            question=request.content,
+            context_notes=eval_notes,
+            note_titles=[],
+            ai_response=ai_response.content,
+            lang=lang,
+        )
+        if qa_result:
+            if quality_dict is None:
+                quality_dict = {}
+            quality_dict["qa_evaluation"] = qa_result.model_dump()
 
     return AIChatResponse(
         content=ai_response.content,
@@ -673,7 +693,27 @@ async def ai_stream(
                     yield f"event: quality\ndata: {json.dumps(quality_result.model_dump(), ensure_ascii=False)}\n\n"
             except Exception:
                 logger.exception("Stream quality gate evaluation failed")
-                pass
+
+            # Search QA specific evaluation (correctness + utility)
+            if request.feature == "search_qa":
+                try:
+                    from app.ai_router.search_qa_evaluator import SearchQAEvaluator
+
+                    eval_context = effective_options.get("context_notes", [])
+                    eval_notes = [str(n) for n in eval_context] if isinstance(eval_context, list) else []
+                    evaluator = SearchQAEvaluator(effective_router)
+                    qa_result = await evaluator.evaluate(
+                        question=request.content,
+                        context_notes=eval_notes,
+                        note_titles=[],
+                        ai_response=accumulated_content,
+                        lang=lang,
+                    )
+                    if qa_result:
+                        qa_json = json.dumps(qa_result.model_dump(), ensure_ascii=False)
+                        yield f"event: qa_evaluation\ndata: {qa_json}\n\n"
+                except Exception:
+                    logger.exception("Stream search QA evaluation failed")
 
     return StreamingResponse(
         event_generator(),

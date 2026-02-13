@@ -38,6 +38,22 @@ export interface QualityResult {
   summary: string
 }
 
+interface SourceCoverage {
+  note_index: number
+  note_title: string
+  cited: boolean
+  relevant_claim: string
+}
+
+export interface SearchQAEvaluation {
+  correctness: number
+  utility: number
+  confidence: 'high' | 'medium' | 'low'
+  source_coverage: SourceCoverage[]
+  grounding_issues: string[]
+  summary: string
+}
+
 interface MetadataMessage {
   matched_notes?: MatchedNote[]
 }
@@ -54,6 +70,7 @@ export function useAIStream() {
   const [error, setError] = useState<string | null>(null)
   const [matchedNotes, setMatchedNotes] = useState<MatchedNote[]>([])
   const [qualityResult, setQualityResult] = useState<QualityResult | null>(null)
+  const [qaEvaluation, setQaEvaluation] = useState<SearchQAEvaluation | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
 
   const startStream = useCallback(async (options: StreamOptions) => {
@@ -62,6 +79,7 @@ export function useAIStream() {
     setError(null)
     setMatchedNotes([])
     setQualityResult(null)
+    setQaEvaluation(null)
     setIsStreaming(true)
 
     // AbortController 생성
@@ -151,6 +169,18 @@ export function useAIStream() {
               continue
             }
 
+            // Handle qa_evaluation event (search QA correctness + utility)
+            if (currentEvent === 'qa_evaluation') {
+              try {
+                const evalResult: SearchQAEvaluation = JSON.parse(data)
+                setQaEvaluation(evalResult)
+              } catch {
+                console.warn('Failed to parse qa_evaluation SSE:', data)
+              }
+              currentEvent = ''
+              continue
+            }
+
             currentEvent = ''
 
             // [DONE] 신호 — 스트리밍 텍스트 완료, quality 이벤트는 이후 도착 가능
@@ -206,6 +236,7 @@ export function useAIStream() {
     setError(null)
     setMatchedNotes([])
     setQualityResult(null)
+    setQaEvaluation(null)
     setIsStreaming(false)
   }, [])
 
@@ -215,6 +246,7 @@ export function useAIStream() {
     error,
     matchedNotes,
     qualityResult,
+    qaEvaluation,
     startStream,
     stopStream,
     reset,

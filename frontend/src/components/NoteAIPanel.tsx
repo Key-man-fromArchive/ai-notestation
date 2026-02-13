@@ -23,6 +23,8 @@ import {
   CheckCircle2,
   XCircle,
   AlertCircle,
+  AlertTriangle,
+  AlertOctagon,
 } from 'lucide-react'
 
 type AIFeature = 'insight' | 'spellcheck' | 'writing' | 'search_qa' | 'template'
@@ -41,8 +43,9 @@ export function NoteAIPanel({ noteId, noteContent, noteTitle }: NoteAIPanelProps
   const [selectedModel, setSelectedModel] = useState('')
   const [activePanel, setActivePanel] = useState<'search_qa' | 'template' | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
-  const { content, isStreaming, error, matchedNotes, qualityResult, startStream, stopStream, reset } = useAIStream()
+  const { content, isStreaming, error, matchedNotes, qualityResult, qaEvaluation, startStream, stopStream, reset } = useAIStream()
   const [qualityExpanded, setQualityExpanded] = useState(false)
+  const [qaExpanded, setQaExpanded] = useState(false)
 
   /** Quick actions: send note content immediately */
   const quickActions: { id: AIFeature; icon: typeof Lightbulb }[] = [
@@ -374,6 +377,115 @@ export function NoteAIPanel({ noteId, noteContent, noteTitle }: NoteAIPanelProps
                         </li>
                       ))}
                     </ul>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Search QA evaluation badge */}
+            {qaEvaluation && !isStreaming && (
+              <div className={cn('mt-2', !qualityResult && 'mt-3 border-t border-border pt-3')}>
+                <button
+                  onClick={() => setQaExpanded(!qaExpanded)}
+                  className={cn(
+                    'inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-full transition-colors',
+                    qaEvaluation.confidence === 'high' && 'bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20',
+                    qaEvaluation.confidence === 'medium' && 'bg-amber-500/10 text-amber-600 hover:bg-amber-500/20',
+                    qaEvaluation.confidence === 'low' && 'bg-red-500/10 text-red-600 hover:bg-red-500/20',
+                  )}
+                >
+                  {qaEvaluation.confidence === 'high' && <ShieldCheck className="h-3.5 w-3.5" />}
+                  {qaEvaluation.confidence === 'medium' && <AlertTriangle className="h-3.5 w-3.5" />}
+                  {qaEvaluation.confidence === 'low' && <AlertOctagon className="h-3.5 w-3.5" />}
+                  {t(`ai.qaConfidence${qaEvaluation.confidence.charAt(0).toUpperCase() + qaEvaluation.confidence.slice(1)}`)}
+                  <span className="text-muted-foreground ml-1">
+                    {t('ai.qaCorrectness')} {(qaEvaluation.correctness * 100).toFixed(0)}%
+                    {' · '}
+                    {t('ai.qaUtility')} {(qaEvaluation.utility * 100).toFixed(0)}%
+                  </span>
+                </button>
+
+                {qaExpanded && (
+                  <div className="mt-2 space-y-2">
+                    <p className="text-xs text-muted-foreground">{qaEvaluation.summary}</p>
+
+                    {/* Correctness & Utility bars */}
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 text-xs">
+                        <span className="w-14 text-muted-foreground">{t('ai.qaCorrectness')}</span>
+                        <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                          <div
+                            className={cn(
+                              'h-full rounded-full',
+                              qaEvaluation.correctness >= 0.8 ? 'bg-emerald-500' : qaEvaluation.correctness >= 0.5 ? 'bg-amber-500' : 'bg-red-500',
+                            )}
+                            style={{ width: `${qaEvaluation.correctness * 100}%` }}
+                          />
+                        </div>
+                        <span className="w-8 text-right">{(qaEvaluation.correctness * 100).toFixed(0)}%</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs">
+                        <span className="w-14 text-muted-foreground">{t('ai.qaUtility')}</span>
+                        <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                          <div
+                            className={cn(
+                              'h-full rounded-full',
+                              qaEvaluation.utility >= 0.7 ? 'bg-emerald-500' : qaEvaluation.utility >= 0.4 ? 'bg-amber-500' : 'bg-red-500',
+                            )}
+                            style={{ width: `${qaEvaluation.utility * 100}%` }}
+                          />
+                        </div>
+                        <span className="w-8 text-right">{(qaEvaluation.utility * 100).toFixed(0)}%</span>
+                      </div>
+                    </div>
+
+                    {/* Source coverage */}
+                    {qaEvaluation.source_coverage.length > 0 && (
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground mb-1">{t('ai.qaSourceCoverage')}</p>
+                        <ul className="space-y-0.5">
+                          {qaEvaluation.source_coverage.map((src) => (
+                            <li key={src.note_index} className="text-xs flex items-start gap-1.5">
+                              {src.cited
+                                ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 mt-0.5 shrink-0" />
+                                : <XCircle className="h-3.5 w-3.5 text-muted-foreground/50 mt-0.5 shrink-0" />
+                              }
+                              <span>
+                                <span className="font-medium">[{src.note_index}] {src.note_title || `Note ${src.note_index}`}</span>
+                                {src.cited
+                                  ? <span className="text-emerald-600"> — {t('ai.qaSourceCited')}</span>
+                                  : <span className="text-muted-foreground"> — {t('ai.qaSourceNotCited')}</span>
+                                }
+                                {src.relevant_claim && (
+                                  <span className="text-muted-foreground block ml-5 italic">"{src.relevant_claim}"</span>
+                                )}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Grounding issues */}
+                    {qaEvaluation.grounding_issues.length > 0 && (
+                      <div>
+                        <p className="text-xs font-medium text-red-600 mb-1">{t('ai.qaGroundingIssues')}</p>
+                        <ul className="space-y-0.5">
+                          {qaEvaluation.grounding_issues.map((issue, idx) => (
+                            <li key={idx} className="text-xs text-red-600 flex items-start gap-1.5">
+                              <AlertOctagon className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                              {issue}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {qaEvaluation.grounding_issues.length === 0 && (
+                      <p className="text-xs text-emerald-600 flex items-center gap-1">
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        {t('ai.qaNoIssues')}
+                      </p>
+                    )}
                   </div>
                 )}
               </div>

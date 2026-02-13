@@ -352,7 +352,17 @@
     "qualityChecklist": "체크리스트 상세",
     "qualityItemPassed": "충족",
     "qualityItemFailed": "미달",
-    "qualityItemPartial": "부분 충족"
+    "qualityItemPartial": "부분 충족",
+    "qaCorrectness": "정확성",
+    "qaUtility": "유용성",
+    "qaConfidenceHigh": "높은 신뢰도",
+    "qaConfidenceMedium": "보통 신뢰도",
+    "qaConfidenceLow": "낮은 신뢰도",
+    "qaSourceCoverage": "소스 활용",
+    "qaSourceCited": "인용됨",
+    "qaSourceNotCited": "미인용",
+    "qaGroundingIssues": "근거 이슈",
+    "qaNoIssues": "근거 문제 없음"
   },
   "settings": {
     "title": "설정",

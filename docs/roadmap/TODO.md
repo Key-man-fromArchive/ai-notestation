@@ -1,6 +1,6 @@
 # LabNote AI — Master TODO
 
-> 리서치 기반 로드맵 종합 TODO | 현재 v1.2.0
+> 리서치 기반 로드맵 종합 TODO | 현재 v1.4.0-dev
 
 ## Overview
 
@@ -50,20 +50,20 @@
 
 ## Phase 2 — AI 품질 게이트 (v1.4.0)
 
-### 2-1. Checklist-Based Quality Gate `★★★ 난이도`
-- [ ] Backend: QualityChecklist + 태스크별 체크리스트 정의
-- [ ] Backend: 자가 평가 프롬프트 (`ai_router/prompts/quality_eval.py`)
-- [ ] Backend: /chat에 Quality Gate 통합 (평가 → 재생성)
-- [ ] Backend: /stream에 quality SSE 이벤트 추가
-- [ ] Backend: quality_gate_enabled 설정
-- [ ] Frontend: AIChat, NoteAIPanel에 품질 뱃지
-- [ ] Frontend: 체크리스트 상세 + 재생성 버튼
+### 2-1. Checklist-Based Quality Gate `★★★ 난이도` ✅ 완료
+- [x] Backend: QualityChecklist + 태스크별 체크리스트 정의
+- [x] Backend: 자가 평가 프롬프트 (`ai_router/prompts/quality_eval.py`)
+- [x] Backend: /chat에 Quality Gate 통합 (평가 → 재생성)
+- [x] Backend: /stream에 quality SSE 이벤트 추가
+- [x] Backend: quality_gate_enabled 설정
+- [x] Frontend: AIChat, NoteAIPanel에 품질 뱃지
+- [x] Frontend: 체크리스트 상세 + 재생성 버튼
 
-### 2-2. Search QA 품질 평가 `★★★ 난이도`
-- [ ] Backend: SearchQAEvaluator (Correctness + Utility)
-- [ ] Backend: reranker 기반 경량 근거 검증
-- [ ] Backend: qa_evaluation SSE 이벤트
-- [ ] Frontend: 신뢰도 뱃지 (높음/보통/낮음)
+### 2-2. Search QA 품질 평가 `★★★ 난이도` ✅ 완료
+- [x] Backend: SearchQAEvaluator (Correctness + Utility)
+- [x] Backend: Search QA 전용 평가 프롬프트 (`search_qa_eval.py`)
+- [x] Backend: qa_evaluation SSE 이벤트
+- [x] Frontend: 신뢰도 뱃지 (높음/보통/낮음) + 소스 커버리지 + 근거 이슈
 
 ### 2-3. 스트리밍 중간 품질 체크 `★★★★ 난이도`
 - [ ] Backend: StreamMonitor (`ai_router/stream_monitor.py`)
@@ -164,6 +164,8 @@
 | `ai_router/prompts/search_refine.py` | 1-3 | 리파인 프롬프트 |
 | `ai_router/quality_gate.py` | 2-1 | Checklist Quality Gate |
 | `ai_router/prompts/quality_eval.py` | 2-1 | 자가 평가 프롬프트 |
+| `ai_router/search_qa_evaluator.py` | 2-2 | Search QA Evaluator |
+| `ai_router/prompts/search_qa_eval.py` | 2-2 | Search QA 평가 프롬프트 |
 | `ai_router/stream_monitor.py` | 2-3 | 스트리밍 품질 모니터 |
 | `services/auto_tagger.py` | 3-1 | AI 자동 태깅 |
 | `services/related_notes.py` | 3-2 | 관련 노트 발견 |
