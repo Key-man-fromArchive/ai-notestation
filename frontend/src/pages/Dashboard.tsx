@@ -17,10 +17,13 @@ import {
   Clock,
   Notebook,
   BookOpen,
+  Lightbulb,
+  RotateCw,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useTimezone } from '@/hooks/useTimezone'
 import { useTranslation } from 'react-i18next'
+import { useRediscovery } from '@/hooks/useRediscovery'
 
 interface Note {
   note_id: string
@@ -48,6 +51,7 @@ export default function Dashboard() {
   const { t, i18n } = useTranslation()
   const { status: syncStatus, lastSync, error: syncError, triggerSync } = useSync()
   const timezone = useTimezone()
+  const { data: rediscoveryData, isLoading: rediscoveryLoading, refresh: refreshRediscovery } = useRediscovery()
 
   const { data, isLoading } = useQuery<NotesResponse>({
     queryKey: ['notes', 'recent'],
@@ -306,6 +310,68 @@ export default function Dashboard() {
           />
         )}
       </div>
+
+      {/* 오늘의 재발견 */}
+      {rediscoveryData && rediscoveryData.items.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Lightbulb className="h-5 w-5 text-amber-500" aria-hidden="true" />
+              <h3 className="text-lg font-semibold">{t('dashboard.rediscoveryTitle')}</h3>
+            </div>
+            <button
+              onClick={refreshRediscovery}
+              className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <RotateCw className="h-3.5 w-3.5" />
+              {t('dashboard.rediscoveryRefresh')}
+            </button>
+          </div>
+          <p className="text-xs text-muted-foreground mb-3">
+            {t('dashboard.rediscoveryDesc')}
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {rediscoveryData.items.map((item) => {
+              const daysAgo = item.last_updated
+                ? Math.floor((Date.now() - new Date(item.last_updated).getTime()) / (1000 * 60 * 60 * 24))
+                : null
+              const percent = Math.round(item.similarity * 100)
+
+              return (
+                <Link
+                  key={item.note_id}
+                  to={`/notes/${item.note_id}`}
+                  className={cn(
+                    'block p-4 border border-border rounded-lg',
+                    'hover:border-amber-500/40 hover:bg-amber-50/30 transition-colors duration-200',
+                    'motion-reduce:transition-none'
+                  )}
+                >
+                  <div className="font-medium text-foreground truncate mb-1">
+                    {item.title || t('common.noData')}
+                  </div>
+                  {item.snippet && (
+                    <p className="text-xs text-muted-foreground line-clamp-2 mb-2">
+                      {item.snippet}
+                    </p>
+                  )}
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">
+                      {t('dashboard.rediscoverySimilarity', { percent })}
+                    </span>
+                    {daysAgo !== null && (
+                      <span className="flex items-center gap-1">
+                        <Clock className="h-3 w-3" aria-hidden="true" />
+                        {t('dashboard.rediscoveryDaysAgo', { days: daysAgo })}
+                      </span>
+                    )}
+                  </div>
+                </Link>
+              )
+            })}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

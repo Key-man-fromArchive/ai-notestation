@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,11 +13,14 @@ from app.models import Note, Notebook, NoteCluster
 from app.services.auth_service import get_current_user
 from app.services.clustering import get_cached_clusters
 from app.services.notebook_access_control import check_notebook_access
+from app.services.rediscovery import RediscoveryService
 from app.tasks.clustering import (
     create_clustering_task,
     get_task_status,
     start_clustering_background,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/discovery", tags=["discovery"])
 
@@ -63,6 +67,19 @@ class TimelineEntry(BaseModel):
 
 class TimelineResponse(BaseModel):
     entries: list[TimelineEntry]
+
+
+class RediscoveryItemResponse(BaseModel):
+    note_id: str
+    title: str
+    snippet: str
+    similarity: float
+    last_updated: str | None = None
+    reason: str
+
+
+class RediscoveryResponse(BaseModel):
+    items: list[RediscoveryItemResponse]
 
 
 @router.post("/cluster", status_code=202, response_model=ClusterTaskResponse)
@@ -205,3 +222,36 @@ async def get_timeline(
     entries = [TimelineEntry(date=row.day.strftime("%Y-%m-%d"), count=row.count) for row in rows if row.day]
 
     return TimelineResponse(entries=entries)
+
+
+@router.get("/rediscovery", response_model=RediscoveryResponse)
+async def get_rediscovery(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[dict, Depends(get_current_user)],
+    limit: int = Query(default=5, ge=1, le=20),
+    days_threshold: int = Query(default=30, ge=7, le=365),
+) -> RediscoveryResponse:
+    """Return forgotten notes that are relevant to recent work."""
+    service = RediscoveryService(db)
+    try:
+        items = await service.get_rediscoveries(
+            limit=limit,
+            days_threshold=days_threshold,
+        )
+    except Exception:
+        logger.exception("Rediscovery query failed")
+        return RediscoveryResponse(items=[])
+
+    return RediscoveryResponse(
+        items=[
+            RediscoveryItemResponse(
+                note_id=item.note_id,
+                title=item.title,
+                snippet=item.snippet,
+                similarity=item.similarity,
+                last_updated=item.last_updated,
+                reason=item.reason,
+            )
+            for item in items
+        ]
+    )

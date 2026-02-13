@@ -105,7 +105,15 @@
     "recentNotes": "최근 노트",
     "noNotes": "노트가 없습니다",
     "noNotesDesc": "NAS와 동기화하여 노트를 불러오세요",
-    "startSync": "동기화 시작"
+    "startSync": "동기화 시작",
+    "rediscoveryTitle": "오늘의 재발견",
+    "rediscoveryDesc": "최근 작업과 관련 있는 잊혀진 노트",
+    "rediscoveryEmpty": "재발견할 노트가 없습니다",
+    "rediscoveryEmptyDesc": "노트가 더 쌓이면 잊혀진 보석을 찾아드릴게요",
+    "rediscoverySimilarity": "유사도 {{percent}}%",
+    "rediscoveryDaysAgo": "{{days}}일 전 수정",
+    "rediscoveryRefresh": "새로고침",
+    "rediscoveryError": "재발견 노트를 불러오지 못했습니다"
   },
   "notes": {
     "title": "노트",

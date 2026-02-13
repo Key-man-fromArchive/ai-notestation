@@ -105,7 +105,15 @@
     "recentNotes": "Recent Notes",
     "noNotes": "No notes",
     "noNotesDesc": "Sync with NAS to load your notes",
-    "startSync": "Start sync"
+    "startSync": "Start sync",
+    "rediscoveryTitle": "Rediscover Today",
+    "rediscoveryDesc": "Forgotten notes related to your recent work",
+    "rediscoveryEmpty": "No notes to rediscover",
+    "rediscoveryEmptyDesc": "As you write more notes, we'll find hidden gems for you",
+    "rediscoverySimilarity": "{{percent}}% similar",
+    "rediscoveryDaysAgo": "Modified {{days}} days ago",
+    "rediscoveryRefresh": "Refresh",
+    "rediscoveryError": "Failed to load rediscovery notes"
   },
   "notes": {
     "title": "Notes",
