@@ -84,7 +84,7 @@ export function SearchParamsSection() {
   // Initialize local state from fetched settings
   useEffect(() => {
     if (!paramsData?.value || initialized) return
-    setLocalParams(paramsData.value)
+    setLocalParams({ ...DEFAULT_PARAMS, ...paramsData.value })
     setInitialized(true)
   }, [paramsData, initialized])
 
