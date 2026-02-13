@@ -1,9 +1,11 @@
-"""AI Vision-based OCR service for extracting text from images."""
+"""OCR service with pluggable engines: AI Vision (cloud) and PaddleOCR-VL (local)."""
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import logging
+import tempfile
 from pathlib import Path
 
 from pydantic import BaseModel
@@ -31,34 +33,109 @@ class OCRResult(BaseModel):
     """Result of an OCR extraction."""
 
     text: str
-    confidence: float  # 0.0~1.0 (AI model self-assessment)
-    method: str  # model id used, e.g. "glm-4.7"
+    confidence: float  # 0.0~1.0
+    method: str  # engine/model id used
+
+
+class PaddleOCRVLEngine:
+    """Local PaddleOCR-VL engine (CPU, no API key needed).
+
+    Model weights (~1.8GB) are downloaded on first use and cached
+    in PADDLE_HOME (default: ~/.paddleocr).
+    """
+
+    _pipeline = None  # Lazy singleton
+
+    @classmethod
+    def _get_pipeline(cls):
+        if cls._pipeline is None:
+            from paddleocr import PaddleOCRVL
+
+            logger.info("Loading PaddleOCR-VL pipeline (first call — downloading model if needed)...")
+            cls._pipeline = PaddleOCRVL(pipeline_version="v1")
+            logger.info("PaddleOCR-VL pipeline ready")
+        return cls._pipeline
+
+    async def extract(self, image_bytes: bytes, mime_type: str) -> OCRResult:
+        """Run PaddleOCR-VL on image bytes.
+
+        PaddleOCR expects a file path, so we write bytes to a temp file.
+        Inference is CPU-bound, so we run it in a thread executor.
+        """
+        suffix_map = {
+            "image/png": ".png",
+            "image/jpeg": ".jpg",
+            "image/gif": ".gif",
+            "image/webp": ".webp",
+            "image/bmp": ".bmp",
+        }
+        suffix = suffix_map.get(mime_type, ".png")
+
+        def _run_ocr(data: bytes, ext: str) -> str:
+            pipeline = PaddleOCRVLEngine._get_pipeline()
+            with tempfile.NamedTemporaryFile(suffix=ext, delete=True) as tmp:
+                tmp.write(data)
+                tmp.flush()
+                result = pipeline.predict(tmp.name)
+                # result is a generator of dicts with "rec_text" or similar
+                texts = []
+                for item in result:
+                    if isinstance(item, dict):
+                        texts.append(item.get("rec_text", ""))
+                    elif isinstance(item, str):
+                        texts.append(item)
+                return "\n".join(texts).strip()
+
+        logger.info("Running OCR with PaddleOCR-VL (local)")
+        text = await asyncio.to_thread(_run_ocr, image_bytes, suffix)
+        confidence = 0.9 if text else 0.0
+        return OCRResult(text=text, confidence=confidence, method="paddleocr-vl")
 
 
 class OCRService:
-    """AI Vision-based OCR service.
+    """OCR service dispatching to the configured engine.
 
-    Uses the AIRouter to select an available Vision-capable model
-    and extract text from images. Falls back to the next model on failure.
+    Engine selection is based on the ``ocr_engine`` setting:
+    - ``"ai_vision"`` (default): cloud AI Vision models via AIRouter
+    - ``"paddleocr_vl"``: local PaddleOCR-VL on CPU
     """
+
+    async def _get_engine_setting(self) -> str:
+        """Read ocr_engine from the settings cache."""
+        from app.api.settings import _get_store
+
+        store = _get_store()
+        return store.get("ocr_engine", "ai_vision")
 
     async def extract_text(
         self, image_bytes: bytes, mime_type: str = "image/png"
     ) -> OCRResult:
-        """Extract text from image bytes via AI Vision.
-
-        Tries each available Vision model in priority order,
-        falling back to the next on failure.
+        """Extract text from image bytes using the configured engine.
 
         Args:
             image_bytes: Raw image data.
             mime_type: MIME type of the image (e.g. "image/png").
 
         Returns:
-            OCRResult with extracted text and model info.
+            OCRResult with extracted text and engine info.
 
         Raises:
-            RuntimeError: If no Vision-capable model is available or all fail.
+            RuntimeError: If the engine fails or no model is available.
+        """
+        engine = await self._get_engine_setting()
+
+        if engine == "paddleocr_vl":
+            return await PaddleOCRVLEngine().extract(image_bytes, mime_type)
+
+        return await self._ai_vision_extract(image_bytes, mime_type)
+
+    async def _ai_vision_extract(
+        self, image_bytes: bytes, mime_type: str
+    ) -> OCRResult:
+        """Extract text via AI Vision models (cloud API).
+
+        Tries each available Vision model in priority order,
+        falling back to the next on failure.
         """
         from app.ai_router.router import AIRouter
         from app.ai_router.schemas import AIRequest, ImageContent, Message
@@ -66,7 +143,6 @@ class OCRService:
         router = AIRouter()
         available_ids = {m.id for m in router.all_models()}
 
-        # Collect available vision models in priority order
         candidates = [m for m in _VISION_MODELS if m in available_ids]
         if not candidates:
             raise RuntimeError(

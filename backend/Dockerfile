@@ -8,13 +8,15 @@
 
 FROM python:3.12-slim
 
-# Install system dependencies required by asyncpg and lxml
+# Install system dependencies required by asyncpg, lxml, and PaddleOCR (OpenCV)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         build-essential \
         libpq-dev \
         libxml2-dev \
         libxslt1-dev \
+        libgl1 \
+        libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

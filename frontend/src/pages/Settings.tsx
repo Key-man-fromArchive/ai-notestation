@@ -32,6 +32,7 @@ import {
   Sparkles,
   Languages,
   ShieldCheck,
+  ScanSearch,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -156,6 +157,8 @@ export default function Settings() {
         isPending={updateMutation.isPending}
         onSave={(tz) => updateMutation.mutate({ key: 'timezone', value: tz })}
       />
+
+      <OcrEngineSection />
 
       <QualityGateSection />
 
@@ -1070,6 +1073,59 @@ function LanguageSection() {
           🇺🇸 {t('settings.english')}
         </button>
       </div>
+    </div>
+  )
+}
+
+function OcrEngineSection() {
+  const { t } = useTranslation()
+  const queryClient = useQueryClient()
+  const [saving, setSaving] = useState(false)
+
+  const { data: ocrSetting } = useQuery<SettingResponse>({
+    queryKey: ['settings', 'ocr_engine'],
+    queryFn: () => apiClient.get('/settings/ocr_engine'),
+  })
+
+  const currentEngine = typeof ocrSetting?.value === 'string'
+    ? ocrSetting.value
+    : 'ai_vision'
+
+  const handleChange = async (value: string) => {
+    setSaving(true)
+    try {
+      await apiClient.put('/settings/ocr_engine', { value })
+      queryClient.invalidateQueries({ queryKey: ['settings', 'ocr_engine'] })
+      queryClient.invalidateQueries({ queryKey: ['settings'] })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="p-4 border border-input rounded-md">
+      <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
+        <ScanSearch className="h-5 w-5" aria-hidden="true" />
+        {t('settings.ocrEngine')}
+      </h3>
+      <p className="text-sm text-muted-foreground mb-4">
+        {t('settings.ocrEngineDesc')}
+      </p>
+
+      <select
+        value={currentEngine}
+        onChange={(e) => handleChange(e.target.value)}
+        disabled={saving}
+        className={cn(
+          'w-full px-3 py-2 text-sm rounded-md',
+          'border border-input bg-background',
+          'focus:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+          'disabled:opacity-50',
+        )}
+      >
+        <option value="ai_vision">{t('settings.ocrEngineAiVision')}</option>
+        <option value="paddleocr_vl">{t('settings.ocrEnginePaddleOcr')}</option>
+      </select>
     </div>
   )
 }
