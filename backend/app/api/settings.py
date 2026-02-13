@@ -104,6 +104,7 @@ _SETTING_DESCRIPTIONS: dict[str, str] = {
     "quality_gate_enabled": "AI 응답 품질 검증 활성화 (체크리스트 기반)",
     "quality_gate_auto_retry": "품질 미달 시 자동 재생성",
     "ocr_engine": "OCR engine: ai_vision (cloud API) or paddleocr_vl (local CPU)",
+    "editor_width": "Editor width: compact, comfortable, wide, or full",
 }
 
 
@@ -130,6 +131,7 @@ def _get_default_settings() -> dict[str, Any]:
         "quality_gate_enabled": False,
         "quality_gate_auto_retry": True,
         "ocr_engine": "ai_vision",
+        "editor_width": "comfortable",
     }
 
 

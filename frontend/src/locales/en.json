@@ -485,7 +485,15 @@
     "qualityGateDesc": "Automatically evaluate AI responses with a checklist. When enabled, a quality score is shown after each response.",
     "qualityGateEnabled": "Enable quality gate",
     "qualityGateAutoRetry": "Auto-regenerate",
-    "qualityGateAutoRetryDesc": "Automatically regenerate once if quality check fails"
+    "qualityGateAutoRetryDesc": "Automatically regenerate once if quality check fails",
+    "editorWidthSettings": "Editor Width",
+    "editorWidthDesc": "Choose the maximum width for the note editor",
+    "editorWidth": {
+      "compact": "Compact",
+      "comfortable": "Comfortable",
+      "wide": "Wide",
+      "full": "Full"
+    }
   },
   "members": {
     "title": "Members",

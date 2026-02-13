@@ -33,6 +33,7 @@ import {
   Languages,
   ShieldCheck,
   ScanSearch,
+  Columns3,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -151,6 +152,8 @@ export default function Settings() {
         </>
       )}
       <LanguageSection />
+
+      <EditorWidthSection />
 
       <TimezoneSection
         data={data}
@@ -1072,6 +1075,70 @@ function LanguageSection() {
         >
           🇺🇸 {t('settings.english')}
         </button>
+      </div>
+    </div>
+  )
+}
+
+function EditorWidthSection() {
+  const { t } = useTranslation()
+  const queryClient = useQueryClient()
+  const [saving, setSaving] = useState(false)
+
+  const { data: widthSetting } = useQuery<SettingResponse>({
+    queryKey: ['settings', 'editor_width'],
+    queryFn: () => apiClient.get('/settings/editor_width'),
+  })
+
+  const currentWidth = typeof widthSetting?.value === 'string'
+    ? widthSetting.value
+    : 'comfortable'
+
+  const handleChange = async (value: string) => {
+    setSaving(true)
+    try {
+      await apiClient.put('/settings/editor_width', { value })
+      queryClient.invalidateQueries({ queryKey: ['settings', 'editor_width'] })
+      queryClient.invalidateQueries({ queryKey: ['settings'] })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const options = [
+    { value: 'compact', labelKey: 'settings.editorWidth.compact', hint: '768px' },
+    { value: 'comfortable', labelKey: 'settings.editorWidth.comfortable', hint: '1024px' },
+    { value: 'wide', labelKey: 'settings.editorWidth.wide', hint: '1280px' },
+    { value: 'full', labelKey: 'settings.editorWidth.full', hint: '100%' },
+  ]
+
+  return (
+    <div className="p-4 border border-input rounded-md">
+      <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
+        <Columns3 className="h-5 w-5" aria-hidden="true" />
+        {t('settings.editorWidthSettings')}
+      </h3>
+      <p className="text-sm text-muted-foreground mb-4">
+        {t('settings.editorWidthDesc')}
+      </p>
+      <div className="grid grid-cols-4 gap-3">
+        {options.map((opt) => (
+          <button
+            key={opt.value}
+            onClick={() => handleChange(opt.value)}
+            disabled={saving}
+            className={cn(
+              'flex flex-col items-center gap-1 px-4 py-2.5 rounded-md border text-sm font-medium transition-colors',
+              currentWidth === opt.value
+                ? 'border-primary bg-primary/10 text-primary'
+                : 'border-input hover:bg-accent',
+              'disabled:opacity-50',
+            )}
+          >
+            <span>{t(opt.labelKey)}</span>
+            <span className="text-xs font-normal text-muted-foreground">{opt.hint}</span>
+          </button>
+        ))}
       </div>
     </div>
   )

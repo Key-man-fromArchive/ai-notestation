@@ -485,7 +485,15 @@
     "qualityGateDesc": "AI 응답을 체크리스트로 자동 평가합니다. 활성화하면 응답 생성 후 품질 점수가 표시됩니다.",
     "qualityGateEnabled": "품질 검증 활성화",
     "qualityGateAutoRetry": "자동 재생성",
-    "qualityGateAutoRetryDesc": "품질 미달 시 자동으로 1회 재생성합니다"
+    "qualityGateAutoRetryDesc": "품질 미달 시 자동으로 1회 재생성합니다",
+    "editorWidthSettings": "에디터 너비",
+    "editorWidthDesc": "노트 에디터의 최대 너비를 선택합니다",
+    "editorWidth": {
+      "compact": "좁게",
+      "comfortable": "보통",
+      "wide": "넓게",
+      "full": "전체"
+    }
   },
   "members": {
     "title": "멤버",

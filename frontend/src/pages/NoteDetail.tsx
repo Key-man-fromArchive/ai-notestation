@@ -2,13 +2,13 @@
 // @SPEC docs/plans/2026-01-29-labnote-ai-design.md#노트-상세
 // @TEST frontend/src/__tests__/NoteDetail.test.tsx
 
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Notebook, Tag, Paperclip, Image, File, FileText, AlertCircle, Calendar, Share2, AlertTriangle, CloudOff, CloudUpload, CloudDownload, Loader2, Check, Sparkles, X, Plus, Wand2, Link2, Eye, ScanText, RotateCcw, CheckCircle2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { apiClient } from '@/lib/api'
 import { useNote } from '@/hooks/useNote'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { NoteAIPanel } from '@/components/NoteAIPanel'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
 import { EmptyState } from '@/components/EmptyState'
@@ -56,6 +56,21 @@ export default function NoteDetail() {
     nasImage?: { noteId: string; attKey: string; filename: string }
   } | null>(null)
   const [textModal, setTextModal] = useState<{ title: string; text: string; pageCount?: number } | null>(null)
+
+  const { data: editorWidthSetting } = useQuery<{ value: string }>({
+    queryKey: ['settings', 'editor_width'],
+    queryFn: () => apiClient.get('/settings/editor_width'),
+  })
+  const editorWidthClass = useMemo(() => {
+    const w = editorWidthSetting?.value ?? 'comfortable'
+    const map: Record<string, string> = {
+      compact: 'max-w-3xl',
+      comfortable: 'max-w-5xl',
+      wide: 'max-w-7xl',
+      full: 'max-w-full',
+    }
+    return map[w] || 'max-w-5xl'
+  }, [editorWidthSetting])
 
   const handleExtractPdf = async (fileId: string) => {
     setExtractingFileId(fileId)
@@ -422,7 +437,7 @@ export default function NoteDetail() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="max-w-4xl mx-auto p-6">
+      <div className={`${editorWidthClass} mx-auto p-6`}>
         {/* 뒤로가기 버튼 */}
         <button
           onClick={() => navigate('/notes')}
