@@ -102,6 +102,8 @@ class NoteImageItem(BaseModel):
     mime_type: str
     extraction_status: str | None = None
     extracted_text: str | None = None
+    vision_status: str | None = None
+    vision_description: str | None = None
 
 
 class NoteDetailResponse(NoteItem):
@@ -242,6 +244,8 @@ async def _load_note_images(
             mime_type=img.mime_type,
             extraction_status=img.extraction_status,
             extracted_text=img.extracted_text,
+            vision_status=img.vision_status,
+            vision_description=img.vision_description,
         )
         for img in images
     ]

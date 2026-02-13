@@ -58,9 +58,7 @@ async def extract_note_images(
     Returns:
         List of ImageContent with base64-encoded image data.
     """
-    result = await db.execute(
-        select(Note).where(Note.synology_note_id == note_id)
-    )
+    result = await db.execute(select(Note).where(Note.synology_note_id == note_id))
     note = result.scalar_one_or_none()
     if not note or not note.content_html:
         return []
@@ -69,9 +67,7 @@ async def extract_note_images(
     images: list[ImageContent] = []
 
     # Pre-load all NoteImage records for this note
-    img_result = await db.execute(
-        select(NoteImage).where(NoteImage.synology_note_id == note_id)
-    )
+    img_result = await db.execute(select(NoteImage).where(NoteImage.synology_note_id == note_id))
     note_images = img_result.scalars().all()
     # Build lookup: decoded_name -> NoteImage, also name -> NoteImage
     image_by_name: dict[str, NoteImage] = {}
@@ -97,9 +93,7 @@ async def extract_note_images(
 
         # Try NAS proxy if note has NAS data
         if note.link_id and note.nas_ver:
-            nas_img = await _load_nas_image_by_ref(
-                note_id, note.link_id, note.nas_ver, decoded_name, db
-            )
+            nas_img = await _load_nas_image_by_ref(note_id, note.link_id, note.nas_ver, decoded_name, db)
             if nas_img:
                 images.append(nas_img)
 
@@ -181,9 +175,11 @@ async def _load_nas_image_by_ref(
                     continue
                 att_ref = att.get("ref", "")
                 att_name = att.get("name", "")
-                if (att_name == decoded_name
-                        or (att_name and decoded_name.endswith(att_name))
-                        or att_ref == decoded_name):
+                if (
+                    att_name == decoded_name
+                    or (att_name and decoded_name.endswith(att_name))
+                    or att_ref == decoded_name
+                ):
                     filename = att_name or decoded_name
                     nas_path = f"/note/ns/dv/{link_id}/{nas_ver}/{att_key}/{filename}"
                     image_bytes, content_type = await service._notestation._client.fetch_binary(nas_path)
@@ -230,3 +226,47 @@ def _load_uploaded_image(file_id: str) -> ImageContent | None:
     except Exception:
         logger.warning("Failed to load uploaded image %s", file_id, exc_info=True)
         return None
+
+
+async def get_cached_image_descriptions(
+    note_id: str,
+    db: AsyncSession,
+) -> str | None:
+    """Get cached OCR + Vision text for a note's images.
+
+    Returns a combined text block if any cached descriptions exist,
+    or None if no cached data is available (caller should fall back
+    to sending raw images).
+
+    Args:
+        note_id: The synology_note_id of the note.
+        db: Async database session.
+
+    Returns:
+        Combined text block or None.
+    """
+    stmt = select(
+        NoteImage.name,
+        NoteImage.extracted_text,
+        NoteImage.vision_description,
+    ).where(
+        NoteImage.synology_note_id == note_id,
+        (NoteImage.extraction_status == "completed") | (NoteImage.vision_status == "completed"),
+    )
+    result = await db.execute(stmt)
+    rows = result.fetchall()
+
+    if not rows:
+        return None
+
+    parts = []
+    for name, ocr_text, vision_desc in rows:
+        lines = [f"Image: {name}"]
+        if ocr_text and ocr_text.strip():
+            lines.append(f"OCR: {ocr_text.strip()}")
+        if vision_desc and vision_desc.strip():
+            lines.append(f"Description: {vision_desc.strip()}")
+        if len(lines) > 1:  # has at least some content
+            parts.append("\n".join(lines))
+
+    return "\n\n".join(parts) if parts else None

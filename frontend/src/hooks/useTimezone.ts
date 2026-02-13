@@ -4,16 +4,25 @@ import { apiClient } from '@/lib/api'
 /**
  * Returns the user-configured timezone from settings.
  * Falls back to 'Asia/Seoul' if not yet loaded.
+ *
+ * Uses a dedicated query key to avoid conflicts with the Settings page,
+ * which transforms the response into a different shape under the same
+ * ['settings'] key.
  */
 export function useTimezone(): string {
-  const { data } = useQuery<{ settings: Array<{ key: string; value: string }> }>({
-    queryKey: ['settings'],
-    queryFn: () => apiClient.get('/settings'),
+  const { data } = useQuery<string>({
+    queryKey: ['settings', 'timezone', '_resolved'],
+    queryFn: async () => {
+      const response = await apiClient.get<{
+        settings: Array<{ key: string; value: string }>
+      }>('/settings')
+      const item = response.settings?.find((s) => s.key === 'timezone')
+      return typeof item?.value === 'string' && item.value ? item.value : 'Asia/Seoul'
+    },
     staleTime: 5 * 60 * 1000, // cache 5 min
   })
 
-  const tz = data?.settings?.find((s) => s.key === 'timezone')?.value
-  return typeof tz === 'string' && tz ? tz : 'Asia/Seoul'
+  return data ?? 'Asia/Seoul'
 }
 
 /**

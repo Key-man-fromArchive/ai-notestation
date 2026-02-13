@@ -44,12 +44,14 @@ export default function NoteDetail() {
   const [suggestedTags, setSuggestedTags] = useState<string[]>([])
   const [isApplying, setIsApplying] = useState(false)
   const [extractingFileId, setExtractingFileId] = useState<string | null>(null)
-  const [extractingImageId, setExtractingImageId] = useState<number | null>(null)
+  const [ocrQueue, setOcrQueue] = useState<Set<number>>(new Set())
+  const [visionQueue, setVisionQueue] = useState<Set<number>>(new Set())
   const [contextMenu, setContextMenu] = useState<{
     x: number; y: number
     type: 'attachment' | 'image'
     id: string | number
     status: string | null
+    visionStatus?: string | null
     name: string
     isPdf: boolean
     pageCount?: number | null
@@ -104,7 +106,7 @@ export default function NoteDetail() {
   }
 
   const handleExtractImage = async (imageId: number) => {
-    setExtractingImageId(imageId)
+    setOcrQueue(prev => new Set(prev).add(imageId))
     try {
       await apiClient.post(`/images/${imageId}/extract`)
       const poll = setInterval(async () => {
@@ -112,16 +114,52 @@ export default function NoteDetail() {
           const result = await apiClient.get<{ extraction_status: string; text: string }>(`/images/${imageId}/text`)
           if (result.extraction_status === 'completed' || result.extraction_status === 'failed') {
             clearInterval(poll)
-            setExtractingImageId(null)
+            setOcrQueue(prev => { const next = new Set(prev); next.delete(imageId); return next })
             queryClient.invalidateQueries({ queryKey: ['note', id] })
           }
         } catch {
           clearInterval(poll)
-          setExtractingImageId(null)
+          setOcrQueue(prev => { const next = new Set(prev); next.delete(imageId); return next })
         }
       }, 2000)
     } catch {
-      setExtractingImageId(null)
+      setOcrQueue(prev => { const next = new Set(prev); next.delete(imageId); return next })
+    }
+  }
+
+  const handleVisionImage = async (imageId: number) => {
+    setVisionQueue(prev => new Set(prev).add(imageId))
+    try {
+      const res = await apiClient.post<{ status: string }>(`/images/${imageId}/vision`)
+      if (res.status === 'already_completed') {
+        setVisionQueue(prev => { const next = new Set(prev); next.delete(imageId); return next })
+        queryClient.invalidateQueries({ queryKey: ['note', id] })
+        return
+      }
+      const poll = setInterval(async () => {
+        try {
+          const result = await apiClient.get<{ vision_status: string; description: string }>(`/images/${imageId}/vision-text`)
+          if (result.vision_status === 'completed' || result.vision_status === 'failed') {
+            clearInterval(poll)
+            setVisionQueue(prev => { const next = new Set(prev); next.delete(imageId); return next })
+            queryClient.invalidateQueries({ queryKey: ['note', id] })
+          }
+        } catch {
+          clearInterval(poll)
+          setVisionQueue(prev => { const next = new Set(prev); next.delete(imageId); return next })
+        }
+      }, 2000)
+    } catch {
+      setVisionQueue(prev => { const next = new Set(prev); next.delete(imageId); return next })
+    }
+  }
+
+  const handleShowVisionText = async (imageId: number, name: string) => {
+    try {
+      const result = await apiClient.get<{ description: string }>(`/images/${imageId}/vision-text`)
+      setTextModal({ title: `${name} — Vision`, text: result.description || '' })
+    } catch {
+      // ignore
     }
   }
 
@@ -187,8 +225,9 @@ export default function NoteDetail() {
       // Check if a NoteImage already exists for this image
       const existingImg = note?.images?.find(img => img.name === filename)
       if (existingImg) {
-        const imgStatus = existingImg.extraction_status ?? (extractingImageId === existingImg.id ? 'pending' : null)
-        setContextMenu({ x: e.clientX, y: e.clientY, type: 'image', id: existingImg.id, status: imgStatus, name: existingImg.name, isPdf: false })
+        const imgStatus = existingImg.extraction_status ?? (ocrQueue.has(existingImg.id) ? 'pending' : null)
+        const vStatus = existingImg.vision_status ?? (visionQueue.has(existingImg.id) ? 'pending' : null)
+        setContextMenu({ x: e.clientX, y: e.clientY, type: 'image', id: existingImg.id, status: imgStatus, visionStatus: vStatus, name: existingImg.name, isPdf: false })
       } else {
         const nasKey = `${noteId}/${attKey}/${filename}`
         const isExtracting = extractingNasImage === nasKey
@@ -204,15 +243,16 @@ export default function NoteDetail() {
       const existingImg = note.images.find(img => img.ref === ref)
       if (existingImg) {
         e.preventDefault()
-        const imgStatus = existingImg.extraction_status ?? (extractingImageId === existingImg.id ? 'pending' : null)
-        setContextMenu({ x: e.clientX, y: e.clientY, type: 'image', id: existingImg.id, status: imgStatus, name: existingImg.name, isPdf: false })
+        const imgStatus = existingImg.extraction_status ?? (ocrQueue.has(existingImg.id) ? 'pending' : null)
+        const vStatus = existingImg.vision_status ?? (visionQueue.has(existingImg.id) ? 'pending' : null)
+        setContextMenu({ x: e.clientX, y: e.clientY, type: 'image', id: existingImg.id, status: imgStatus, visionStatus: vStatus, name: existingImg.name, isPdf: false })
       }
     }
-  }, [note, extractingImageId, extractingNasImage])
+  }, [note, ocrQueue, visionQueue, extractingNasImage])
 
   const handleAttachmentContextMenu = (
     e: React.MouseEvent,
-    opts: { type: 'attachment' | 'image'; id: string | number; status: string | null; name: string; isPdf: boolean; pageCount?: number | null }
+    opts: { type: 'attachment' | 'image'; id: string | number; status: string | null; visionStatus?: string | null; name: string; isPdf: boolean; pageCount?: number | null }
   ) => {
     e.preventDefault()
     setContextMenu({ x: e.clientX, y: e.clientY, ...opts })
@@ -220,55 +260,55 @@ export default function NoteDetail() {
 
   const getContextMenuItems = (): ContextMenuItem[] => {
     if (!contextMenu) return []
-    const { type, id, status, name, isPdf, pageCount } = contextMenu
+    const { type, id, status, visionStatus, name, isPdf, pageCount } = contextMenu
     const isFile = type === 'attachment'
+    const items: ContextMenuItem[] = []
 
-    if (status === 'completed') {
-      return [{
-        icon: <Eye className="h-4 w-4" />,
-        label: isPdf ? t('files.viewExtractedText') : t('ocr.viewExtractedText'),
-        onClick: () => {
-          if (isFile) handleShowPdfText(id as string, name, pageCount)
-          else handleShowOcrText(id as number, name)
-        },
-      }]
+    // --- File attachments (PDF etc.) — keep original logic ---
+    if (isFile) {
+      if (status === 'completed') {
+        items.push({ icon: <Eye className="h-4 w-4" />, label: isPdf ? t('files.viewExtractedText') : t('ocr.viewExtractedText'), onClick: () => handleShowPdfText(id as string, name, pageCount) })
+      } else if (status === 'pending' || extractingFileId === id) {
+        items.push({ icon: <ScanText className="h-4 w-4" />, label: isPdf ? t('files.extracting') : t('ocr.extracting'), disabled: true, loading: true, onClick: () => {} })
+      } else if (status === 'failed') {
+        items.push({ icon: <RotateCcw className="h-4 w-4" />, label: t('common.retry'), onClick: () => handleExtractPdf(id as string) })
+      } else {
+        items.push({ icon: <ScanText className="h-4 w-4" />, label: isPdf ? t('files.extractText') : t('ocr.extractText'), onClick: () => handleExtractPdf(id as string) })
+      }
+      return items
     }
-    if (status === 'pending' || (isFile && extractingFileId === id) || (!isFile && extractingImageId === id)) {
-      return [{
-        icon: <ScanText className="h-4 w-4" />,
-        label: isPdf ? t('files.extracting') : t('ocr.extracting'),
-        disabled: true,
-        loading: true,
-        onClick: () => {},
-      }]
-    }
-    if (status === 'failed') {
-      return [{
-        icon: <RotateCcw className="h-4 w-4" />,
-        label: t('common.retry'),
-        onClick: () => {
-          if (isFile) handleExtractPdf(id as string)
-          else handleExtractImage(id as number)
-        },
-      }]
-    }
-    // No extraction yet
+
+    // --- NAS images without a NoteImage record yet ---
     if (contextMenu.nasImage) {
       const { noteId, attKey, filename } = contextMenu.nasImage
-      return [{
-        icon: <ScanText className="h-4 w-4" />,
-        label: t('ocr.extractText'),
-        onClick: () => handleExtractNasImage(noteId, attKey, filename),
-      }]
+      items.push({ icon: <ScanText className="h-4 w-4" />, label: t('ocr.extractText'), onClick: () => handleExtractNasImage(noteId, attKey, filename) })
+      return items
     }
-    return [{
-      icon: <ScanText className="h-4 w-4" />,
-      label: isPdf ? t('files.extractText') : t('ocr.extractText'),
-      onClick: () => {
-        if (isFile) handleExtractPdf(id as string)
-        else handleExtractImage(id as number)
-      },
-    }]
+
+    // --- NoteImage: OCR item ---
+    const imageId = id as number
+    if (status === 'completed') {
+      items.push({ icon: <Eye className="h-4 w-4" />, label: t('ocr.viewExtractedText'), onClick: () => handleShowOcrText(imageId, name) })
+    } else if (status === 'pending' || ocrQueue.has(imageId)) {
+      items.push({ icon: <ScanText className="h-4 w-4" />, label: t('ocr.extracting'), disabled: true, loading: true, onClick: () => {} })
+    } else if (status === 'failed') {
+      items.push({ icon: <RotateCcw className="h-4 w-4" />, label: `${t('ocr.extractText')} (${t('common.retry')})`, onClick: () => handleExtractImage(imageId) })
+    } else {
+      items.push({ icon: <ScanText className="h-4 w-4" />, label: t('ocr.extractText'), onClick: () => handleExtractImage(imageId) })
+    }
+
+    // --- NoteImage: Vision item ---
+    if (visionStatus === 'completed') {
+      items.push({ icon: <Sparkles className="h-4 w-4" />, label: t('vision.viewDescription'), onClick: () => handleShowVisionText(imageId, name) })
+    } else if (visionStatus === 'pending' || visionQueue.has(imageId)) {
+      items.push({ icon: <Sparkles className="h-4 w-4" />, label: t('vision.analyzing'), disabled: true, loading: true, onClick: () => {} })
+    } else if (visionStatus === 'failed') {
+      items.push({ icon: <RotateCcw className="h-4 w-4" />, label: `${t('vision.analyze')} (${t('common.retry')})`, onClick: () => handleVisionImage(imageId) })
+    } else {
+      items.push({ icon: <Sparkles className="h-4 w-4" />, label: t('vision.analyze'), onClick: () => handleVisionImage(imageId) })
+    }
+
+    return items
   }
 
   const handlePushSync = async (force = false) => {
@@ -841,28 +881,42 @@ export default function NoteDetail() {
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {note.images?.map((img) => {
-                const imgStatus = img.extraction_status ?? (extractingImageId === img.id ? 'pending' : null)
+                const imgStatus = img.extraction_status ?? (ocrQueue.has(img.id) ? 'pending' : null)
+                const vStatus = img.vision_status ?? (visionQueue.has(img.id) ? 'pending' : null)
                 return (
                   <div
                     key={img.id}
                     className="flex items-center gap-3 rounded-lg border border-border bg-muted/30 px-3 py-2.5 cursor-context-menu"
                     onContextMenu={(e) => handleAttachmentContextMenu(e, {
-                      type: 'image', id: img.id, status: imgStatus, name: img.name, isPdf: false,
+                      type: 'image', id: img.id, status: imgStatus, visionStatus: vStatus, name: img.name, isPdf: false,
                     })}
                   >
                     <Image className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                     <span className="text-sm text-foreground truncate">{img.name}</span>
 
-                    {/* Extraction status icon */}
-                    {imgStatus === 'completed' && (
-                      <CheckCircle2 className="ml-auto h-3.5 w-3.5 shrink-0 text-green-600" title={t('ocr.viewExtractedText')} />
-                    )}
-                    {imgStatus === 'pending' && (
-                      <Loader2 className="ml-auto h-3.5 w-3.5 shrink-0 text-amber-600 animate-spin" title={t('ocr.extracting')} />
-                    )}
-                    {imgStatus === 'failed' && (
-                      <AlertCircle className="ml-auto h-3.5 w-3.5 shrink-0 text-destructive" title={t('ocr.extractionFailed')} />
-                    )}
+                    {/* Status icons */}
+                    <span className="ml-auto flex items-center gap-1">
+                      {/* OCR status */}
+                      {imgStatus === 'completed' && (
+                        <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-green-600" title={t('ocr.viewExtractedText')} />
+                      )}
+                      {imgStatus === 'pending' && (
+                        <Loader2 className="h-3.5 w-3.5 shrink-0 text-amber-600 animate-spin" title={t('ocr.extracting')} />
+                      )}
+                      {imgStatus === 'failed' && (
+                        <AlertCircle className="h-3.5 w-3.5 shrink-0 text-destructive" title={t('ocr.extractionFailed')} />
+                      )}
+                      {/* Vision status */}
+                      {vStatus === 'completed' && (
+                        <Sparkles className="h-3.5 w-3.5 shrink-0 text-blue-600" title={t('vision.viewDescription')} />
+                      )}
+                      {vStatus === 'pending' && (
+                        <Loader2 className="h-3.5 w-3.5 shrink-0 text-blue-400 animate-spin" title={t('vision.analyzing')} />
+                      )}
+                      {vStatus === 'failed' && (
+                        <AlertCircle className="h-3.5 w-3.5 shrink-0 text-orange-500" title={t('vision.failed')} />
+                      )}
+                    </span>
                   </div>
                 )
               })}

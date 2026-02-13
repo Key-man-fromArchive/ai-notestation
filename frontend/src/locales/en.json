@@ -113,7 +113,10 @@
     "rediscoverySimilarity": "{{percent}}% similar",
     "rediscoveryDaysAgo": "Modified {{days}} days ago",
     "rediscoveryRefresh": "Refresh",
-    "rediscoveryError": "Failed to load rediscovery notes"
+    "rediscoveryError": "Failed to load rediscovery notes",
+    "imageAnalysis": "Image Analysis",
+    "totalImages": "Total Images",
+    "pendingAnalysis": "Pending"
   },
   "notes": {
     "title": "Notes",
@@ -481,6 +484,13 @@
     "ocrEngineDesc": "Choose the engine for text recognition from images. AI Vision uses cloud API models (requires API key). PaddleOCR-VL runs locally on CPU (free, private).",
     "ocrEngineAiVision": "AI Vision (Cloud API)",
     "ocrEnginePaddleOcr": "PaddleOCR-VL (Local)",
+    "ocrEngineGlmOcr": "GLM-OCR (ZhipuAI)",
+    "batchAnalysis": "Batch Image Analysis",
+    "batchAnalysisDesc": "Automatically run OCR text extraction and Vision description on all note images. Results are used for search and AI analysis.",
+    "batchAnalysisButton": "Start Batch Analysis",
+    "batchAnalyzing": "Analyzing...",
+    "batchAnalysisProgress": "Analyzing images... {{progress}}%",
+    "batchAnalysisComplete": "OCR: {{ocr}}, Vision: {{vision}} completed",
     "qualityGate": "AI Quality Gate",
     "qualityGateDesc": "Automatically evaluate AI responses with a checklist. When enabled, a quality score is shown after each response.",
     "qualityGateEnabled": "Enable quality gate",
@@ -785,6 +795,12 @@
     "viewExtractedText": "View recognized text",
     "extractedText": "Recognized text",
     "ocrMethod": "Recognition method"
+  },
+  "vision": {
+    "analyze": "Describe image (Vision)",
+    "analyzing": "Analyzing image...",
+    "failed": "Analysis failed",
+    "viewDescription": "View image description"
   },
   "errors": {
     "somethingWentWrong": "Something went wrong",

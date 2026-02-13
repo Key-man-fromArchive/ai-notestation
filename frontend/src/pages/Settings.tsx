@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useSync } from '@/hooks/useSync'
 import { useSearchIndex } from '@/hooks/useSearchIndex'
 import { useImageSync } from '@/hooks/useImageSync'
+import { useBatchImageAnalysis } from '@/hooks/useBatchImageAnalysis'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
 import { EmptyState } from '@/components/EmptyState'
 import {
@@ -34,6 +35,7 @@ import {
   ShieldCheck,
   ScanSearch,
   Columns3,
+  Eye,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -148,6 +150,7 @@ export default function Settings() {
 
           <NsxImportSection />
           <ImageSyncSection />
+          <BatchImageAnalysisSection />
           <BackupSection />
         </>
       )}
@@ -642,6 +645,116 @@ function ImageSyncSection() {
       >
         <Image className="h-4 w-4" aria-hidden="true" />
         {isSyncing ? t('settings.imageSyncingButton') : t('settings.imageSyncButton')}
+      </button>
+    </div>
+  )
+}
+
+function BatchImageAnalysisSection() {
+  const { t } = useTranslation()
+  const {
+    status,
+    total,
+    processed,
+    ocrDone,
+    visionDone,
+    failed,
+    error,
+    progress,
+    isProcessing,
+    triggerBatch,
+  } = useBatchImageAnalysis()
+
+  const handleTrigger = async () => {
+    try {
+      await triggerBatch()
+    } catch {
+      // Error handled by hook
+    }
+  }
+
+  return (
+    <div className="p-4 border border-input rounded-md">
+      <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
+        <Eye className="h-5 w-5" aria-hidden="true" />
+        {t('settings.batchAnalysis')}
+      </h3>
+
+      <p className="text-sm text-muted-foreground mb-4">
+        {t('settings.batchAnalysisDesc')}
+      </p>
+
+      {status === 'processing' && (
+        <div className="space-y-3 mb-4">
+          <div className="flex justify-between text-sm">
+            <span>{t('settings.inProgress')}</span>
+            <span className="font-medium">
+              {processed.toLocaleString()} / {total.toLocaleString()}
+            </span>
+          </div>
+          <div className="flex justify-between text-sm">
+            <span>OCR</span>
+            <span className="font-medium text-green-600">
+              {ocrDone.toLocaleString()}
+            </span>
+          </div>
+          <div className="flex justify-between text-sm">
+            <span>Vision</span>
+            <span className="font-medium text-blue-600">
+              {visionDone.toLocaleString()}
+            </span>
+          </div>
+          {failed > 0 && (
+            <div className="flex justify-between text-sm">
+              <span>{t('settings.failedCount')}</span>
+              <span className="font-medium text-destructive">
+                {failed.toLocaleString()}
+              </span>
+            </div>
+          )}
+          <div className="mt-2">
+            <div className="h-2 bg-muted rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary transition-all duration-300"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground mt-1 text-center">
+              {t('settings.batchAnalysisProgress', { progress })}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {status === 'completed' && (
+        <div className="mb-4 p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
+          <p className="text-sm text-green-600">
+            {t('settings.batchAnalysisComplete', { ocr: ocrDone, vision: visionDone })}
+          </p>
+        </div>
+      )}
+
+      {error && (
+        <div
+          className="mb-4 p-3 bg-destructive/10 border border-destructive/20 rounded-lg"
+          role="alert"
+        >
+          <p className="text-sm text-destructive">{error}</p>
+        </div>
+      )}
+
+      <button
+        onClick={handleTrigger}
+        disabled={isProcessing}
+        className={cn(
+          'flex items-center gap-2 px-4 py-2 rounded-md',
+          'bg-primary text-primary-foreground',
+          'hover:bg-primary/90 transition-colors',
+          'disabled:opacity-50 disabled:cursor-not-allowed',
+        )}
+      >
+        <Eye className="h-4 w-4" aria-hidden="true" />
+        {isProcessing ? t('settings.batchAnalyzing') : t('settings.batchAnalysisButton')}
       </button>
     </div>
   )
@@ -1192,6 +1305,7 @@ function OcrEngineSection() {
       >
         <option value="ai_vision">{t('settings.ocrEngineAiVision')}</option>
         <option value="paddleocr_vl">{t('settings.ocrEnginePaddleOcr')}</option>
+        <option value="glm_ocr">{t('settings.ocrEngineGlmOcr')}</option>
       </select>
     </div>
   )

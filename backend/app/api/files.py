@@ -200,6 +200,55 @@ async def get_image_text(
     }
 
 
+# -- NoteImage Vision endpoints -----------------------------------------------
+
+
+@router.post("/images/{image_id}/vision")
+async def trigger_image_vision(
+    image_id: int,
+    background_tasks: BackgroundTasks,
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> dict:
+    """Trigger Vision analysis for a NoteImage."""
+    stmt = select(NoteImage).where(NoteImage.id == image_id)
+    result = await db.execute(stmt)
+    image = result.scalar_one_or_none()
+    if not image:
+        raise HTTPException(status_code=404, detail="Image not found")
+
+    if image.vision_status == "completed":
+        return {"status": "already_completed"}
+
+    image.vision_status = "pending"
+    await db.commit()
+
+    background_tasks.add_task(_run_image_vision, image_id)
+
+    return {"status": "pending"}
+
+
+@router.get("/images/{image_id}/vision-text")
+async def get_image_vision_text(
+    image_id: int,
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> dict:
+    """Return Vision description for a NoteImage."""
+    stmt = select(NoteImage).where(NoteImage.id == image_id)
+    result = await db.execute(stmt)
+    image = result.scalar_one_or_none()
+    if not image:
+        raise HTTPException(status_code=404, detail="Image not found")
+
+    return {
+        "image_id": image.id,
+        "name": image.name,
+        "vision_status": image.vision_status,
+        "description": image.vision_description,
+    }
+
+
 # -- Background tasks -------------------------------------------------------
 
 
@@ -293,6 +342,73 @@ async def _run_image_ocr(image_id: int) -> None:
         except Exception:
             logger.exception("Image OCR failed for image %d", image_id)
             image.extraction_status = "failed"
+            await db.commit()
+
+
+_VISION_PROMPT = (
+    "Describe this image concisely in 2-3 sentences. "
+    "Focus on: main content, objects, text, diagrams, charts, or notable features. "
+    "If this is a scientific image (gel, blot, microscopy, etc.), "
+    "describe the experimental content."
+)
+
+_VISION_MODEL = "glm-4.6v"
+
+
+async def _run_image_vision(image_id: int) -> None:
+    """Background task: run Vision analysis on a NoteImage and reindex its parent note."""
+    import base64
+
+    from app.ai_router.router import AIRouter
+    from app.ai_router.schemas import AIRequest, ImageContent, Message
+    from app.database import async_session_factory
+    from app.models import Note
+
+    async with async_session_factory() as db:
+        stmt = select(NoteImage).where(NoteImage.id == image_id)
+        result = await db.execute(stmt)
+        image = result.scalar_one_or_none()
+        if not image:
+            return
+
+        try:
+            file_path = Path(image.file_path)
+            if not file_path.exists():
+                raise FileNotFoundError(f"Image file not found: {image.file_path}")
+
+            image_bytes = file_path.read_bytes()
+            b64 = base64.b64encode(image_bytes).decode("ascii")
+            mime_type = image.mime_type or "image/png"
+
+            router = AIRouter()
+            message = Message(
+                role="user",
+                content=_VISION_PROMPT,
+                images=[ImageContent(data=b64, mime_type=mime_type)],
+            )
+            request = AIRequest(
+                messages=[message],
+                model=_VISION_MODEL,
+                temperature=0.3,
+            )
+            response = await router.chat(request)
+
+            image.vision_description = response.content.strip()
+            image.vision_status = "completed"
+            await db.commit()
+
+            # Find the note by synology_note_id to reindex
+            note_stmt = select(Note.id).where(
+                Note.synology_note_id == image.synology_note_id
+            )
+            note_result = await db.execute(note_stmt)
+            note_id = note_result.scalar_one_or_none()
+            if note_id:
+                await _reindex_note(note_id, db)
+
+        except Exception:
+            logger.exception("Image Vision failed for image %d", image_id)
+            image.vision_status = "failed"
             await db.commit()
 
 

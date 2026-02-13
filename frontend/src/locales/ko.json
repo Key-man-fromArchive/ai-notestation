@@ -113,7 +113,10 @@
     "rediscoverySimilarity": "유사도 {{percent}}%",
     "rediscoveryDaysAgo": "{{days}}일 전 수정",
     "rediscoveryRefresh": "새로고침",
-    "rediscoveryError": "재발견 노트를 불러오지 못했습니다"
+    "rediscoveryError": "재발견 노트를 불러오지 못했습니다",
+    "imageAnalysis": "이미지 분석 현황",
+    "totalImages": "전체 이미지",
+    "pendingAnalysis": "미처리"
   },
   "notes": {
     "title": "노트",
@@ -481,6 +484,13 @@
     "ocrEngineDesc": "이미지 텍스트 인식에 사용할 엔진을 선택합니다. AI Vision은 클라우드 API 모델을 사용합니다 (API 키 필요). PaddleOCR-VL은 로컬 CPU에서 실행됩니다 (무료, 비공개).",
     "ocrEngineAiVision": "AI Vision (클라우드 API)",
     "ocrEnginePaddleOcr": "PaddleOCR-VL (로컬)",
+    "ocrEngineGlmOcr": "GLM-OCR (ZhipuAI)",
+    "batchAnalysis": "이미지 일괄 분석",
+    "batchAnalysisDesc": "모든 노트 이미지에 대해 OCR 텍스트 추출과 Vision 설명을 자동 생성합니다. 처리된 결과는 검색 및 AI 분석에 활용됩니다.",
+    "batchAnalysisButton": "일괄 분석 시작",
+    "batchAnalyzing": "분석 중...",
+    "batchAnalysisProgress": "이미지 분석 중... {{progress}}%",
+    "batchAnalysisComplete": "OCR {{ocr}}개, Vision {{vision}}개 분석 완료",
     "qualityGate": "AI 품질 검증",
     "qualityGateDesc": "AI 응답을 체크리스트로 자동 평가합니다. 활성화하면 응답 생성 후 품질 점수가 표시됩니다.",
     "qualityGateEnabled": "품질 검증 활성화",
@@ -785,6 +795,12 @@
     "viewExtractedText": "인식된 텍스트 보기",
     "extractedText": "인식된 텍스트",
     "ocrMethod": "인식 방법"
+  },
+  "vision": {
+    "analyze": "이미지 설명(Vision)",
+    "analyzing": "이미지 분석 중...",
+    "failed": "분석 실패",
+    "viewDescription": "이미지 설명 보기"
   },
   "errors": {
     "somethingWentWrong": "Something went wrong",

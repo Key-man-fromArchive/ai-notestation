@@ -112,6 +112,9 @@ class JudgeInfoResponse(BaseModel):
     engines: list[str]
     skip_reason: str | None = None
     confidence: float = 0.0
+    fts_result_count: int | None = None
+    fts_avg_score: float | None = None
+    term_coverage: float | None = None
 
 class SearchResponse(BaseModel):
     """Search API response containing results and metadata."""
@@ -358,6 +361,9 @@ async def search(
             engines=page.judge_info.engines,
             skip_reason=page.judge_info.skip_reason,
             confidence=page.judge_info.confidence,
+            fts_result_count=page.judge_info.fts_result_count,
+            fts_avg_score=page.judge_info.fts_avg_score,
+            term_coverage=page.judge_info.term_coverage,
         ) if page.judge_info else None,
     )
 
@@ -503,6 +509,9 @@ async def refine_search(
             engines=page.judge_info.engines,
             skip_reason=page.judge_info.skip_reason,
             confidence=page.judge_info.confidence,
+            fts_result_count=page.judge_info.fts_result_count,
+            fts_avg_score=page.judge_info.fts_avg_score,
+            term_coverage=page.judge_info.term_coverage,
         )
         if page.judge_info
         else None,

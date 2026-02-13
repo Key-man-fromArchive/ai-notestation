@@ -98,7 +98,6 @@
 - [x] Backend: 일일/컨텍스트 재발견 로직 (centroid + random sampling)
 - [x] Backend: GET /api/discovery/rediscovery 엔드포인트
 - [x] Frontend: Dashboard "오늘의 재발견" 카드 섹션
-- [ ] Frontend: NoteDetail 에디터 사이드바 추천 (후속)
 
 ---
 

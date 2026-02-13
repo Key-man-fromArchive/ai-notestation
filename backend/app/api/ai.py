@@ -24,7 +24,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.ai_router.image_utils import extract_note_images
+from app.ai_router.image_utils import extract_note_images, get_cached_image_descriptions
 from app.ai_router.prompts import insight, search_qa, spellcheck, summarize, template, writing
 from app.ai_router.router import AIRouter
 from app.ai_router.schemas import AIRequest, AIResponse, Message, ModelInfo, ProviderError
@@ -464,14 +464,26 @@ async def ai_chat(
 
     # Inject images from note for multimodal features
     if request.note_id and request.feature in _MULTIMODAL_FEATURES:
-        images = await extract_note_images(request.note_id, db)
-        if images:
+        # Try cached descriptions first (cheaper, works with any model)
+        cached_desc = await get_cached_image_descriptions(request.note_id, db)
+        if cached_desc:
             for i in range(len(messages) - 1, -1, -1):
                 if messages[i].role == "user":
                     messages[i] = Message(
-                        role="user", content=messages[i].content, images=images
+                        role="user",
+                        content=f"{messages[i].content}\n\n[Image Analysis]\n{cached_desc}",
                     )
                     break
+        else:
+            # Fallback: send raw images for Vision-capable models
+            images = await extract_note_images(request.note_id, db)
+            if images:
+                for i in range(len(messages) - 1, -1, -1):
+                    if messages[i].role == "user":
+                        messages[i] = Message(
+                            role="user", content=messages[i].content, images=images
+                        )
+                        break
 
     # Inject OAuth token if user has one for the target provider
     effective_router = await _inject_oauth_if_available(
@@ -635,14 +647,26 @@ async def ai_stream(
 
     # Inject images from note for multimodal features
     if request.note_id and request.feature in _MULTIMODAL_FEATURES:
-        images = await extract_note_images(request.note_id, db)
-        if images:
+        # Try cached descriptions first (cheaper, works with any model)
+        cached_desc = await get_cached_image_descriptions(request.note_id, db)
+        if cached_desc:
             for i in range(len(messages) - 1, -1, -1):
                 if messages[i].role == "user":
                     messages[i] = Message(
-                        role="user", content=messages[i].content, images=images
+                        role="user",
+                        content=f"{messages[i].content}\n\n[Image Analysis]\n{cached_desc}",
                     )
                     break
+        else:
+            # Fallback: send raw images for Vision-capable models
+            images = await extract_note_images(request.note_id, db)
+            if images:
+                for i in range(len(messages) - 1, -1, -1):
+                    if messages[i].role == "user":
+                        messages[i] = Message(
+                            role="user", content=messages[i].content, images=images
+                        )
+                        break
 
     # Inject OAuth token if user has one for the target provider
     effective_router = await _inject_oauth_if_available(

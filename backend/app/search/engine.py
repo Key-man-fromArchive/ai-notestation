@@ -30,7 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Note, NoteEmbedding
 from app.search.embeddings import EmbeddingError, EmbeddingService
-from app.search.judge import SearchJudge, SearchStrategy
+from app.search.judge import SearchJudge
 from app.search.params import get_search_params
 from app.search.query_preprocessor import QueryAnalysis, analyze_query
 
@@ -104,6 +104,9 @@ class JudgeInfo(BaseModel):
     engines: list[str]
     skip_reason: str | None = None
     confidence: float = 0.0
+    fts_result_count: int | None = None
+    fts_avg_score: float | None = None
+    term_coverage: float | None = None
 
 class SearchPage(BaseModel):
     """Paginated search results with total count."""
@@ -592,20 +595,19 @@ class HybridSearchEngine:
         date_from: datetime | None = None,
         date_to: datetime | None = None,
     ) -> SearchPage:
-        """Execute hybrid search: FTS + semantic in parallel, merged via weighted RRF."""
+        """Execute hybrid search: FTS first → judge quality → conditional semantic.
+
+        Post-retrieval flow:
+        1. Always run FTS (~50ms)
+        2. Judge evaluates FTS result quality
+        3. If insufficient, run semantic and merge via RRF
+        4. If sufficient, return FTS results directly
+        """
         if not query or not query.strip():
             return SearchPage(results=[], total=0)
 
         analysis = analyze_query(query)
-        strategy = self._judge.judge(analysis)
         k, fts_weight, sem_weight = self._compute_rrf_params(analysis)
-
-        judge_info = JudgeInfo(
-            strategy=strategy.strategy_name,
-            engines=strategy.engines,
-            skip_reason=strategy.skip_reason,
-            confidence=strategy.confidence,
-        )
 
         filter_kwargs = {
             "notebook_name": notebook_name,
@@ -613,26 +615,47 @@ class HybridSearchEngine:
             "date_to": date_to,
         }
 
-        # Adaptive: skip engines the judge deems unnecessary
-        if strategy.strategy_name == "fts_only":
-            fts_page = await self._safe_search(
-                self._fts_engine, query, limit=limit, offset=offset, label="FTS", **filter_kwargs,
+        # Step 1: Always run FTS first
+        fts_page = await self._safe_search(
+            self._fts_engine, query, limit=limit, offset=offset, label="FTS", **filter_kwargs,
+        )
+
+        # Step 2: Judge evaluates FTS results
+        decision = self._judge.judge_results(analysis, fts_page.results)
+
+        # Step 3: Build judge_info from decision
+        if not decision.should_run_semantic:
+            judge_info = JudgeInfo(
+                strategy="fts_only",
+                engines=["fts"],
+                skip_reason=decision.reason,
+                confidence=decision.confidence,
+                fts_result_count=decision.fts_result_count,
+                fts_avg_score=decision.avg_score,
+                term_coverage=decision.term_coverage,
             )
             return SearchPage(results=fts_page.results, total=fts_page.total, judge_info=judge_info)
 
-        if strategy.strategy_name == "semantic_only":
-            sem_page = await self._safe_search(
-                self._semantic_engine, query, limit=limit, offset=offset, label="Semantic", **filter_kwargs,
-            )
-            return SearchPage(results=sem_page.results, total=sem_page.total, judge_info=judge_info)
-
-        # Full hybrid path
-        fts_page, sem_page = await self._gather_results(
-            query, limit=limit, offset=offset, **filter_kwargs,
+        # Step 4: Semantic needed — run and merge
+        sem_page = await self._safe_search(
+            self._semantic_engine, query, limit=limit, offset=offset, label="Semantic", **filter_kwargs,
         )
 
-        merged = self.rrf_merge(fts_page.results, sem_page.results, k=k, fts_weight=fts_weight, semantic_weight=sem_weight)
+        merged = self.rrf_merge(
+            fts_page.results, sem_page.results,
+            k=k, fts_weight=fts_weight, semantic_weight=sem_weight,
+        )
         total = max(fts_page.total, sem_page.total)
+
+        judge_info = JudgeInfo(
+            strategy="hybrid",
+            engines=["fts", "semantic"],
+            skip_reason=decision.reason,
+            confidence=decision.confidence,
+            fts_result_count=decision.fts_result_count,
+            fts_avg_score=decision.avg_score,
+            term_coverage=decision.term_coverage,
+        )
         return SearchPage(results=merged, total=total, judge_info=judge_info)
 
     async def search_progressive(
@@ -640,14 +663,12 @@ class HybridSearchEngine:
         query: str,
         limit: int = 20,
     ) -> AsyncIterator[list[SearchResult]]:
-        """Progressive search: FTS first, then weighted RRF-merged hybrid results.
+        """Progressive search: FTS first → judge quality → conditional semantic.
 
         Phase 1: Yields FTS results immediately (search_type="fts").
-        Phase 2: Yields weighted RRF-merged results after semantic completes
-                 (search_type="hybrid").
-
-        When the adaptive judge decides semantic is unnecessary, Phase 2
-        is skipped entirely (only Phase 1 is yielded).
+        Phase 2: If judge deems FTS insufficient, yields weighted RRF-merged
+                 results after semantic completes (search_type="hybrid").
+                 Skipped if FTS quality is sufficient.
 
         Args:
             query: The search query string.
@@ -656,41 +677,35 @@ class HybridSearchEngine:
         Yields:
             Phase 1: list[SearchResult] from FTS (search_type="fts").
             Phase 2: list[SearchResult] from weighted RRF merge (search_type="hybrid"),
-                     only if the judge selects hybrid strategy.
+                     only if judge decides semantic is needed.
         """
         if not query or not query.strip():
             return
 
         analysis = analyze_query(query)
-        strategy = self._judge.judge(analysis)
         k, fts_weight, sem_weight = self._compute_rrf_params(analysis)
-
-        # Semantic-only: skip FTS phase, yield semantic directly
-        if strategy.strategy_name == "semantic_only":
-            try:
-                semantic_results = await self._semantic_engine.search(query, limit=limit, offset=0)
-            except Exception:
-                logger.warning("Semantic engine failed during progressive search")
-                semantic_results = []
-            yield semantic_results
-            return
 
         # Phase 1: FTS results immediately
         try:
-            fts_results = await self._fts_engine.search(query, limit=limit, offset=0)
+            fts_page = await self._fts_engine.search(query, limit=limit, offset=0)
+            fts_results = fts_page.results if hasattr(fts_page, "results") else fts_page
         except Exception:
             logger.warning("FTS engine failed during progressive search")
             fts_results = []
 
         yield fts_results
 
-        # FTS-only: skip semantic phase
-        if strategy.strategy_name == "fts_only":
+        # Post-retrieval judge evaluates FTS quality
+        decision = self._judge.judge_results(analysis, fts_results)
+
+        # FTS sufficient → skip Phase 2
+        if not decision.should_run_semantic:
             return
 
         # Phase 2: Semantic search, then weighted RRF merge
         try:
-            semantic_results = await self._semantic_engine.search(query, limit=limit, offset=0)
+            semantic_page = await self._semantic_engine.search(query, limit=limit, offset=0)
+            semantic_results = semantic_page.results if hasattr(semantic_page, "results") else semantic_page
         except Exception:
             logger.warning("Semantic engine failed during progressive search")
             semantic_results = []

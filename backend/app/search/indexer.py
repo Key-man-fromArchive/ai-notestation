@@ -199,9 +199,7 @@ class NoteIndexer:
         Returns:
             True if the note has no embeddings and needs indexing.
         """
-        stmt = select(func.count()).select_from(NoteEmbedding).where(
-            NoteEmbedding.note_id == note_id
-        )
+        stmt = select(func.count()).select_from(NoteEmbedding).where(NoteEmbedding.note_id == note_id)
         result = await self._session.execute(stmt)
         count = result.scalar()
         return count == 0
@@ -231,14 +229,17 @@ class NoteIndexer:
         return "\n\n---\n\n".join(parts)
 
     async def _get_image_texts(self, note: Note) -> str:
-        """Collect OCR text from NoteImages associated with this note."""
+        """Collect OCR text and Vision descriptions from NoteImages."""
         if not note.synology_note_id:
             return ""
 
-        stmt = select(NoteImage.extracted_text, NoteImage.name).where(
+        stmt = select(
+            NoteImage.extracted_text,
+            NoteImage.vision_description,
+            NoteImage.name,
+        ).where(
             NoteImage.synology_note_id == note.synology_note_id,
-            NoteImage.extraction_status == "completed",
-            NoteImage.extracted_text.isnot(None),
+            (NoteImage.extraction_status == "completed") | (NoteImage.vision_status == "completed"),
         )
         result = await self._session.execute(stmt)
         rows = result.fetchall()
@@ -247,9 +248,11 @@ class NoteIndexer:
             return ""
 
         parts = []
-        for text, name in rows:
-            if text and text.strip():
-                parts.append(f"[OCR: {name}]\n{text.strip()}")
+        for ocr_text, vision_desc, name in rows:
+            if ocr_text and ocr_text.strip():
+                parts.append(f"[OCR: {name}]\n{ocr_text.strip()}")
+            if vision_desc and vision_desc.strip():
+                parts.append(f"[Vision: {name}]\n{vision_desc.strip()}")
 
         return "\n\n---\n\n".join(parts)
 

@@ -19,11 +19,13 @@ import {
   BookOpen,
   Lightbulb,
   RotateCw,
+  Eye,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useTimezone } from '@/hooks/useTimezone'
 import { useTranslation } from 'react-i18next'
 import { useRediscovery } from '@/hooks/useRediscovery'
+import { useImageAnalysisStats } from '@/hooks/useImageAnalysisStats'
 
 interface Note {
   note_id: string
@@ -52,6 +54,7 @@ export default function Dashboard() {
   const { status: syncStatus, lastSync, error: syncError, triggerSync } = useSync()
   const timezone = useTimezone()
   const { data: rediscoveryData, isLoading: rediscoveryLoading, refresh: refreshRediscovery } = useRediscovery()
+  const { stats: imageStats } = useImageAnalysisStats()
 
   const { data, isLoading } = useQuery<NotesResponse>({
     queryKey: ['notes', 'recent'],
@@ -178,6 +181,48 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* 이미지 분석 현황 */}
+      {imageStats && imageStats.total > 0 && (
+        <div className="p-4 border border-border rounded-lg">
+          <div className="flex items-center gap-2 mb-3">
+            <Eye className="h-5 w-5 text-primary" aria-hidden="true" />
+            <h3 className="font-semibold text-sm">{t('dashboard.imageAnalysis')}</h3>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="text-center">
+              <div className="text-lg font-bold">{imageStats.total}</div>
+              <div className="text-xs text-muted-foreground">{t('dashboard.totalImages')}</div>
+            </div>
+            <div className="text-center">
+              <div className="text-lg font-bold text-green-600">{imageStats.ocr_done}</div>
+              <div className="text-xs text-muted-foreground">OCR</div>
+            </div>
+            <div className="text-center">
+              <div className="text-lg font-bold text-blue-600">{imageStats.vision_done}</div>
+              <div className="text-xs text-muted-foreground">Vision</div>
+            </div>
+            <div className="text-center">
+              <div className="text-lg font-bold text-amber-600">{imageStats.pending + imageStats.vision_pending}</div>
+              <div className="text-xs text-muted-foreground">{t('dashboard.pendingAnalysis')}</div>
+            </div>
+          </div>
+          {imageStats.total > 0 && (
+            <div className="mt-3">
+              <div className="h-1.5 bg-muted rounded-full overflow-hidden flex">
+                <div
+                  className="h-full bg-green-500 transition-all duration-300"
+                  style={{ width: `${Math.round((imageStats.ocr_done / imageStats.total) * 100)}%` }}
+                />
+                <div
+                  className="h-full bg-blue-500 transition-all duration-300"
+                  style={{ width: `${Math.round(((imageStats.vision_done - imageStats.ocr_done) / imageStats.total) * 100)}%` }}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 빠른 액션 */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">

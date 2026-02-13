@@ -32,10 +32,13 @@ DEFAULT_SEARCH_PARAMS: dict[str, float | int] = {
     # Unified search
     "unified_fts_weight": 0.65,
     "unified_trigram_weight": 0.35,
-    # Adaptive search strategy
+    # Adaptive search strategy (post-retrieval judge)
     "adaptive_enabled": 1,
-    "adaptive_semantic_min_words": 3,
-    "adaptive_short_query_max_words": 2,
+    "judge_min_results": 3,
+    "judge_min_avg_score": 0.1,
+    "judge_min_avg_score_ko": 0.08,
+    "judge_min_term_coverage": 0.5,
+    "judge_confidence_threshold": 0.7,
 }
 
 

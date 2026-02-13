@@ -19,8 +19,11 @@ interface SearchParams {
   unified_fts_weight: number
   unified_trigram_weight: number
   adaptive_enabled: number
-  adaptive_semantic_min_words: number
-  adaptive_short_query_max_words: number
+  judge_min_results: number
+  judge_min_avg_score: number
+  judge_min_avg_score_ko: number
+  judge_min_term_coverage: number
+  judge_confidence_threshold: number
 }
 
 interface SearchParamsResponse {
@@ -43,8 +46,11 @@ const DEFAULT_PARAMS: SearchParams = {
   unified_fts_weight: 0.65,
   unified_trigram_weight: 0.35,
   adaptive_enabled: 1,
-  adaptive_semantic_min_words: 3,
-  adaptive_short_query_max_words: 2,
+  judge_min_results: 3,
+  judge_min_avg_score: 0.1,
+  judge_min_avg_score_ko: 0.08,
+  judge_min_term_coverage: 0.5,
+  judge_confidence_threshold: 0.7,
 }
 
 export function SearchParamsSection() {
@@ -283,35 +289,62 @@ export function SearchParamsSection() {
           </div>
         </div>
 
-        {/* Group 5: Adaptive Search Strategy */}
+        {/* Group 5: Post-Retrieval Judge */}
         <div>
           <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-            적응형 검색 전략 (Adaptive)
+            적응형 검색 전략 (Post-Retrieval Judge)
           </h4>
           <div className="space-y-4">
             <ToggleParam
               label="적응형 검색 활성화"
               checked={localParams.adaptive_enabled === 1}
-              description="쿼리 특성에 따라 검색 엔진을 자동 선택하여 비용 절감 및 속도 향상"
+              description="FTS 결과 품질을 평가하여 시맨틱 검색 실행 여부를 자동 결정"
               onChange={(checked) => updateParam('adaptive_enabled', checked ? 1 : 0)}
             />
             <SliderParam
-              label="시맨틱 검색 최소 단어 수"
-              value={localParams.adaptive_semantic_min_words}
+              label="최소 결과 수"
+              value={localParams.judge_min_results}
               min={1}
               max={10}
               step={1}
-              description="이 단어 수 이상이어야 시맨틱 검색을 실행"
-              onChange={(v) => updateParam('adaptive_semantic_min_words', v)}
+              description="FTS 결과가 이 수 미만이면 시맨틱 검색 추가 실행"
+              onChange={(v) => updateParam('judge_min_results', v)}
             />
             <SliderParam
-              label="짧은 쿼리 기준 단어 수"
-              value={localParams.adaptive_short_query_max_words}
-              min={1}
-              max={5}
-              step={1}
-              description="이 단어 수 이하면 FTS 전용 (시맨틱 스킵)"
-              onChange={(v) => updateParam('adaptive_short_query_max_words', v)}
+              label="최소 평균 점수"
+              value={localParams.judge_min_avg_score}
+              min={0.01}
+              max={0.5}
+              step={0.01}
+              description="FTS 평균 점수 임계값 (영어)"
+              onChange={(v) => updateParam('judge_min_avg_score', v)}
+            />
+            <SliderParam
+              label="최소 평균 점수 (한국어)"
+              value={localParams.judge_min_avg_score_ko}
+              min={0.01}
+              max={0.5}
+              step={0.01}
+              description="FTS 평균 점수 임계값 (한국어, 형태소 특성상 낮게 설정)"
+              onChange={(v) => updateParam('judge_min_avg_score_ko', v)}
+            />
+            <SliderParam
+              label="최소 텀 커버리지"
+              value={localParams.judge_min_term_coverage}
+              min={0.1}
+              max={1.0}
+              step={0.05}
+              description="쿼리 형태소 중 FTS 결과에서 발견된 비율의 최소 기준"
+              onChange={(v) => updateParam('judge_min_term_coverage', v)}
+            />
+            <SliderParam
+              label="품질 임계값"
+              value={localParams.judge_confidence_threshold}
+              min={0.1}
+              max={1.0}
+              step={0.05}
+              description="품질 점수가 이 값 미만이면 시맨틱 검색 실행 (낮추면 FTS만으로 더 자주 만족)"
+              onChange={(v) => updateParam('judge_confidence_threshold', v)}
             />
           </div>
         </div>

@@ -2,20 +2,21 @@
 
 > 리서치 기반 로드맵 — ReSeek(논문), Web-Shepherd(논문), Reseek(제품) 분석 종합
 >
-> 현재 버전: **v1.2.0** | 작성일: 2026-02-13
+> 현재 버전: **v1.3.0** | 작성일: 2026-02-13
 >
 > **상세 계획**: [docs/roadmap/](docs/roadmap/) | **마스터 TODO**: [docs/roadmap/TODO.md](docs/roadmap/TODO.md)
 
 ---
 
-## 현재 보유 기능 (v1.2.0)
+## 현재 보유 기능 (v1.3.0)
 
 | 영역 | 기능 |
 |------|------|
 | **검색** | Hybrid Search (FTS + Trigram + Semantic), RRF 병합, 12개 파라미터 튜닝 UI |
-| **AI** | 6개 태스크 (insight, search_qa, writing, spellcheck, template, summarize), SSE 스트리밍 |
-| **AI 프로바이더** | OpenAI, Anthropic, Google, ZhipuAI 자동 감지 |
-| **에디터** | Tiptap 리치텍스트, 항상 편집 가능, 자동 저장 (3초/30초/이탈 시) |
+| **AI** | 6개 태스크 (insight, search_qa, writing, spellcheck, template, summarize), SSE 스트리밍, AI 품질 게이트 |
+| **AI 프로바이더** | OpenAI, Anthropic, Google, ZhipuAI 자동 감지 + OAuth |
+| **멀티모달** | OCR (AI Vision / PaddleOCR-VL / GLM-OCR), Vision 설명 (glm-4.6v), 배치 일괄 분석, 캐시 기반 AI Insight 최적화 |
+| **에디터** | Tiptap 리치텍스트, 항상 편집 가능, 자동 저장 (3초/30초/이탈 시), 너비 4단계 조절 |
 | **동기화** | Synology NoteStation 양방향 동기화, NSX 포맷 지원 |
 | **기타** | 지식 그래프, 노트 발견, 공유/협업, i18n (한/영), 가상화 리스트 |
 
@@ -49,12 +50,9 @@
 
 > 핵심 근거: Web-Shepherd 논문 — "checklist decomposition으로 모든 모델 품질 향상", "process reward >> outcome reward"
 
-### 2-1. Checklist-Based AI Quality Gate
-- AI 응답 생성 전, 요청을 **검증 가능한 체크리스트로 분해**
-- 예: "연구 노트 생성" → `[핵심 발견 포함?, 출처 인용?, 구조 준수?, 질문 해결?]`
-- 생성 후 체크리스트 대비 자가 평가 → 미달 항목 재생성
-- Web-Shepherd의 핵심 발견: 체크리스트는 **모든 모델에 보편적으로 효과적**
-- **구현**: `ai_router/quality_gate.py` — 태스크별 체크리스트 템플릿 + 자가 평가 프롬프트
+### 2-1. Checklist-Based AI Quality Gate ✅ (v1.2.0)
+- ~~AI 응답 생성 전, 요청을 검증 가능한 체크리스트로 분해~~
+- `ai_router/quality_gate.py` 구현 완료 — Settings에서 ON/OFF + 자동 재생성 토글
 
 ### 2-2. Search QA 결과 품질 평가
 - search_qa 응답의 **정확성(Correctness) + 유용성(Utility)** 분리 평가
@@ -86,11 +84,9 @@
 - "이 노트와 관련된 노트" 추천 패널
 - **구현**: 임베딩 코사인 유사도 + 그래프 클러스터링 강화
 
-### 3-3. 잊혀진 노트 재발견 (Rediscovery)
-- 오래됐지만 **현재 작업과 관련 있는 노트** 주기적 서피스
-- Discovery 페이지 확장 → "오늘의 재발견" 섹션
-- 현재 작업 중인 노트와 semantic similarity 기반 추천
-- **구현**: `services/rediscovery.py` — 주기적 배치 + 실시간 추천
+### 3-3. 잊혀진 노트 재발견 (Rediscovery) ✅ (v1.2.0)
+- ~~오래됐지만 현재 작업과 관련 있는 노트 주기적 서피스~~
+- Dashboard "오늘의 재발견" 섹션, semantic similarity 기반 추천 완료
 
 ---
 
@@ -98,15 +94,19 @@
 
 > 핵심 근거: Reseek 제품 (OCR, PDF), Web-Shepherd 논문 ("text-only가 더 나을 수 있다" 주의)
 
-### 4-1. PDF 텍스트 추출
-- 연구 논문, eBook PDF에서 **텍스트 추출 → 검색 가능하게**
-- 추출된 텍스트를 노트로 변환 또는 첨부 파일 인덱싱
-- **주의**: Web-Shepherd 발견 — 멀티모달이 항상 좋은 건 아님, 텍스트 기반 처리 우선
+### 4-1. PDF 텍스트 추출 ✅ (v1.2.0)
+- ~~연구 논문, eBook PDF에서 텍스트 추출 → 검색 가능하게~~
+- `PDFExtractor` + 첨부 파일 인덱싱 완료
 
-### 4-2. OCR 파이프라인 (이미지 → 텍스트)
-- 실험실 노트의 사진, 다이어그램, 손글씨를 **검색 가능한 텍스트로**
-- 기존 NoteImage/NoteAttachment 모델과 통합
-- 추출 텍스트는 임베딩 인덱싱 파이프라인에 합류
+### 4-2. OCR 파이프라인 (이미지 → 텍스트) ✅ (v1.2.0 ~ v1.3.0)
+- ~~실험실 노트의 사진, 다이어그램, 손글씨를 검색 가능한 텍스트로~~
+- v1.2.0: 수동 OCR (우클릭 → 텍스트 인식), 3개 엔진 (AI Vision / PaddleOCR-VL / GLM-OCR)
+- v1.3.0: **배치 OCR + Vision 파이프라인 추가**
+  - `ImageAnalysisService` — 배치 OCR (concurrency 3) + Vision 설명 (glm-4.6v, concurrency 10)
+  - Vision 설명이 검색 임베딩에 포함 → 이미지 내용으로도 검색 가능
+  - 캐시된 텍스트로 AI Insight 최적화 (이미지 재전송 불필요)
+  - Settings 배치 처리 UI + Dashboard 현황 카드
+  - 우클릭 개별 Vision 분석 + FIFO 큐 기반 다중 요청 관리
 
 ### 4-3. 외부 콘텐츠 캡처
 - URL 북마크 → 콘텐츠 자동 추출 (Reseek의 Smart Bookmarks)
@@ -138,18 +138,19 @@
 
 ## 우선순위 매트릭스
 
-| Phase | 기능 | 영향도 | 난이도 | 근거 |
-|-------|------|--------|--------|------|
-| 1-1 | Why this matched | ★★★★★ | ★★☆☆☆ | Reseek 제품 핵심 UX, 기존 인프라 활용 |
-| 1-2 | Adaptive Search | ★★★★☆ | ★★★☆☆ | ReSeek JUDGE 패턴, 비용 절감 |
-| 2-1 | Checklist Quality Gate | ★★★★★ | ★★★☆☆ | Web-Shepherd 보편적 효과, 프롬프트 수정 중심 |
-| 3-1 | Auto-Tagging | ★★★★☆ | ★★☆☆☆ | Reseek 핵심 기능, 즉각적 UX 개선 |
-| 3-2 | Content Relationships | ★★★★☆ | ★★★☆☆ | 기존 그래프/임베딩 인프라 활용 |
-| 1-3 | Multi-turn Refinement | ★★★☆☆ | ★★★★☆ | ReSeek 핵심이나 UX 복잡도 높음 |
-| 3-3 | Rediscovery | ★★★☆☆ | ★★☆☆☆ | Reseek 차별 기능, 비교적 간단 |
-| 4-1 | PDF 추출 | ★★★★☆ | ★★★☆☆ | 연구자 니즈 높음 |
-| 4-2 | OCR | ★★★☆☆ | ★★★★☆ | 실험실 노트 특화, 외부 서비스 의존 |
-| 5-1 | 평가 프레임워크 | ★★★★★ | ★★★★★ | 장기적 품질 기반, 높은 초기 투자 |
+| Phase | 기능 | 상태 | 영향도 | 난이도 | 근거 |
+|-------|------|------|--------|--------|------|
+| 1-1 | Why this matched | 🔲 | ★★★★★ | ★★☆☆☆ | Reseek 제품 핵심 UX, 기존 인프라 활용 |
+| 1-2 | Adaptive Search | 🔲 | ★★★★☆ | ★★★☆☆ | ReSeek JUDGE 패턴, 비용 절감 |
+| 2-1 | Checklist Quality Gate | ✅ | ★★★★★ | ★★★☆☆ | v1.2.0 구현 완료 |
+| 3-1 | Auto-Tagging | 🔲 | ★★★★☆ | ★★☆☆☆ | Reseek 핵심 기능, 즉각적 UX 개선 |
+| 3-2 | Content Relationships | 🔲 | ★★★★☆ | ★★★☆☆ | 기존 그래프/임베딩 인프라 활용 |
+| 1-3 | Multi-turn Refinement | 🔲 | ★★★☆☆ | ★★★★☆ | ReSeek 핵심이나 UX 복잡도 높음 |
+| 3-3 | Rediscovery | ✅ | ★★★☆☆ | ★★☆☆☆ | v1.2.0 구현 완료 |
+| 4-1 | PDF 추출 | ✅ | ★★★★☆ | ★★★☆☆ | v1.2.0 구현 완료 |
+| 4-2 | OCR + Vision 파이프라인 | ✅ | ★★★☆☆ | ★★★★☆ | v1.3.0 구현 완료 — 배치 + 개별 + 큐 |
+| 4-3 | 외부 콘텐츠 캡처 | 🔲 | ★★★☆☆ | ★★★☆☆ | URL 북마크/학술 메타데이터 |
+| 5-1 | 평가 프레임워크 | 🔲 | ★★★★★ | ★★★★★ | 장기적 품질 기반, 높은 초기 투자 |
 
 ---
 

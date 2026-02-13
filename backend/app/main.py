@@ -90,6 +90,7 @@ from app.api.graph import router as graph_router
 from app.api.admin import router as admin_router
 from app.api.activity_log import router as activity_log_router
 from app.api.nas_images import router as nas_images_router
+from app.api.image_analysis import router as image_analysis_router
 
 app.include_router(nsx_router, prefix="/api")
 app.include_router(backup_router, prefix="/api")
@@ -103,6 +104,7 @@ app.include_router(graph_router, prefix="/api")
 app.include_router(admin_router, prefix="/api")
 app.include_router(activity_log_router, prefix="/api")
 app.include_router(nas_images_router, prefix="/api")
+app.include_router(image_analysis_router, prefix="/api")
 
 
 @app.get("/api/health", tags=["health"])

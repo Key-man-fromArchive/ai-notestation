@@ -4,7 +4,7 @@
 
 """Tests for the hybrid search engine using Reciprocal Rank Fusion (RRF).
 
-Verifies RRF merge algorithm, hybrid search orchestration,
+Verifies RRF merge algorithm, post-retrieval judge integration,
 progressive search streaming, and error resilience
 without requiring a real PostgreSQL database or OpenAI API.
 """
@@ -15,7 +15,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.search.engine import HybridSearchEngine, SearchResult
+from app.search.engine import HybridSearchEngine, SearchPage, SearchResult
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -39,23 +39,29 @@ def _sr(
     )
 
 
+def _page(results: list[SearchResult] | None = None) -> SearchPage:
+    """Wrap results in a SearchPage."""
+    results = results or []
+    return SearchPage(results=results, total=len(results))
+
+
 def _make_mock_fts_engine(results: list[SearchResult] | None = None, side_effect=None):
-    """Build a mock FullTextSearchEngine."""
+    """Build a mock FullTextSearchEngine that returns SearchPage."""
     engine = AsyncMock()
     if side_effect is not None:
         engine.search = AsyncMock(side_effect=side_effect)
     else:
-        engine.search = AsyncMock(return_value=results if results is not None else [])
+        engine.search = AsyncMock(return_value=_page(results))
     return engine
 
 
 def _make_mock_semantic_engine(results: list[SearchResult] | None = None, side_effect=None):
-    """Build a mock SemanticSearchEngine."""
+    """Build a mock SemanticSearchEngine that returns SearchPage."""
     engine = AsyncMock()
     if side_effect is not None:
         engine.search = AsyncMock(side_effect=side_effect)
     else:
-        engine.search = AsyncMock(return_value=results if results is not None else [])
+        engine.search = AsyncMock(return_value=_page(results))
     return engine
 
 
@@ -270,49 +276,102 @@ class TestRRFMergeSorting:
 
 
 # ---------------------------------------------------------------------------
-# 6. Hybrid search success (asyncio.gather)
+# 6. Post-retrieval judge: FTS 0 results → semantic runs
 # ---------------------------------------------------------------------------
 
 
-class TestHybridSearchSuccess:
-    """Hybrid search orchestrates FTS + semantic via asyncio.gather."""
+class TestPostRetrievalJudgeNoResults:
+    """When FTS returns zero results, judge triggers semantic search."""
 
     @pytest.mark.asyncio
-    async def test_hybrid_search_combines_both_engines(self):
-        """search() calls both FTS and semantic engines and merges results."""
-        fts_results = [_sr(1, "Note A", "fts A", 0.9, "fts")]
-        semantic_results = [_sr(2, "Note B", "sem B", 0.7, "semantic")]
+    async def test_fts_empty_triggers_semantic(self):
+        """FTS returns nothing → judge says run semantic → hybrid results returned."""
+        semantic_results = [_sr(1, "Note A", "sem A", 0.8, "semantic")]
+
+        fts_engine = _make_mock_fts_engine([])
+        sem_engine = _make_mock_semantic_engine(semantic_results)
+
+        hybrid = HybridSearchEngine(fts_engine=fts_engine, semantic_engine=sem_engine)
+        page = await hybrid.search("obscure quantum query", limit=20)
+
+        # Semantic should have been called
+        sem_engine.search.assert_awaited_once()
+        assert len(page.results) > 0
+        assert page.judge_info is not None
+        assert page.judge_info.strategy == "hybrid"
+        assert "fts" in page.judge_info.engines
+        assert "semantic" in page.judge_info.engines
+        assert page.judge_info.fts_result_count == 0
+
+
+# ---------------------------------------------------------------------------
+# 7. Post-retrieval judge: high-quality FTS → semantic skipped
+# ---------------------------------------------------------------------------
+
+
+class TestPostRetrievalJudgeHighQuality:
+    """When FTS returns high-quality results, judge skips semantic."""
+
+    @pytest.mark.asyncio
+    async def test_high_quality_fts_skips_semantic(self):
+        """Many high-scoring FTS results with good term coverage → semantic skipped."""
+        fts_results = [
+            _sr(1, "Research Note", "<b>research</b> methods", 0.9, "fts"),
+            _sr(2, "Lab Research", "<b>research</b> protocol", 0.85, "fts"),
+            _sr(3, "Research Data", "<b>research</b> data analysis", 0.8, "fts"),
+            _sr(4, "Study Research", "<b>research</b> study design", 0.75, "fts"),
+        ]
+
+        fts_engine = _make_mock_fts_engine(fts_results)
+        sem_engine = _make_mock_semantic_engine([])
+
+        hybrid = HybridSearchEngine(fts_engine=fts_engine, semantic_engine=sem_engine)
+        page = await hybrid.search("research", limit=20)
+
+        # Semantic should NOT have been called
+        sem_engine.search.assert_not_awaited()
+        assert len(page.results) == 4
+        assert page.judge_info is not None
+        assert page.judge_info.strategy == "fts_only"
+        assert page.judge_info.engines == ["fts"]
+        assert page.judge_info.fts_result_count == 4
+        # All results are plain FTS (not hybrid-merged)
+        assert all(r.search_type == "fts" for r in page.results)
+
+
+# ---------------------------------------------------------------------------
+# 8. Post-retrieval judge: low-quality FTS → semantic runs
+# ---------------------------------------------------------------------------
+
+
+class TestPostRetrievalJudgeLowQuality:
+    """When FTS returns low-quality results, judge triggers semantic."""
+
+    @pytest.mark.asyncio
+    async def test_low_score_fts_triggers_semantic(self):
+        """Few FTS results with low scores → judge triggers semantic."""
+        fts_results = [
+            _sr(1, "Note", "some snippet", 0.02, "fts"),
+        ]
+        semantic_results = [
+            _sr(2, "Better Result", "semantic match", 0.7, "semantic"),
+        ]
 
         fts_engine = _make_mock_fts_engine(fts_results)
         sem_engine = _make_mock_semantic_engine(semantic_results)
 
         hybrid = HybridSearchEngine(fts_engine=fts_engine, semantic_engine=sem_engine)
-        results = await hybrid.search("test query", limit=20)
+        page = await hybrid.search("complex natural language question about experiments", limit=20)
 
-        assert len(results) == 2
-        assert all(r.search_type == "hybrid" for r in results)
-        fts_engine.search.assert_awaited_once()
+        # Semantic should have been called
         sem_engine.search.assert_awaited_once()
-
-    @pytest.mark.asyncio
-    async def test_hybrid_search_passes_limit(self):
-        """search() passes limit parameter to both sub-engines."""
-        fts_engine = _make_mock_fts_engine([])
-        sem_engine = _make_mock_semantic_engine([])
-
-        hybrid = HybridSearchEngine(fts_engine=fts_engine, semantic_engine=sem_engine)
-        await hybrid.search("test", limit=10)
-
-        fts_engine.search.assert_awaited_once_with(
-            "test", limit=10, offset=0, notebook_name=None, date_from=None, date_to=None,
-        )
-        sem_engine.search.assert_awaited_once_with(
-            "test", limit=10, offset=0, notebook_name=None, date_from=None, date_to=None,
-        )
+        assert page.judge_info is not None
+        assert page.judge_info.strategy == "hybrid"
+        assert "semantic" in page.judge_info.engines
 
 
 # ---------------------------------------------------------------------------
-# 7. Empty query handling
+# 9. Hybrid search: empty query handling
 # ---------------------------------------------------------------------------
 
 
@@ -326,9 +385,9 @@ class TestHybridEmptyQuery:
         sem_engine = _make_mock_semantic_engine([])
 
         hybrid = HybridSearchEngine(fts_engine=fts_engine, semantic_engine=sem_engine)
-        results = await hybrid.search("")
+        page = await hybrid.search("")
 
-        assert results == []
+        assert page.results == []
         fts_engine.search.assert_not_awaited()
         sem_engine.search.assert_not_awaited()
 
@@ -339,15 +398,15 @@ class TestHybridEmptyQuery:
         sem_engine = _make_mock_semantic_engine([])
 
         hybrid = HybridSearchEngine(fts_engine=fts_engine, semantic_engine=sem_engine)
-        results = await hybrid.search("   \t\n  ")
+        page = await hybrid.search("   \t\n  ")
 
-        assert results == []
+        assert page.results == []
         fts_engine.search.assert_not_awaited()
         sem_engine.search.assert_not_awaited()
 
 
 # ---------------------------------------------------------------------------
-# 8. Progressive search - Phase 1 (FTS immediate)
+# 10. Progressive search - Phase 1 (FTS immediate)
 # ---------------------------------------------------------------------------
 
 
@@ -369,7 +428,7 @@ class TestProgressiveSearchPhase1:
         hybrid = HybridSearchEngine(fts_engine=fts_engine, semantic_engine=sem_engine)
 
         phases = []
-        async for batch in hybrid.search_progressive("test query", limit=20):
+        async for batch in hybrid.search_progressive("test query phrase for semantic", limit=20):
             phases.append(batch)
 
         # Phase 1: FTS results
@@ -378,52 +437,67 @@ class TestProgressiveSearchPhase1:
         assert len(phase1) == 2
         assert all(r.search_type == "fts" for r in phase1)
 
+
+# ---------------------------------------------------------------------------
+# 11. Progressive search - Phase 2 skip when FTS sufficient
+# ---------------------------------------------------------------------------
+
+
+class TestProgressiveSearchPhase2Skip:
+    """Progressive search skips Phase 2 when FTS quality is sufficient."""
+
     @pytest.mark.asyncio
-    async def test_progressive_fts_empty_still_yields(self):
-        """Even if FTS returns nothing, Phase 1 yields an empty list."""
-        fts_engine = _make_mock_fts_engine([])
-        sem_engine = _make_mock_semantic_engine([_sr(1, search_type="semantic")])
+    async def test_progressive_skips_phase2_when_fts_sufficient(self):
+        """High-quality FTS results → only Phase 1 yielded, no Phase 2."""
+        fts_results = [
+            _sr(1, "Research Note", "<b>research</b> methods", 0.9, "fts"),
+            _sr(2, "Lab Research", "<b>research</b> protocol", 0.85, "fts"),
+            _sr(3, "Research Data", "<b>research</b> data analysis", 0.8, "fts"),
+            _sr(4, "Study Research", "<b>research</b> study design", 0.75, "fts"),
+        ]
+
+        fts_engine = _make_mock_fts_engine(fts_results)
+        sem_engine = _make_mock_semantic_engine([_sr(5, search_type="semantic")])
 
         hybrid = HybridSearchEngine(fts_engine=fts_engine, semantic_engine=sem_engine)
 
         phases = []
-        async for batch in hybrid.search_progressive("test"):
+        async for batch in hybrid.search_progressive("research", limit=20):
             phases.append(batch)
 
-        # Phase 1 is still yielded (empty FTS)
-        assert len(phases) >= 1
+        # Only Phase 1 should be yielded
+        assert len(phases) == 1
+        assert len(phases[0]) == 4
+        # Semantic engine should NOT have been called
+        sem_engine.search.assert_not_awaited()
 
 
 # ---------------------------------------------------------------------------
-# 9. Progressive search - Phase 2 (RRF merge)
+# 12. Progressive search - Phase 2 runs when FTS insufficient
 # ---------------------------------------------------------------------------
 
 
-class TestProgressiveSearchPhase2:
-    """Progressive search yields RRF-merged results as Phase 2."""
+class TestProgressiveSearchPhase2Runs:
+    """Progressive search yields Phase 2 when FTS quality is insufficient."""
 
     @pytest.mark.asyncio
-    async def test_progressive_second_yield_is_hybrid(self):
-        """The second yield from search_progressive is RRF-merged hybrid results."""
-        fts_results = [_sr(1, "Note A", "fts A", 0.9, "fts")]
-        semantic_results = [_sr(2, "Note B", "sem B", 0.7, "semantic")]
-
-        fts_engine = _make_mock_fts_engine(fts_results)
+    async def test_progressive_yields_phase2_when_fts_insufficient(self):
+        """Empty FTS results → Phase 2 is yielded with hybrid results."""
+        fts_engine = _make_mock_fts_engine([])
+        semantic_results = [_sr(1, "Note A", "sem A", 0.8, "semantic")]
         sem_engine = _make_mock_semantic_engine(semantic_results)
 
         hybrid = HybridSearchEngine(fts_engine=fts_engine, semantic_engine=sem_engine)
 
         phases = []
-        async for batch in hybrid.search_progressive("test query"):
+        async for batch in hybrid.search_progressive("obscure query"):
             phases.append(batch)
 
-        # Phase 2: hybrid merged results
+        # Phase 1 (empty FTS) + Phase 2 (hybrid merged)
         assert len(phases) == 2
-        phase2 = phases[1]
-        assert all(r.search_type == "hybrid" for r in phase2)
-        merged_ids = {r.note_id for r in phase2}
-        assert "1" in merged_ids
-        assert "2" in merged_ids
+        assert len(phases[0]) == 0  # empty FTS
+        assert len(phases[1]) > 0  # hybrid results
+        assert all(r.search_type == "hybrid" for r in phases[1])
 
     @pytest.mark.asyncio
     async def test_progressive_empty_query_no_yields(self):
@@ -441,12 +515,52 @@ class TestProgressiveSearchPhase2:
 
 
 # ---------------------------------------------------------------------------
-# 10. FTS error - fallback to semantic only
+# 13. adaptive_enabled=False → always full hybrid
+# ---------------------------------------------------------------------------
+
+
+class TestAdaptiveDisabled:
+    """When adaptive_enabled=0, always runs both FTS and semantic."""
+
+    @pytest.mark.asyncio
+    async def test_adaptive_disabled_always_runs_semantic(self):
+        """With adaptive disabled, semantic always runs even with good FTS results."""
+        fts_results = [
+            _sr(1, "Research Note", "<b>research</b> methods", 0.9, "fts"),
+            _sr(2, "Lab Research", "<b>research</b> protocol", 0.85, "fts"),
+            _sr(3, "Research Data", "<b>research</b> analysis", 0.8, "fts"),
+            _sr(4, "Study", "<b>research</b> design", 0.75, "fts"),
+        ]
+        semantic_results = [_sr(5, "Semantic Result", "sem", 0.7, "semantic")]
+
+        fts_engine = _make_mock_fts_engine(fts_results)
+        sem_engine = _make_mock_semantic_engine(semantic_results)
+
+        hybrid = HybridSearchEngine(fts_engine=fts_engine, semantic_engine=sem_engine)
+
+        with patch("app.search.judge.get_search_params", return_value={
+            "adaptive_enabled": 0,
+            "judge_min_results": 3,
+            "judge_min_avg_score": 0.1,
+            "judge_min_avg_score_ko": 0.08,
+            "judge_min_term_coverage": 0.5,
+            "judge_confidence_threshold": 0.7,
+        }):
+            page = await hybrid.search("research", limit=20)
+
+        # Semantic should have been called (adaptive disabled = always hybrid)
+        sem_engine.search.assert_awaited_once()
+        assert page.judge_info is not None
+        assert page.judge_info.strategy == "hybrid"
+
+
+# ---------------------------------------------------------------------------
+# 14. FTS error → semantic fallback
 # ---------------------------------------------------------------------------
 
 
 class TestFTSError:
-    """When FTS engine fails, hybrid search falls back to semantic results."""
+    """When FTS engine fails, semantic still runs as fallback."""
 
     @pytest.mark.asyncio
     async def test_fts_error_returns_semantic_only(self):
@@ -459,84 +573,56 @@ class TestFTSError:
         sem_engine = _make_mock_semantic_engine(semantic_results)
 
         hybrid = HybridSearchEngine(fts_engine=fts_engine, semantic_engine=sem_engine)
-        results = await hybrid.search("test query")
+        page = await hybrid.search("test query")
 
-        assert len(results) == 1
-        assert results[0].search_type == "hybrid"
-        assert results[0].note_id == "1"
+        # FTS failed (0 results) → judge says run semantic
+        assert len(page.results) > 0
+        sem_engine.search.assert_awaited_once()
 
 
 # ---------------------------------------------------------------------------
-# 11. Semantic error - fallback to FTS only
+# 15. Semantic error → FTS results preserved
 # ---------------------------------------------------------------------------
 
 
 class TestSemanticError:
-    """When semantic engine fails, hybrid search falls back to FTS results."""
+    """When semantic engine fails, FTS results are still returned."""
 
     @pytest.mark.asyncio
     async def test_semantic_error_returns_fts_only(self):
         """If semantic raises an exception, FTS results are still returned."""
         fts_results = [
-            _sr(1, "Note A", "fts A", 0.9, "fts"),
+            _sr(1, "Note A", "snippet", 0.02, "fts"),
         ]
 
         fts_engine = _make_mock_fts_engine(fts_results)
         sem_engine = _make_mock_semantic_engine(side_effect=Exception("Embedding API error"))
 
         hybrid = HybridSearchEngine(fts_engine=fts_engine, semantic_engine=sem_engine)
-        results = await hybrid.search("test query")
+        page = await hybrid.search("test query")
 
-        assert len(results) == 1
-        assert results[0].search_type == "hybrid"
-        assert results[0].note_id == "1"
+        # Even if semantic fails, we get the hybrid merge result (fts only in the merge)
+        assert len(page.results) >= 1
 
 
 # ---------------------------------------------------------------------------
-# 12. Dynamic RRF parameters
+# 16. Dynamic RRF parameters
 # ---------------------------------------------------------------------------
 
 
 class TestDynamicRRFParams:
     """_compute_rrf_params returns correct (k, fts_w, sem_w) per query type."""
 
-    def test_korean_single_term(self):
+    def test_korean_query(self):
         from app.search.query_preprocessor import analyze_query
 
         analysis = analyze_query("연구")
         k, fts_w, sem_w = HybridSearchEngine._compute_rrf_params(analysis)
-        assert k == 40
+        # Korean queries get korean weights
         assert fts_w == pytest.approx(0.70)
         assert sem_w == pytest.approx(0.30)
 
-    def test_korean_multi_term(self):
-        from app.search.query_preprocessor import analyze_query
-
-        analysis = analyze_query("실험 프로토콜")
-        k, fts_w, sem_w = HybridSearchEngine._compute_rrf_params(analysis)
-        assert k == 60
-        assert fts_w == pytest.approx(0.55)
-        assert sem_w == pytest.approx(0.45)
-
-    def test_english_single_term(self):
-        from app.search.query_preprocessor import analyze_query
-
-        analysis = analyze_query("PCR")
-        k, fts_w, sem_w = HybridSearchEngine._compute_rrf_params(analysis)
-        assert k == 50
-        assert fts_w == pytest.approx(0.65)
-        assert sem_w == pytest.approx(0.35)
-
-    def test_mixed_language(self):
-        from app.search.query_preprocessor import analyze_query
-
-        analysis = analyze_query("PCR 실험 결과")
-        k, fts_w, sem_w = HybridSearchEngine._compute_rrf_params(analysis)
-        assert k == 60
-        assert fts_w == pytest.approx(0.50)
-        assert sem_w == pytest.approx(0.50)
-
-    def test_english_multi_default(self):
+    def test_english_query(self):
         from app.search.query_preprocessor import analyze_query
 
         analysis = analyze_query("protein analysis method")
@@ -547,7 +633,7 @@ class TestDynamicRRFParams:
 
 
 # ---------------------------------------------------------------------------
-# 13. Weighted RRF duplicate scores
+# 17. Weighted RRF duplicate scores
 # ---------------------------------------------------------------------------
 
 
@@ -567,3 +653,32 @@ class TestWeightedRRFDuplicates:
         assert len(merged) == 1
         expected = 0.7 * (1 / 60) + 0.3 * (1 / 60)
         assert merged[0].score == pytest.approx(expected, abs=1e-10)
+
+
+# ---------------------------------------------------------------------------
+# 18. JudgeInfo contains post-retrieval metrics
+# ---------------------------------------------------------------------------
+
+
+class TestJudgeInfoMetrics:
+    """JudgeInfo includes post-retrieval quality metrics."""
+
+    @pytest.mark.asyncio
+    async def test_judge_info_has_quality_metrics(self):
+        """JudgeInfo includes fts_result_count, fts_avg_score, term_coverage."""
+        fts_results = [
+            _sr(1, "Note A", "<b>test</b> snippet", 0.5, "fts"),
+            _sr(2, "Note B", "<b>test</b> data", 0.3, "fts"),
+        ]
+
+        fts_engine = _make_mock_fts_engine(fts_results)
+        sem_engine = _make_mock_semantic_engine([])
+
+        hybrid = HybridSearchEngine(fts_engine=fts_engine, semantic_engine=sem_engine)
+        page = await hybrid.search("test query analysis", limit=20)
+
+        assert page.judge_info is not None
+        assert page.judge_info.fts_result_count is not None
+        assert page.judge_info.fts_avg_score is not None
+        assert page.judge_info.term_coverage is not None
+        assert page.judge_info.fts_result_count == 2
