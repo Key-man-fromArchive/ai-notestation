@@ -16,22 +16,22 @@
 
 ## Quick Wins (즉시 착수 가능, 고효과)
 
-- [ ] **3-1. Auto-Tagging** — Note.tags 필드 + summarize 프롬프트 이미 있음, 연결만 필요 (★★☆)
-- [ ] **1-1. Why this matched** — 기존 엔진 데이터 노출만 하면 됨 (★★☆)
-- [ ] **3-3. Rediscovery** — 임베딩 인프라 활용, 쿼리 하나면 됨 (★★☆)
+- [x] **3-1. Auto-Tagging** — ✅ 완료 (커밋 94ba748)
+- [x] **1-1. Why this matched** — ✅ 완료 (v1.2.0+)
+- [x] **3-3. Rediscovery** — ✅ 완료 (커밋 19f49e3)
 
 ---
 
 ## Phase 1 — 검색 고도화 (v1.3.0)
 
-### 1-1. 검색 결과 설명 ("Why this matched") `★★☆ 난이도`
-- [ ] Backend: SearchResult에 MatchSource 필드 추가
-- [ ] Backend: FTS — ts_headline에서 매칭 키워드 추출
-- [ ] Backend: Semantic — 코사인 유사도 점수 보존
-- [ ] Backend: RRF 병합 시 소스별 기여도 추적
-- [ ] Backend: API 응답 SearchResultResponse 확장
-- [ ] Frontend: NoteCard에 매칭 설명 UI
-- [ ] Frontend: Search 페이지 "매칭 설명 보기" 토글
+### 1-1. 검색 결과 설명 ("Why this matched") `★★☆ 난이도` ✅ 완료
+- [x] Backend: SearchResult에 MatchSource 필드 추가
+- [x] Backend: FTS — ts_headline에서 매칭 키워드 추출
+- [x] Backend: Semantic — 코사인 유사도 점수 보존
+- [x] Backend: RRF 병합 시 소스별 기여도 추적
+- [x] Backend: API 응답 SearchResultResponse 확장
+- [x] Frontend: NoteCard에 매칭 설명 UI
+- [x] Frontend: Search 페이지 엔진 뱃지 + 매칭 키워드 표시
 
 ### 1-2. Adaptive Search Strategy `★★★ 난이도`
 - [ ] Backend: SearchJudge 모듈 생성 (`search/judge.py`)
@@ -75,15 +75,15 @@
 
 ## Phase 3 — 콘텐츠 인텔리전스 (v1.5.0)
 
-### 3-1. Auto-Tagging `★★☆ 난이도` ⚡ Quick Win
-- [ ] Backend: AutoTagger 서비스 (summarize 프롬프트 활용)
-- [ ] Backend: 동기화 훅 통합 (`sync_service.py`)
-- [ ] Backend: POST /notes/{id}/auto-tag, POST /notes/batch-auto-tag
-- [ ] Backend: auto_tag_on_sync 설정
-- [ ] Frontend: NoteCard 태그 뱃지
-- [ ] Frontend: 태그 인라인 편집
-- [ ] Frontend: 태그 필터 (Notes, Search 페이지)
-- [ ] Frontend: 배치 태깅 UI (진행률 표시)
+### 3-1. Auto-Tagging `★★☆ 난이도` ⚡ Quick Win ✅ 완료
+- [x] Backend: AutoTagger 서비스 (summarize 프롬프트 활용)
+- [x] Backend: 동기화 훅 통합 (`sync_service.py`)
+- [x] Backend: POST /notes/{id}/auto-tag, POST /notes/batch-auto-tag
+- [x] Backend: auto_tag_on_sync 설정
+- [x] Frontend: NoteCard 태그 뱃지
+- [x] Frontend: 태그 인라인 편집
+- [x] Frontend: 태그 필터 (Notes, Search 페이지)
+- [x] Frontend: 배치 태깅 UI (진행률 표시)
 
 ### 3-2. 노트 간 관계 발견 `★★★ 난이도`
 - [ ] Backend: RelatedNotesService (`services/related_notes.py`)
@@ -93,12 +93,12 @@
 - [ ] Frontend: NoteDetail 관련 노트 패널
 - [ ] Frontend: DiscoveryGraph 유사도 엣지 시각화
 
-### 3-3. 잊혀진 노트 재발견 `★★☆ 난이도` ⚡ Quick Win
-- [ ] Backend: RediscoveryService (`services/rediscovery.py`)
-- [ ] Backend: 일일/컨텍스트 재발견 로직
-- [ ] Backend: GET /discovery/rediscovery 엔드포인트
-- [ ] Frontend: Discovery 페이지 "오늘의 재발견" 섹션
-- [ ] Frontend: NoteDetail 에디터 사이드바 추천
+### 3-3. 잊혀진 노트 재발견 `★★☆ 난이도` ⚡ Quick Win ✅ 완료
+- [x] Backend: RediscoveryService (`services/rediscovery.py`)
+- [x] Backend: 일일/컨텍스트 재발견 로직 (centroid + random sampling)
+- [x] Backend: GET /api/discovery/rediscovery 엔드포인트
+- [x] Frontend: Dashboard "오늘의 재발견" 카드 섹션
+- [ ] Frontend: NoteDetail 에디터 사이드바 추천 (후속)
 
 ---
 
