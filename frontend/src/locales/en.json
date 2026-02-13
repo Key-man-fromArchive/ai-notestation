@@ -766,6 +766,14 @@
     "extractedText": "Extracted text",
     "pages": " pages"
   },
+  "ocr": {
+    "extractText": "Text recognition (OCR)",
+    "extracting": "Recognizing text...",
+    "extractionFailed": "Recognition failed",
+    "viewExtractedText": "View recognized text",
+    "extractedText": "Recognized text",
+    "ocrMethod": "Recognition method"
+  },
   "errors": {
     "somethingWentWrong": "Something went wrong",
     "unexpectedError": "An unexpected error occurred",

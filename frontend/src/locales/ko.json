@@ -766,6 +766,14 @@
     "extractedText": "추출된 텍스트",
     "pages": "페이지"
   },
+  "ocr": {
+    "extractText": "텍스트 인식(OCR)",
+    "extracting": "텍스트 인식 중...",
+    "extractionFailed": "인식 실패",
+    "viewExtractedText": "인식된 텍스트 보기",
+    "extractedText": "인식된 텍스트",
+    "ocrMethod": "인식 방법"
+  },
   "errors": {
     "somethingWentWrong": "Something went wrong",
     "unexpectedError": "An unexpected error occurred",

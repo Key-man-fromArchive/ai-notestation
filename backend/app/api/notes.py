@@ -87,6 +87,21 @@ class AttachmentItem(BaseModel):
     file_id: str | None = None
     name: str
     url: str
+    extraction_status: str | None = None
+    page_count: int | None = None
+
+
+class NoteImageItem(BaseModel):
+    """NoteImage metadata for a note (NSX extracted images)."""
+
+    id: int
+    synology_note_id: str
+    ref: str
+    name: str
+    file_path: str
+    mime_type: str
+    extraction_status: str | None = None
+    extracted_text: str | None = None
 
 
 class NoteDetailResponse(NoteItem):
@@ -94,6 +109,7 @@ class NoteDetailResponse(NoteItem):
 
     content: str
     attachments: list[AttachmentItem] = []
+    images: list[NoteImageItem] = []
 
 
 class NoteCreateRequest(BaseModel):
@@ -200,8 +216,34 @@ async def _load_note_attachments(
             file_id=att.file_id,
             name=att.name,
             url=f"/api/files/{att.file_id}",
+            extraction_status=att.extraction_status,
+            page_count=att.page_count,
         )
         for att in attachments
+    ]
+
+
+async def _load_note_images(
+    db: AsyncSession,
+    synology_note_id: str,
+) -> list[NoteImageItem]:
+    """Load NoteImages (NSX extracted images) for a note."""
+    result = await db.execute(
+        select(NoteImage).where(NoteImage.synology_note_id == synology_note_id)
+    )
+    images = result.scalars().all()
+    return [
+        NoteImageItem(
+            id=img.id,
+            synology_note_id=img.synology_note_id,
+            ref=img.ref,
+            name=img.name,
+            file_path=img.file_path,
+            mime_type=img.mime_type,
+            extraction_status=img.extraction_status,
+            extracted_text=img.extracted_text,
+        )
+        for img in images
     ]
 
 
@@ -555,6 +597,7 @@ async def resolve_conflict(
         updated_at=datetime_to_iso(note.local_modified_at or note.source_updated_at),
         content=note.content_html,
         attachments=await _load_note_attachments(db, note.id),
+        images=await _load_note_images(db, note.synology_note_id) if note.synology_note_id else [],
         sync_status=note.sync_status,
     )
 
@@ -707,6 +750,7 @@ async def get_note(
             updated_at=datetime_to_iso(updated_at),
             content=content,
             attachments=await _load_note_attachments(db, db_note.id),
+            images=await _load_note_images(db, db_note.synology_note_id) if db_note.synology_note_id else [],
             sync_status=db_note.sync_status,
         )
 
@@ -901,6 +945,7 @@ async def update_note(
         updated_at=datetime_to_iso(note.local_modified_at or note.source_updated_at),
         content=note.content_html,
         attachments=await _load_note_attachments(db, note.id),
+        images=await _load_note_images(db, note.synology_note_id) if note.synology_note_id else [],
         sync_status=note.sync_status,
     )
 

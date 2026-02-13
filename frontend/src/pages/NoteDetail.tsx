@@ -42,6 +42,8 @@ export default function NoteDetail() {
   const [isApplying, setIsApplying] = useState(false)
   const [pdfText, setPdfText] = useState<{ text: string; pageCount: number } | null>(null)
   const [extractingFileId, setExtractingFileId] = useState<string | null>(null)
+  const [ocrText, setOcrText] = useState<{ text: string; name: string } | null>(null)
+  const [extractingImageId, setExtractingImageId] = useState<number | null>(null)
 
   const handleExtractPdf = async (fileId: string) => {
     setExtractingFileId(fileId)
@@ -69,6 +71,37 @@ export default function NoteDetail() {
     try {
       const result = await apiClient.get<{ text: string; page_count: number }>(`/files/${fileId}/text`)
       setPdfText({ text: result.text, pageCount: result.page_count })
+    } catch {
+      // ignore
+    }
+  }
+
+  const handleExtractImage = async (imageId: number) => {
+    setExtractingImageId(imageId)
+    try {
+      await apiClient.post(`/images/${imageId}/extract`)
+      const poll = setInterval(async () => {
+        try {
+          const result = await apiClient.get<{ extraction_status: string; text: string }>(`/images/${imageId}/text`)
+          if (result.extraction_status === 'completed' || result.extraction_status === 'failed') {
+            clearInterval(poll)
+            setExtractingImageId(null)
+            queryClient.invalidateQueries({ queryKey: ['note', id] })
+          }
+        } catch {
+          clearInterval(poll)
+          setExtractingImageId(null)
+        }
+      }, 2000)
+    } catch {
+      setExtractingImageId(null)
+    }
+  }
+
+  const handleShowOcrText = async (imageId: number, name: string) => {
+    try {
+      const result = await apiClient.get<{ text: string }>(`/images/${imageId}/text`)
+      setOcrText({ text: result.text, name })
     } catch {
       // ignore
     }
@@ -597,8 +630,8 @@ export default function NoteDetail() {
                     <span className="text-sm text-foreground truncate">{attachment.name}</span>
                     <span className="ml-auto text-xs text-muted-foreground uppercase shrink-0">{ext}</span>
 
-                    {/* PDF extraction UI */}
-                    {isPdf && (
+                    {/* Text extraction UI (PDF or image OCR) */}
+                    {(isPdf || isImage) && (
                       <>
                         {attachment.extraction_status === 'completed' && (
                           <button
@@ -608,20 +641,22 @@ export default function NoteDetail() {
                             }}
                             className="text-xs text-primary hover:underline"
                           >
-                            {t('files.viewExtractedText')}
-                            <span className="text-muted-foreground ml-1">
-                              ({attachment.page_count}{t('files.pages')})
-                            </span>
+                            {isPdf ? t('files.viewExtractedText') : t('ocr.viewExtractedText')}
+                            {isPdf && attachment.page_count != null && (
+                              <span className="text-muted-foreground ml-1">
+                                ({attachment.page_count}{t('files.pages')})
+                              </span>
+                            )}
                           </button>
                         )}
                         {(attachment.extraction_status === 'pending' || extractingFileId === (attachment.file_id ?? attachment.url.split('/').pop())) && (
                           <span className="text-xs text-amber-600 animate-pulse">
-                            {t('files.extracting')}
+                            {isPdf ? t('files.extracting') : t('ocr.extracting')}
                           </span>
                         )}
                         {attachment.extraction_status === 'failed' && (
                           <span className="text-xs text-destructive">
-                            {t('files.extractionFailed')}
+                            {isPdf ? t('files.extractionFailed') : t('ocr.extractionFailed')}
                           </span>
                         )}
                         {!attachment.extraction_status && !extractingFileId && (
@@ -632,7 +667,7 @@ export default function NoteDetail() {
                             }}
                             className="text-xs text-primary hover:underline"
                           >
-                            {t('files.extractText')}
+                            {isPdf ? t('files.extractText') : t('ocr.extractText')}
                           </button>
                         )}
                       </>
@@ -667,6 +702,74 @@ export default function NoteDetail() {
                 </div>
                 <pre className="text-xs text-muted-foreground whitespace-pre-wrap max-h-[300px] overflow-y-auto">
                   {pdfText.text}
+                </pre>
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* NoteImages (NSX extracted images) OCR */}
+        {(note.images?.length ?? 0) > 0 && (
+          <section className="border-t border-border pt-6">
+            <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
+              <Image className="h-5 w-5" aria-hidden="true" />
+              {t('ocr.extractText')}
+              <span className="text-sm font-normal text-muted-foreground">
+                ({note.images?.length})
+              </span>
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {note.images?.map((img) => (
+                <div
+                  key={img.id}
+                  className="flex items-center gap-3 rounded-lg border border-border bg-muted/30 px-3 py-2.5"
+                >
+                  <Image className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                  <span className="text-sm text-foreground truncate">{img.name}</span>
+
+                  {img.extraction_status === 'completed' && (
+                    <button
+                      onClick={() => handleShowOcrText(img.id, img.name)}
+                      className="ml-auto text-xs text-primary hover:underline"
+                    >
+                      {t('ocr.viewExtractedText')}
+                    </button>
+                  )}
+                  {(img.extraction_status === 'pending' || extractingImageId === img.id) && (
+                    <span className="ml-auto text-xs text-amber-600 animate-pulse">
+                      {t('ocr.extracting')}
+                    </span>
+                  )}
+                  {img.extraction_status === 'failed' && (
+                    <span className="ml-auto text-xs text-destructive">
+                      {t('ocr.extractionFailed')}
+                    </span>
+                  )}
+                  {!img.extraction_status && extractingImageId !== img.id && (
+                    <button
+                      onClick={() => handleExtractImage(img.id)}
+                      className="ml-auto text-xs text-primary hover:underline"
+                    >
+                      {t('ocr.extractText')}
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* OCR text preview */}
+            {ocrText && (
+              <div className="mt-4 border border-border rounded-lg p-4 bg-muted/20">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-medium">
+                    {t('ocr.extractedText')} — {ocrText.name}
+                  </h3>
+                  <button onClick={() => setOcrText(null)} className="text-muted-foreground hover:text-foreground">
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+                <pre className="text-xs text-muted-foreground whitespace-pre-wrap max-h-[300px] overflow-y-auto">
+                  {ocrText.text}
                 </pre>
               </div>
             )}

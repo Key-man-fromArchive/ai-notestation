@@ -1,5 +1,5 @@
 # @TASK P6-T6.2 - File upload and serving endpoints
-"""File upload API for note attachments and images."""
+"""File upload API for note attachments, images, and OCR."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.database import get_db
-from app.models import NoteAttachment
+from app.models import NoteAttachment, NoteImage
 from app.services.activity_log import get_trigger_name, log_activity
 from app.services.auth_service import get_current_user
 
@@ -24,10 +24,12 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["files"])
 settings = get_settings()
 
+_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"}
+
 
 @router.post("/files", status_code=status.HTTP_201_CREATED)
 async def upload_file(
-    file: UploadFile = File(..., description="Attachment file"),
+    file: UploadFile = File(..., description="Attachment file"),  # noqa: B008
     current_user: dict = Depends(get_current_user),  # noqa: B008
 ) -> dict:
     """Upload a file and return its API URL."""
@@ -94,15 +96,18 @@ async def extract_file_text(
     current_user: dict = Depends(get_current_user),  # noqa: B008
     db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> dict:
-    """Trigger PDF text extraction in the background."""
+    """Trigger text extraction (PDF or image OCR) in the background."""
     uploads_dir = Path(settings.UPLOADS_PATH)
     file_path = uploads_dir / file_id
 
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found")
 
-    if not file_id.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Only PDF files can be extracted")
+    is_pdf = file_id.lower().endswith(".pdf")
+    is_image = any(file_id.lower().endswith(ext) for ext in _IMAGE_EXTENSIONS)
+
+    if not is_pdf and not is_image:
+        raise HTTPException(status_code=400, detail="Only PDF and image files can be extracted")
 
     stmt = select(NoteAttachment).where(NoteAttachment.file_id == file_id)
     result = await db.execute(stmt)
@@ -116,7 +121,10 @@ async def extract_file_text(
     attachment.extraction_status = "pending"
     await db.commit()
 
-    background_tasks.add_task(_run_pdf_extraction, file_id, str(file_path))
+    if is_pdf:
+        background_tasks.add_task(_run_pdf_extraction, file_id, str(file_path))
+    else:
+        background_tasks.add_task(_run_ocr_extraction, file_id, str(file_path))
 
     return {"status": "pending"}
 
@@ -127,7 +135,7 @@ async def get_file_text(
     current_user: dict = Depends(get_current_user),  # noqa: B008
     db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> dict:
-    """Return extracted PDF text for a file."""
+    """Return extracted text (PDF or OCR) for a file."""
     stmt = select(NoteAttachment).where(NoteAttachment.file_id == file_id)
     result = await db.execute(stmt)
     attachment = result.scalar_one_or_none()
@@ -141,6 +149,58 @@ async def get_file_text(
         "page_count": attachment.page_count,
         "text": attachment.extracted_text,
     }
+
+
+# -- NoteImage OCR endpoints -----------------------------------------------
+
+
+@router.post("/images/{image_id}/extract")
+async def extract_image_text(
+    image_id: int,
+    background_tasks: BackgroundTasks,
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> dict:
+    """Trigger OCR extraction for a NoteImage (NSX extracted image)."""
+    stmt = select(NoteImage).where(NoteImage.id == image_id)
+    result = await db.execute(stmt)
+    image = result.scalar_one_or_none()
+    if not image:
+        raise HTTPException(status_code=404, detail="Image not found")
+
+    if image.extraction_status == "completed":
+        return {"status": "already_completed"}
+
+    image.extraction_status = "pending"
+    await db.commit()
+
+    background_tasks.add_task(_run_image_ocr, image_id)
+
+    return {"status": "pending"}
+
+
+@router.get("/images/{image_id}/text")
+async def get_image_text(
+    image_id: int,
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> dict:
+    """Return OCR-extracted text for a NoteImage."""
+    stmt = select(NoteImage).where(NoteImage.id == image_id)
+    result = await db.execute(stmt)
+    image = result.scalar_one_or_none()
+    if not image:
+        raise HTTPException(status_code=404, detail="Image not found")
+
+    return {
+        "image_id": image.id,
+        "name": image.name,
+        "extraction_status": image.extraction_status,
+        "text": image.extracted_text,
+    }
+
+
+# -- Background tasks -------------------------------------------------------
 
 
 async def _run_pdf_extraction(file_id: str, file_path: str) -> None:
@@ -164,7 +224,7 @@ async def _run_pdf_extraction(file_id: str, file_path: str) -> None:
             attachment.page_count = extraction.page_count
             await db.commit()
 
-            await _reindex_note_with_pdf(attachment.note_id, db)
+            await _reindex_note(attachment.note_id, db)
 
         except Exception:
             logger.exception("PDF extraction failed for %s", file_id)
@@ -172,8 +232,72 @@ async def _run_pdf_extraction(file_id: str, file_path: str) -> None:
             await db.commit()
 
 
-async def _reindex_note_with_pdf(note_id: int, db: AsyncSession) -> None:
-    """Reindex note embeddings including PDF extracted text."""
+async def _run_ocr_extraction(file_id: str, file_path: str) -> None:
+    """Background task: OCR an image attachment and reindex the note."""
+    from app.database import async_session_factory
+    from app.services.ocr_service import OCRService
+
+    async with async_session_factory() as db:
+        stmt = select(NoteAttachment).where(NoteAttachment.file_id == file_id)
+        result = await db.execute(stmt)
+        attachment = result.scalar_one_or_none()
+        if not attachment:
+            return
+
+        try:
+            ocr = OCRService()
+            ocr_result = await ocr.extract_text_from_file(file_path)
+
+            attachment.extracted_text = ocr_result.text
+            attachment.extraction_status = "completed"
+            await db.commit()
+
+            await _reindex_note(attachment.note_id, db)
+
+        except Exception:
+            logger.exception("OCR extraction failed for %s", file_id)
+            attachment.extraction_status = "failed"
+            await db.commit()
+
+
+async def _run_image_ocr(image_id: int) -> None:
+    """Background task: OCR a NoteImage and reindex its parent note."""
+    from app.database import async_session_factory
+    from app.models import Note
+    from app.services.ocr_service import OCRService
+
+    async with async_session_factory() as db:
+        stmt = select(NoteImage).where(NoteImage.id == image_id)
+        result = await db.execute(stmt)
+        image = result.scalar_one_or_none()
+        if not image:
+            return
+
+        try:
+            ocr = OCRService()
+            ocr_result = await ocr.extract_text_from_file(image.file_path)
+
+            image.extracted_text = ocr_result.text
+            image.extraction_status = "completed"
+            await db.commit()
+
+            # Find the note by synology_note_id to reindex
+            note_stmt = select(Note.id).where(
+                Note.synology_note_id == image.synology_note_id
+            )
+            note_result = await db.execute(note_stmt)
+            note_id = note_result.scalar_one_or_none()
+            if note_id:
+                await _reindex_note(note_id, db)
+
+        except Exception:
+            logger.exception("Image OCR failed for image %d", image_id)
+            image.extraction_status = "failed"
+            await db.commit()
+
+
+async def _reindex_note(note_id: int, db: AsyncSession) -> None:
+    """Reindex note embeddings including extracted text."""
     from app.search.embeddings import EmbeddingService
     from app.search.indexer import NoteIndexer
 
@@ -182,4 +306,4 @@ async def _reindex_note_with_pdf(note_id: int, db: AsyncSession) -> None:
         indexer = NoteIndexer(session=db, embedding_service=embedding_service)
         await indexer.reindex_note(note_id)
     except Exception:
-        logger.exception("Failed to reindex note %d after PDF extraction", note_id)
+        logger.exception("Failed to reindex note %d after extraction", note_id)

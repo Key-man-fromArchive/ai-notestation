@@ -138,6 +138,12 @@ class NoteImage(Base):
     height: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
+    # OCR fields (Task 4-2)
+    extracted_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    extraction_status: Mapped[str | None] = mapped_column(
+        String(20), nullable=True
+    )  # None | "pending" | "completed" | "failed"
+
     __table_args__ = (
         UniqueConstraint("synology_note_id", "ref", name="uq_note_images_note_ref"),
         Index("idx_note_images_note_id", "synology_note_id"),

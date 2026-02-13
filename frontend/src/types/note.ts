@@ -33,6 +33,21 @@ export interface Note {
     extraction_status?: string | null
     page_count?: number | null
   }>
+  images?: NoteImage[]
+}
+
+/**
+ * NSX에서 추출된 이미지 정보
+ */
+export interface NoteImage {
+  id: number
+  synology_note_id: string
+  ref: string
+  name: string
+  file_path: string
+  mime_type: string
+  extraction_status?: string | null
+  extracted_text?: string | null
 }
 
 /**

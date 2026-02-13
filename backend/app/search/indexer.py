@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Note, NoteAttachment, NoteEmbedding
+from app.models import Note, NoteAttachment, NoteEmbedding, NoteImage
 from app.search.embeddings import EmbeddingService
 
 logger = logging.getLogger(__name__)
@@ -94,10 +94,13 @@ class NoteIndexer:
         if not text:
             text = (note.title or "").strip()
 
-        # Append PDF extracted text from attachments (if any)
+        # Append extracted text from attachments (PDF/OCR) and images
         pdf_text = await self._get_attachment_texts(note_id)
-        if pdf_text:
-            text = f"{text}\n\n---\n\n{pdf_text}" if text else pdf_text
+        ocr_text = await self._get_image_texts(note)
+
+        extra = "\n\n---\n\n".join(filter(None, [pdf_text, ocr_text]))
+        if extra:
+            text = f"{text}\n\n---\n\n{extra}" if text else extra
 
         if not text:
             logger.debug("Note %d has no content or title, skipping embedding", note_id)
@@ -224,6 +227,29 @@ class NoteIndexer:
         for text, name in rows:
             if text and text.strip():
                 parts.append(f"[PDF: {name}]\n{text.strip()}")
+
+        return "\n\n---\n\n".join(parts)
+
+    async def _get_image_texts(self, note: Note) -> str:
+        """Collect OCR text from NoteImages associated with this note."""
+        if not note.synology_note_id:
+            return ""
+
+        stmt = select(NoteImage.extracted_text, NoteImage.name).where(
+            NoteImage.synology_note_id == note.synology_note_id,
+            NoteImage.extraction_status == "completed",
+            NoteImage.extracted_text.isnot(None),
+        )
+        result = await self._session.execute(stmt)
+        rows = result.fetchall()
+
+        if not rows:
+            return ""
+
+        parts = []
+        for text, name in rows:
+            if text and text.strip():
+                parts.append(f"[OCR: {name}]\n{text.strip()}")
 
         return "\n\n---\n\n".join(parts)
 

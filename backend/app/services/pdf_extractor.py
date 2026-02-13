@@ -22,6 +22,7 @@ class PDFExtractor:
     """PDF → text extraction service.
 
     Uses PyMuPDF (fitz) for fast, accurate pure-text extraction.
+    Falls back to AI Vision OCR for image-only PDFs.
     """
 
     async def extract(self, file_path: str | Path) -> PDFExtractionResult:
@@ -62,15 +63,52 @@ class PDFExtractor:
                     metadata[key] = val
 
         page_count = doc.page_count
-        doc.close()
-
         combined_text = "\n\n".join(pages_text)
 
         if not combined_text.strip():
+            # Image-only PDF → OCR fallback
+            logger.info("No text in PDF %s, attempting OCR fallback", path.name)
+            ocr_text = await self._ocr_fallback(doc)
+            doc.close()
+            if ocr_text:
+                return PDFExtractionResult(
+                    text=ocr_text,
+                    page_count=page_count,
+                    metadata={**metadata, "ocr": True},
+                )
             raise ValueError("PDF contains no extractable text (may be image-only)")
+
+        doc.close()
 
         return PDFExtractionResult(
             text=combined_text,
             page_count=page_count,
             metadata=metadata,
         )
+
+    async def _ocr_fallback(self, doc: object) -> str:
+        """Render each PDF page to an image and run AI Vision OCR.
+
+        Args:
+            doc: An open fitz.Document instance.
+
+        Returns:
+            Combined OCR text from all pages, or empty string on failure.
+        """
+        from app.services.ocr_service import OCRService
+
+        ocr = OCRService()
+        pages: list[str] = []
+
+        try:
+            for page in doc:  # type: ignore[attr-defined]
+                pix = page.get_pixmap(dpi=150)
+                png_bytes = pix.tobytes("png")
+                result = await ocr.extract_text(png_bytes, "image/png")
+                if result.text.strip():
+                    pages.append(result.text.strip())
+        except Exception:
+            logger.exception("OCR fallback failed")
+            return ""
+
+        return "\n\n".join(pages)

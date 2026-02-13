@@ -88,9 +88,21 @@ class ZhipuAIProvider(AIProvider):
     # -- helpers ------------------------------------------------------------
 
     @staticmethod
-    def _to_dicts(messages: list[Message]) -> list[dict[str, str]]:
-        """Convert Message objects to plain dicts for the SDK."""
-        return [{"role": m.role, "content": m.content} for m in messages]
+    def _to_dicts(messages: list[Message]) -> list[dict[str, Any]]:
+        """Convert Message objects to plain dicts. Supports image content."""
+        result: list[dict[str, Any]] = []
+        for m in messages:
+            if m.images:
+                content: list[dict[str, Any]] = [{"type": "text", "text": m.content}]
+                for img in m.images:
+                    content.append({
+                        "type": "image_url",
+                        "image_url": {"url": f"data:{img.mime_type};base64,{img.data}"},
+                    })
+                result.append({"role": m.role, "content": content})
+            else:
+                result.append({"role": m.role, "content": m.content})
+        return result
 
     # -- AIProvider interface -----------------------------------------------
 
