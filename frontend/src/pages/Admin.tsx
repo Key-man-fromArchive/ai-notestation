@@ -21,6 +21,12 @@ import {
   CheckCircle2,
   XCircle,
   Loader2,
+  Trash2,
+  AlertTriangle,
+  Search,
+  FileX,
+  CheckCircle,
+  AlertCircle,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { apiClient } from '@/lib/api'
@@ -46,9 +52,12 @@ interface UsageData {
   storage: {
     total: string
     images: { human: string }
-    exports: { human: string }
+    exports: { human: string; bytes: number }
     uploads: { human: string }
   }
+  activity_logs: { count: number }
+  vision_data: { ocr_completed: number; vision_completed: number }
+  exports: { count: number; size: number; size_pretty: string }
 }
 
 interface DbStatsData {
@@ -118,6 +127,7 @@ const TABS = [
   { id: 'users', labelKey: 'admin.users', icon: Users },
   { id: 'nas', labelKey: 'admin.nas', icon: Server },
   { id: 'providers', labelKey: 'admin.providers', icon: Brain },
+  { id: 'storage', labelKey: 'admin.storageManagement', icon: Trash2 },
 ] as const
 
 type TabId = (typeof TABS)[number]['id']
@@ -179,6 +189,7 @@ export default function Admin() {
         {activeTab === 'users' && <UsersTab />}
         {activeTab === 'nas' && <NasTab />}
         {activeTab === 'providers' && <ProvidersTab />}
+        {activeTab === 'storage' && <StorageTab />}
       </div>
     </div>
   )
@@ -595,6 +606,367 @@ function ProvidersTab() {
             <p>{t('admin.noProviders')}</p>
             <p className="text-sm">{t('admin.addApiKey')}</p>
           </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Storage Management Tab
+// ---------------------------------------------------------------------------
+
+function StorageTab() {
+  const { t } = useTranslation()
+  const queryClient = useQueryClient()
+
+  const { data: usage, isLoading } = useQuery({
+    queryKey: ['admin', 'data-usage'],
+    queryFn: () => apiClient.get<UsageData>('/admin/data/usage'),
+  })
+
+  const [confirmDialog, setConfirmDialog] = useState<{
+    title: string
+    desc: string
+    requireText?: string
+    onConfirm: () => Promise<void>
+  } | null>(null)
+  const [confirmText, setConfirmText] = useState('')
+  const [processing, setProcessing] = useState<string | null>(null)
+  const [result, setResult] = useState<{ key: string; ok: boolean; msg: string } | null>(null)
+
+  const exec = async (key: string, action: () => Promise<unknown>) => {
+    setProcessing(key)
+    setResult(null)
+    try {
+      await action()
+      queryClient.invalidateQueries({ queryKey: ['admin'] })
+      setResult({ key, ok: true, msg: t('admin.dataActionSuccess') })
+    } catch {
+      setResult({ key, ok: false, msg: t('admin.dataActionFailed') })
+    } finally {
+      setProcessing(null)
+    }
+  }
+
+  const confirm = (
+    title: string,
+    desc: string,
+    onConfirm: () => Promise<void>,
+    requireText?: string,
+  ) => {
+    setConfirmDialog({ title, desc, onConfirm, requireText })
+    setConfirmText('')
+  }
+
+  const handleConfirm = async () => {
+    if (!confirmDialog) return
+    const fn = confirmDialog.onConfirm
+    setConfirmDialog(null)
+    await fn()
+  }
+
+  if (isLoading) return <LoadingSpinner />
+
+  const notesCount = usage?.notes?.count ?? 0
+  const notebooksCount = usage?.notebooks?.count ?? 0
+  const embeddingsCount = usage?.embeddings?.count ?? 0
+  const logsCount = usage?.activity_logs?.count ?? 0
+  const visionTotal = (usage?.vision_data?.ocr_completed ?? 0) + (usage?.vision_data?.vision_completed ?? 0)
+  const exportsCount = usage?.exports?.count ?? 0
+  const exportsSizePretty = usage?.exports?.size_pretty ?? '0 B'
+
+  return (
+    <div className="space-y-6">
+      <p className="text-sm text-muted-foreground">
+        {t('admin.storageManagementDesc')}
+      </p>
+
+      {/* Safe cleanup actions */}
+      <div className="border border-border rounded-lg bg-card">
+        <div className="px-4 py-3 bg-muted/50 border-b border-border">
+          <h3 className="font-semibold">{t('admin.actionClean')}</h3>
+        </div>
+        <div className="divide-y divide-border">
+          <StorageRow
+            icon={<FileX className="h-4 w-4" />}
+            label={t('admin.clearActivityLogs')}
+            desc={t('admin.clearActivityLogsDesc')}
+            info={t('admin.clearActivityLogsCount', { count: logsCount })}
+            processing={processing === 'clear-logs'}
+            result={result?.key === 'clear-logs' ? result : null}
+            actions={
+              <>
+                <button
+                  onClick={() =>
+                    confirm(
+                      t('admin.clearLogsConfirmTitle'),
+                      t('admin.clearLogsConfirmDesc'),
+                      () => exec('clear-logs', () =>
+                        apiClient.post('/admin/db/clear-activity-logs?confirm=true&older_than_days=30', {}),
+                      ),
+                    )
+                  }
+                  disabled={processing === 'clear-logs' || logsCount === 0}
+                  className="text-xs px-3 py-1.5 rounded-md border border-input hover:bg-muted transition-colors disabled:opacity-50"
+                >
+                  {t('admin.clearLogsOlder')}
+                </button>
+                <button
+                  onClick={() =>
+                    confirm(
+                      t('admin.clearLogsConfirmTitle'),
+                      t('admin.clearLogsConfirmDesc'),
+                      () => exec('clear-logs', () =>
+                        apiClient.post('/admin/db/clear-activity-logs?confirm=true', {}),
+                      ),
+                    )
+                  }
+                  disabled={processing === 'clear-logs' || logsCount === 0}
+                  className="text-xs px-3 py-1.5 rounded-md border border-input hover:bg-muted transition-colors disabled:opacity-50"
+                >
+                  {t('admin.clearLogsAll')}
+                </button>
+              </>
+            }
+          />
+
+          <StorageRow
+            icon={<HardDrive className="h-4 w-4" />}
+            label={t('admin.cleanOrphans')}
+            desc={t('admin.cleanOrphansDesc')}
+            processing={processing === 'clean-orphans'}
+            result={result?.key === 'clean-orphans' ? result : null}
+            actions={
+              <button
+                onClick={() =>
+                  confirm(
+                    t('admin.cleanOrphansConfirmTitle'),
+                    t('admin.cleanOrphansConfirmDesc'),
+                    () => exec('clean-orphans', () =>
+                      apiClient.post('/admin/storage/clean-orphans?confirm=true', {}),
+                    ),
+                  )
+                }
+                disabled={processing === 'clean-orphans'}
+                className="text-xs px-3 py-1.5 rounded-md border border-input hover:bg-muted transition-colors disabled:opacity-50"
+              >
+                {t('admin.actionClean')}
+              </button>
+            }
+          />
+
+          <StorageRow
+            icon={<Trash2 className="h-4 w-4" />}
+            label={t('admin.cleanExports')}
+            desc={t('admin.cleanExportsDesc')}
+            info={t('admin.cleanExportsCount', { count: exportsCount, size: exportsSizePretty })}
+            processing={processing === 'clean-exports'}
+            result={result?.key === 'clean-exports' ? result : null}
+            actions={
+              <button
+                onClick={() =>
+                  confirm(
+                    t('admin.cleanExportsConfirmTitle'),
+                    t('admin.cleanExportsConfirmDesc'),
+                    () => exec('clean-exports', () =>
+                      apiClient.post('/admin/storage/clean-exports?confirm=true', {}),
+                    ),
+                  )
+                }
+                disabled={processing === 'clean-exports' || exportsCount === 0}
+                className="text-xs px-3 py-1.5 rounded-md border border-input hover:bg-muted transition-colors disabled:opacity-50"
+              >
+                {t('admin.actionClear')}
+              </button>
+            }
+          />
+        </div>
+      </div>
+
+      {/* Data reset actions (dangerous) */}
+      <div className="border border-destructive/30 rounded-lg bg-card">
+        <div className="px-4 py-3 bg-destructive/5 border-b border-destructive/20">
+          <h3 className="font-semibold text-destructive flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4" />
+            {t('admin.dangerZone')}
+          </h3>
+        </div>
+        <div className="divide-y divide-border">
+          <StorageRow
+            icon={<Search className="h-4 w-4" />}
+            label={t('admin.clearEmbeddings')}
+            desc={t('admin.clearEmbeddingsDesc')}
+            info={t('admin.clearEmbeddingsCount', { count: embeddingsCount })}
+            processing={processing === 'clear-embeddings'}
+            result={result?.key === 'clear-embeddings' ? result : null}
+            actions={
+              <button
+                onClick={() =>
+                  confirm(
+                    t('admin.clearEmbeddingsConfirmTitle'),
+                    t('admin.clearEmbeddingsConfirmDesc'),
+                    () => exec('clear-embeddings', () =>
+                      apiClient.post('/admin/db/clear-embeddings?confirm=true', {}),
+                    ),
+                  )
+                }
+                disabled={processing === 'clear-embeddings' || embeddingsCount === 0}
+                className="text-xs px-3 py-1.5 rounded-md border border-destructive/30 text-destructive hover:bg-destructive/5 transition-colors disabled:opacity-50"
+              >
+                {t('admin.actionClear')}
+              </button>
+            }
+          />
+
+          <StorageRow
+            icon={<Eye className="h-4 w-4" />}
+            label={t('admin.clearVisionData')}
+            desc={t('admin.clearVisionDataDesc')}
+            info={t('admin.clearVisionDataCount', { count: visionTotal })}
+            processing={processing === 'clear-vision'}
+            result={result?.key === 'clear-vision' ? result : null}
+            actions={
+              <button
+                onClick={() =>
+                  confirm(
+                    t('admin.clearVisionDataConfirmTitle'),
+                    t('admin.clearVisionDataConfirmDesc'),
+                    () => exec('clear-vision', () =>
+                      apiClient.post('/admin/db/clear-vision-data?confirm=true', {}),
+                    ),
+                  )
+                }
+                disabled={processing === 'clear-vision' || visionTotal === 0}
+                className="text-xs px-3 py-1.5 rounded-md border border-destructive/30 text-destructive hover:bg-destructive/5 transition-colors disabled:opacity-50"
+              >
+                {t('admin.actionClear')}
+              </button>
+            }
+          />
+
+          <StorageRow
+            icon={<Database className="h-4 w-4" />}
+            label={t('admin.resetNotes')}
+            desc={t('admin.resetNotesDesc')}
+            info={t('admin.resetNotesCount', { notes: notesCount, notebooks: notebooksCount })}
+            processing={processing === 'reset-notes'}
+            result={result?.key === 'reset-notes' ? result : null}
+            actions={
+              <button
+                onClick={() =>
+                  confirm(
+                    t('admin.resetNotesConfirmTitle'),
+                    t('admin.resetNotesConfirmDesc'),
+                    () => exec('reset-notes', () =>
+                      apiClient.post('/admin/db/reset-notes?confirm=true', {}),
+                    ),
+                    t('admin.resetNotesConfirmPlaceholder'),
+                  )
+                }
+                disabled={processing === 'reset-notes' || notesCount === 0}
+                className="text-xs px-3 py-1.5 rounded-md border border-destructive/30 text-destructive hover:bg-destructive/5 transition-colors disabled:opacity-50"
+              >
+                {t('admin.actionReset')}
+              </button>
+            }
+          />
+        </div>
+      </div>
+
+      {/* Confirm Dialog */}
+      {confirmDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-background border border-input rounded-lg shadow-lg p-6 max-w-md w-full mx-4">
+            <h4 className="text-lg font-semibold mb-2 flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              {confirmDialog.title}
+            </h4>
+            <p className="text-sm text-muted-foreground mb-4">{confirmDialog.desc}</p>
+
+            {confirmDialog.requireText && (
+              <div className="mb-4">
+                <label className="text-sm text-muted-foreground block mb-1">
+                  {t('admin.resetNotesConfirmInput')}
+                </label>
+                <input
+                  type="text"
+                  value={confirmText}
+                  onChange={(e) => setConfirmText(e.target.value)}
+                  placeholder={confirmDialog.requireText}
+                  className={cn(
+                    'w-full px-3 py-2 text-sm rounded-md',
+                    'border border-input bg-background',
+                    'focus:outline-none focus-visible:ring-2 focus-visible:ring-destructive',
+                  )}
+                  autoFocus
+                />
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setConfirmDialog(null)}
+                className="px-4 py-2 text-sm rounded-md border border-input hover:bg-muted transition-colors"
+              >
+                {t('common.cancel')}
+              </button>
+              <button
+                onClick={handleConfirm}
+                disabled={confirmDialog.requireText ? confirmText !== confirmDialog.requireText : false}
+                className={cn(
+                  'px-4 py-2 text-sm rounded-md transition-colors',
+                  'bg-destructive text-destructive-foreground hover:bg-destructive/90',
+                  'disabled:opacity-50 disabled:cursor-not-allowed',
+                )}
+              >
+                {t('common.confirm')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function StorageRow({
+  icon,
+  label,
+  desc,
+  info,
+  processing,
+  result,
+  actions,
+}: {
+  icon: React.ReactNode
+  label: string
+  desc: string
+  info?: string
+  processing: boolean
+  result: { ok: boolean; msg: string } | null
+  actions: React.ReactNode
+}) {
+  return (
+    <div className="flex items-center justify-between px-4 py-3">
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <span className="text-muted-foreground shrink-0">{icon}</span>
+          <span className="text-sm font-medium">{label}</span>
+          {info && <span className="text-xs text-muted-foreground ml-1">{info}</span>}
+        </div>
+        <p className="text-xs text-muted-foreground mt-0.5 ml-6">{desc}</p>
+      </div>
+      <div className="flex items-center gap-2 shrink-0 ml-4">
+        {processing ? (
+          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+        ) : (
+          actions
+        )}
+        {result && (
+          result.ok
+            ? <CheckCircle className="h-4 w-4 text-green-600" />
+            : <AlertCircle className="h-4 w-4 text-destructive" />
         )}
       </div>
     </div>

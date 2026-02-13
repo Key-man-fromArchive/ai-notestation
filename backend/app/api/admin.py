@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import contextlib
+import shutil
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -43,6 +44,14 @@ def _dir_size(path: str) -> int:
                 with contextlib.suppress(OSError):
                     total += f.stat().st_size
     return total
+
+
+def _dir_file_count(path: str) -> int:
+    """Count files in a directory."""
+    p = Path(path)
+    if not p.exists():
+        return 0
+    return sum(1 for f in p.rglob("*") if f.is_file())
 
 
 def _human_size(size_bytes: int) -> str:
@@ -194,6 +203,23 @@ async def get_data_usage(
     exports_dir_size = _dir_size(settings.NSX_EXPORTS_PATH)
     uploads_dir_size = _dir_size(settings.UPLOADS_PATH)
 
+    # Activity logs count
+    logs_result = await db.execute(text("SELECT COUNT(*) FROM activity_logs"))
+    logs_count = logs_result.scalar() or 0
+
+    # Vision/OCR completed counts
+    vision_result = await db.execute(
+        text("""
+            SELECT
+                COUNT(*) FILTER (WHERE extraction_status = 'completed') AS ocr_completed,
+                COUNT(*) FILTER (WHERE vision_status = 'completed') AS vision_completed
+            FROM note_images
+        """)
+    )
+    vision_row = vision_result.fetchone()
+
+    exports_file_count = _dir_file_count(settings.NSX_EXPORTS_PATH)
+
     return {
         "notes": {
             "count": notes_row.count if notes_row else 0,
@@ -218,6 +244,16 @@ async def get_data_usage(
             "uploads": {"bytes": uploads_dir_size, "human": _human_size(uploads_dir_size)},
             "total_bytes": images_dir_size + exports_dir_size + uploads_dir_size,
             "total": _human_size(images_dir_size + exports_dir_size + uploads_dir_size),
+        },
+        "activity_logs": {"count": logs_count},
+        "vision_data": {
+            "ocr_completed": vision_row.ocr_completed if vision_row else 0,
+            "vision_completed": vision_row.vision_completed if vision_row else 0,
+        },
+        "exports": {
+            "count": exports_file_count,
+            "size": exports_dir_size,
+            "size_pretty": _human_size(exports_dir_size),
         },
     }
 
@@ -430,4 +466,252 @@ async def get_providers(
         "providers": providers,
         "api_keys": api_keys,
         "total_models": sum(p["model_count"] for p in providers),
+    }
+
+
+# --- Data Management ---
+
+
+def _require_confirm(confirm: bool) -> None:
+    if not confirm:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="confirm=true is required",
+        )
+
+
+@router.post("/db/reset-notes")
+async def reset_notes(
+    confirm: bool = Query(False),  # noqa: B008
+    admin: dict = Depends(require_admin),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> dict:
+    """Delete all notes, notebooks, embeddings, and image metadata."""
+    _require_confirm(confirm)
+
+    settings = get_settings()
+
+    counts = {}
+    for table, key in [
+        ("note_embeddings", "embeddings"),
+        ("note_images", "images"),
+        ("notes", "notes"),
+        ("notebooks", "notebooks"),
+    ]:
+        result = await db.execute(text(f"SELECT COUNT(*) FROM {table}"))  # noqa: S608
+        counts[key] = result.scalar() or 0
+
+    await db.execute(text("TRUNCATE notes CASCADE"))
+    await db.execute(text("TRUNCATE notebooks CASCADE"))
+    await db.commit()
+
+    # Clean image files
+    images_path = Path(settings.NSX_IMAGES_PATH)
+    if images_path.exists():
+        shutil.rmtree(images_path, ignore_errors=True)
+        images_path.mkdir(parents=True, exist_ok=True)
+
+    await log_activity(
+        "admin", "completed",
+        message="노트 전체 초기화",
+        details=counts,
+        triggered_by=get_trigger_name(admin),
+    )
+    return {"status": "ok", "deleted": counts}
+
+
+@router.post("/db/clear-embeddings")
+async def clear_embeddings(
+    confirm: bool = Query(False),  # noqa: B008
+    admin: dict = Depends(require_admin),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> dict:
+    """Delete all note embeddings and reset embedding status."""
+    _require_confirm(confirm)
+
+    count_result = await db.execute(text("SELECT COUNT(*) FROM note_embeddings"))
+    count = count_result.scalar() or 0
+
+    await db.execute(text("DELETE FROM note_embeddings"))
+    await db.commit()
+
+    await log_activity(
+        "admin", "completed",
+        message="임베딩 전체 삭제",
+        details={"deleted_embeddings": count},
+        triggered_by=get_trigger_name(admin),
+    )
+    return {"status": "ok", "deleted_embeddings": count}
+
+
+@router.post("/db/clear-activity-logs")
+async def clear_activity_logs(
+    confirm: bool = Query(False),  # noqa: B008
+    older_than_days: int | None = Query(None),  # noqa: B008
+    admin: dict = Depends(require_admin),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> dict:
+    """Delete activity logs, optionally only older than N days."""
+    _require_confirm(confirm)
+
+    if older_than_days is not None:
+        result = await db.execute(
+            text(
+                "DELETE FROM activity_logs "
+                "WHERE created_at < NOW() - MAKE_INTERVAL(days => :days) "
+                "RETURNING id"
+            ),
+            {"days": older_than_days},
+        )
+    else:
+        result = await db.execute(text("DELETE FROM activity_logs RETURNING id"))
+
+    count = len(result.fetchall())
+    await db.commit()
+
+    msg = f"활동 로그 삭제 ({older_than_days}일 이전)" if older_than_days else "활동 로그 전체 삭제"
+    await log_activity(
+        "admin", "completed",
+        message=msg,
+        details={"deleted_logs": count, "older_than_days": older_than_days},
+        triggered_by=get_trigger_name(admin),
+    )
+    return {"status": "ok", "deleted_logs": count}
+
+
+@router.post("/db/clear-vision-data")
+async def clear_vision_data(
+    confirm: bool = Query(False),  # noqa: B008
+    admin: dict = Depends(require_admin),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> dict:
+    """Reset OCR and Vision analysis results for all images."""
+    _require_confirm(confirm)
+
+    result = await db.execute(
+        text("""
+            UPDATE note_images
+            SET extracted_text = NULL,
+                vision_description = NULL,
+                extraction_status = NULL,
+                vision_status = NULL
+            WHERE extracted_text IS NOT NULL
+               OR vision_description IS NOT NULL
+               OR extraction_status IS NOT NULL
+               OR vision_status IS NOT NULL
+            RETURNING id
+        """)
+    )
+    count = len(result.fetchall())
+    await db.commit()
+
+    await log_activity(
+        "admin", "completed",
+        message="Vision/OCR 데이터 초기화",
+        details={"reset_images": count},
+        triggered_by=get_trigger_name(admin),
+    )
+    return {"status": "ok", "reset_images": count}
+
+
+@router.post("/storage/clean-orphans")
+async def clean_orphan_files(
+    confirm: bool = Query(False),  # noqa: B008
+    admin: dict = Depends(require_admin),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> dict:
+    """Delete files on disk that have no matching DB record."""
+    _require_confirm(confirm)
+
+    settings = get_settings()
+    deleted_count = 0
+    freed_bytes = 0
+
+    # Clean orphan images
+    images_path = Path(settings.NSX_IMAGES_PATH)
+    if images_path.exists():
+        # Get all image file_paths from DB
+        db_result = await db.execute(text("SELECT file_path FROM note_images"))
+        db_paths = {row.file_path for row in db_result.fetchall() if row.file_path}
+
+        for f in images_path.rglob("*"):
+            if not f.is_file():
+                continue
+            # Check if any DB path ends with this filename or matches
+            rel = str(f)
+            if rel not in db_paths and f.name not in {Path(p).name for p in db_paths}:
+                with contextlib.suppress(OSError):
+                    size = f.stat().st_size
+                    f.unlink()
+                    deleted_count += 1
+                    freed_bytes += size
+
+    # Clean orphan uploads
+    uploads_path = Path(settings.UPLOADS_PATH)
+    if uploads_path.exists():
+        db_result = await db.execute(
+            text("SELECT file_id FROM note_attachments")
+        )
+        db_file_ids = {row.file_id for row in db_result.fetchall()}
+
+        for f in uploads_path.rglob("*"):
+            if not f.is_file():
+                continue
+            # file_id is stored as the stem or full filename
+            if f.stem not in db_file_ids and f.name not in db_file_ids:
+                with contextlib.suppress(OSError):
+                    size = f.stat().st_size
+                    f.unlink()
+                    deleted_count += 1
+                    freed_bytes += size
+
+    await log_activity(
+        "admin", "completed",
+        message="고아 파일 정리",
+        details={"deleted_files": deleted_count, "freed_bytes": freed_bytes},
+        triggered_by=get_trigger_name(admin),
+    )
+    return {
+        "status": "ok",
+        "deleted_files": deleted_count,
+        "freed_bytes": freed_bytes,
+        "freed_size": _human_size(freed_bytes),
+    }
+
+
+@router.post("/storage/clean-exports")
+async def clean_exports(
+    confirm: bool = Query(False),  # noqa: B008
+    admin: dict = Depends(require_admin),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: ARG001, B008
+) -> dict:
+    """Delete all export files."""
+    _require_confirm(confirm)
+
+    settings = get_settings()
+    exports_path = Path(settings.NSX_EXPORTS_PATH)
+
+    deleted_count = 0
+    freed_bytes = 0
+
+    if exports_path.exists():
+        for f in exports_path.rglob("*"):
+            if f.is_file():
+                with contextlib.suppress(OSError):
+                    freed_bytes += f.stat().st_size
+                    deleted_count += 1
+        shutil.rmtree(exports_path, ignore_errors=True)
+        exports_path.mkdir(parents=True, exist_ok=True)
+
+    await log_activity(
+        "admin", "completed",
+        message="내보내기 파일 삭제",
+        details={"deleted_files": deleted_count, "freed_bytes": freed_bytes},
+        triggered_by=get_trigger_name(admin),
+    )
+    return {
+        "status": "ok",
+        "deleted_files": deleted_count,
+        "freed_bytes": freed_bytes,
+        "freed_size": _human_size(freed_bytes),
     }
