@@ -3,13 +3,12 @@
 """ZhipuAI (Z.ai) provider for GLM models.
 
 Integrates with the ZhipuAI SDK (OpenAI-compatible interface) to provide
-access to GLM-4.7 series models. The SDK is sync-only, so all
-blocking calls are wrapped with ``asyncio.to_thread``.
+access to GLM model series. The SDK is sync-only, so all blocking calls
+are wrapped with ``asyncio.to_thread``.
 
-Supported models:
-- GLM-4.7-Flash (glm-4.7-flash): Free tier, fast inference
-- GLM-4.7 (glm-4.7): Full model (requires credits)
-- GLM-4-Plus (glm-4-plus): Previous generation (requires credits)
+The base URL defaults to the Z.ai Coding endpoint
+(``https://api.z.ai/api/coding/paas/v4``) but can be overridden via the
+``ZHIPUAI_BASE_URL`` environment variable.
 
 Usage:
     provider = ZhipuAIProvider(api_key="your-key")
@@ -30,7 +29,12 @@ from app.ai_router.schemas import AIResponse, Message, ModelInfo, ProviderError,
 
 _PROVIDER_NAME = "zhipuai"
 
+# Default to Z.ai Coding endpoint (included in Z.ai coding plan).
+# Override with ZHIPUAI_BASE_URL env var if using a different plan.
+_DEFAULT_BASE_URL = "https://api.z.ai/api/coding/paas/v4"
+
 _AVAILABLE_MODELS = [
+    # -- Flagship ($1/$3.2 per M tok) --
     ModelInfo(
         id="glm-5",
         name="GLM-5",
@@ -38,6 +42,7 @@ _AVAILABLE_MODELS = [
         max_tokens=128000,
         supports_streaming=True,
     ),
+    # -- General purpose --
     ModelInfo(
         id="glm-4.7",
         name="GLM-4.7",
@@ -46,15 +51,59 @@ _AVAILABLE_MODELS = [
         supports_streaming=True,
     ),
     ModelInfo(
-        id="glm-4.7-flash",
-        name="GLM-4.7 Flash",
+        id="glm-4.6",
+        name="GLM-4.6",
         provider=_PROVIDER_NAME,
         max_tokens=128000,
         supports_streaming=True,
     ),
     ModelInfo(
-        id="glm-4-plus",
-        name="GLM-4 Plus",
+        id="glm-4.5",
+        name="GLM-4.5",
+        provider=_PROVIDER_NAME,
+        max_tokens=128000,
+        supports_streaming=True,
+    ),
+    # -- Lightweight --
+    ModelInfo(
+        id="glm-4.7-flash",
+        name="GLM-4.7 Flash (Free)",
+        provider=_PROVIDER_NAME,
+        max_tokens=128000,
+        supports_streaming=True,
+    ),
+    ModelInfo(
+        id="glm-4.5-flash",
+        name="GLM-4.5 Flash (Free)",
+        provider=_PROVIDER_NAME,
+        max_tokens=128000,
+        supports_streaming=True,
+    ),
+    ModelInfo(
+        id="glm-4.5-air",
+        name="GLM-4.5 Air",
+        provider=_PROVIDER_NAME,
+        max_tokens=128000,
+        supports_streaming=True,
+    ),
+    # -- Vision --
+    ModelInfo(
+        id="glm-4.6v-flash",
+        name="GLM-4.6V Flash (Vision, Free)",
+        provider=_PROVIDER_NAME,
+        max_tokens=128000,
+        supports_streaming=True,
+    ),
+    ModelInfo(
+        id="glm-4.6v",
+        name="GLM-4.6V (Vision)",
+        provider=_PROVIDER_NAME,
+        max_tokens=128000,
+        supports_streaming=True,
+    ),
+    ModelInfo(
+        id="glm-4.5v",
+        name="GLM-4.5V (Vision)",
         provider=_PROVIDER_NAME,
         max_tokens=128000,
         supports_streaming=True,
@@ -83,7 +132,8 @@ class ZhipuAIProvider(AIProvider):
                 provider=_PROVIDER_NAME,
                 message="API key is required. Pass api_key or set ZHIPUAI_API_KEY environment variable.",
             )
-        self._client: ZhipuAI = ZhipuAI(api_key=resolved_key)
+        base_url = os.environ.get("ZHIPUAI_BASE_URL", _DEFAULT_BASE_URL)
+        self._client: ZhipuAI = ZhipuAI(api_key=resolved_key, base_url=base_url)
 
     # -- helpers ------------------------------------------------------------
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import logging
+import os
 import tempfile
 from pathlib import Path
 
@@ -12,12 +13,14 @@ from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
-# Vision-capable models in priority order
+# Vision-capable models in priority order (cost-optimized)
 _VISION_MODELS = [
-    "glm-4.7",
-    "gpt-4o",
+    "glm-4.6v-flash",    # Free, 14s avg, good quality
+    "glm-4.6v",          # $0.3/M, 70-100s, better quality
+    "glm-4.5v",          # $0.6/M, 60-97s, proven reliable
     "gpt-4o-mini",
     "gemini-2.0-flash",
+    "gpt-4o",
     "claude-sonnet-4-5",
 ]
 
@@ -46,6 +49,10 @@ class PaddleOCRVLEngine:
 
     _pipeline = None  # Lazy singleton
 
+    # Use up to half the available cores for OCR to avoid starving
+    # the main event loop and other services.
+    _NUM_THREADS = max(1, (os.cpu_count() or 1) // 2)
+
     @classmethod
     def _get_pipeline(cls):
         if cls._pipeline is None:
@@ -61,6 +68,10 @@ class PaddleOCRVLEngine:
 
         PaddleOCR expects a file path, so we write bytes to a temp file.
         Inference is CPU-bound, so we run it in a thread executor.
+
+        ``import paddle`` forcibly sets ``OMP_NUM_THREADS=1``, limiting
+        CPU inference to a single core.  We override this before running
+        the model so that the VL inference can use multiple cores.
         """
         suffix_map = {
             "image/png": ".png",
@@ -70,8 +81,13 @@ class PaddleOCRVLEngine:
             "image/bmp": ".bmp",
         }
         suffix = suffix_map.get(mime_type, ".png")
+        num_threads = self._NUM_THREADS
 
         def _run_ocr(data: bytes, ext: str) -> str:
+            # Override Paddle's OMP_NUM_THREADS=1 so the VL model
+            # uses multiple cores for inference.
+            os.environ["OMP_NUM_THREADS"] = str(num_threads)
+
             pipeline = PaddleOCRVLEngine._get_pipeline()
             with tempfile.NamedTemporaryFile(suffix=ext, delete=True) as tmp:
                 tmp.write(data)
@@ -86,7 +102,9 @@ class PaddleOCRVLEngine:
                         texts.append(item)
                 return "\n".join(texts).strip()
 
-        logger.info("Running OCR with PaddleOCR-VL (local)")
+        logger.info(
+            "Running OCR with PaddleOCR-VL (local, %d threads)", num_threads
+        )
         text = await asyncio.to_thread(_run_ocr, image_bytes, suffix)
         confidence = 0.9 if text else 0.0
         return OCRResult(text=text, confidence=confidence, method="paddleocr-vl")
@@ -107,10 +125,18 @@ class OCRService:
         store = _get_store()
         return store.get("ocr_engine", "ai_vision")
 
+    # PaddleOCR-VL CPU inference can be extremely slow. If it doesn't
+    # finish within this timeout, fall back to the AI Vision cloud engine.
+    PADDLE_TIMEOUT_SECONDS = 120
+
     async def extract_text(
         self, image_bytes: bytes, mime_type: str = "image/png"
     ) -> OCRResult:
         """Extract text from image bytes using the configured engine.
+
+        When ``paddleocr_vl`` is selected, a timeout is applied.  If the
+        local engine times out or fails, the service automatically falls
+        back to the cloud AI Vision engine so the user still gets a result.
 
         Args:
             image_bytes: Raw image data.
@@ -120,12 +146,32 @@ class OCRService:
             OCRResult with extracted text and engine info.
 
         Raises:
-            RuntimeError: If the engine fails or no model is available.
+            RuntimeError: If all engines fail or no model is available.
         """
         engine = await self._get_engine_setting()
 
         if engine == "paddleocr_vl":
-            return await PaddleOCRVLEngine().extract(image_bytes, mime_type)
+            try:
+                return await asyncio.wait_for(
+                    PaddleOCRVLEngine().extract(image_bytes, mime_type),
+                    timeout=self.PADDLE_TIMEOUT_SECONDS,
+                )
+            except asyncio.TimeoutError:
+                logger.warning(
+                    "PaddleOCR-VL timed out after %ds, falling back to AI Vision",
+                    self.PADDLE_TIMEOUT_SECONDS,
+                )
+            except Exception as exc:
+                logger.warning("PaddleOCR-VL failed: %s — falling back to AI Vision", exc)
+
+            # Fallback to cloud AI Vision
+            try:
+                return await self._ai_vision_extract(image_bytes, mime_type)
+            except Exception as fallback_exc:
+                raise RuntimeError(
+                    f"PaddleOCR-VL and AI Vision both failed. "
+                    f"AI Vision error: {fallback_exc}"
+                ) from fallback_exc
 
         return await self._ai_vision_extract(image_bytes, mime_type)
 
