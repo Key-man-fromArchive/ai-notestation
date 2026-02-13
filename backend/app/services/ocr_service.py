@@ -16,7 +16,7 @@ _VISION_MODELS = [
     "gpt-4o",
     "gpt-4o-mini",
     "gemini-2.0-flash",
-    "claude-sonnet-4-5-20250929",
+    "claude-sonnet-4-5",
 ]
 
 _OCR_PROMPT = (
@@ -39,13 +39,16 @@ class OCRService:
     """AI Vision-based OCR service.
 
     Uses the AIRouter to select an available Vision-capable model
-    and extract text from images.
+    and extract text from images. Falls back to the next model on failure.
     """
 
     async def extract_text(
         self, image_bytes: bytes, mime_type: str = "image/png"
     ) -> OCRResult:
         """Extract text from image bytes via AI Vision.
+
+        Tries each available Vision model in priority order,
+        falling back to the next on failure.
 
         Args:
             image_bytes: Raw image data.
@@ -55,22 +58,17 @@ class OCRService:
             OCRResult with extracted text and model info.
 
         Raises:
-            RuntimeError: If no Vision-capable model is available.
+            RuntimeError: If no Vision-capable model is available or all fail.
         """
         from app.ai_router.router import AIRouter
-        from app.ai_router.schemas import ImageContent, Message
+        from app.ai_router.schemas import AIRequest, ImageContent, Message
 
         router = AIRouter()
         available_ids = {m.id for m in router.all_models()}
 
-        # Pick first available vision model
-        model_id: str | None = None
-        for candidate in _VISION_MODELS:
-            if candidate in available_ids:
-                model_id = candidate
-                break
-
-        if model_id is None:
+        # Collect available vision models in priority order
+        candidates = [m for m in _VISION_MODELS if m in available_ids]
+        if not candidates:
             raise RuntimeError(
                 "No Vision-capable AI model available. "
                 f"Configure one of: {', '.join(_VISION_MODELS)}"
@@ -83,14 +81,25 @@ class OCRService:
             images=[ImageContent(data=b64, mime_type=mime_type)],
         )
 
-        logger.info("Running OCR with model %s", model_id)
-        response = await router.chat(messages=[message], model=model_id)
+        last_error: Exception | None = None
+        for model_id in candidates:
+            try:
+                logger.info("Running OCR with model %s", model_id)
+                request = AIRequest(
+                    messages=[message], model=model_id, temperature=0.1,
+                )
+                response = await router.chat(request)
 
-        text = response.content.strip()
-        # Simple confidence heuristic: non-empty => 0.8, empty => 0.0
-        confidence = 0.8 if text else 0.0
+                text = response.content.strip()
+                confidence = 0.8 if text else 0.0
+                return OCRResult(text=text, confidence=confidence, method=model_id)
+            except Exception as exc:
+                logger.warning("OCR failed with %s: %s", model_id, exc)
+                last_error = exc
 
-        return OCRResult(text=text, confidence=confidence, method=model_id)
+        raise RuntimeError(
+            f"All Vision models failed. Last error: {last_error}"
+        )
 
     async def extract_text_from_file(self, file_path: str | Path) -> OCRResult:
         """Load an image file and extract text via OCR.
