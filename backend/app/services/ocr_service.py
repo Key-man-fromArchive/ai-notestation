@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 # Vision-capable models in priority order
 _VISION_MODELS = [
-    "glm-5",
+    "glm-4.7",
     "gpt-4o",
     "gpt-4o-mini",
     "gemini-2.0-flash",
@@ -32,7 +32,7 @@ class OCRResult(BaseModel):
 
     text: str
     confidence: float  # 0.0~1.0 (AI model self-assessment)
-    method: str  # model id used, e.g. "glm-5"
+    method: str  # model id used, e.g. "glm-4.7"
 
 
 class OCRService:

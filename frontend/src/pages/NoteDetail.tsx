@@ -4,7 +4,7 @@
 
 import { useCallback, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Notebook, Tag, Paperclip, Image, File, FileText, AlertCircle, Calendar, Share2, AlertTriangle, CloudOff, CloudUpload, CloudDownload, Loader2, Check, Sparkles, X, Plus, Wand2, Link2 } from 'lucide-react'
+import { ArrowLeft, Notebook, Tag, Paperclip, Image, File, FileText, AlertCircle, Calendar, Share2, AlertTriangle, CloudOff, CloudUpload, CloudDownload, Loader2, Check, Sparkles, X, Plus, Wand2, Link2, Eye, ScanText, RotateCcw, CheckCircle2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { apiClient } from '@/lib/api'
 import { useNote } from '@/hooks/useNote'
@@ -19,6 +19,9 @@ import { useConflicts } from '@/hooks/useConflicts'
 import { useTimezone, formatDateWithTz } from '@/hooks/useTimezone'
 import { useAutoTagNote } from '@/hooks/useAutoTag'
 import { useRelatedNotes } from '@/hooks/useRelatedNotes'
+import { AttachmentContextMenu } from '@/components/AttachmentContextMenu'
+import type { ContextMenuItem } from '@/components/AttachmentContextMenu'
+import { ExtractedTextModal } from '@/components/ExtractedTextModal'
 
 export default function NoteDetail() {
   const { t } = useTranslation()
@@ -40,10 +43,18 @@ export default function NoteDetail() {
   const [suggestedTitle, setSuggestedTitle] = useState('')
   const [suggestedTags, setSuggestedTags] = useState<string[]>([])
   const [isApplying, setIsApplying] = useState(false)
-  const [pdfText, setPdfText] = useState<{ text: string; pageCount: number } | null>(null)
   const [extractingFileId, setExtractingFileId] = useState<string | null>(null)
-  const [ocrText, setOcrText] = useState<{ text: string; name: string } | null>(null)
   const [extractingImageId, setExtractingImageId] = useState<number | null>(null)
+  const [contextMenu, setContextMenu] = useState<{
+    x: number; y: number
+    type: 'attachment' | 'image'
+    id: string | number
+    status: string | null
+    name: string
+    isPdf: boolean
+    pageCount?: number | null
+  } | null>(null)
+  const [textModal, setTextModal] = useState<{ title: string; text: string; pageCount?: number } | null>(null)
 
   const handleExtractPdf = async (fileId: string) => {
     setExtractingFileId(fileId)
@@ -67,10 +78,10 @@ export default function NoteDetail() {
     }
   }
 
-  const handleShowPdfText = async (fileId: string) => {
+  const handleShowPdfText = async (fileId: string, name: string, pageCount?: number | null) => {
     try {
       const result = await apiClient.get<{ text: string; page_count: number }>(`/files/${fileId}/text`)
-      setPdfText({ text: result.text, pageCount: result.page_count })
+      setTextModal({ title: name, text: result.text, pageCount: pageCount ?? result.page_count })
     } catch {
       // ignore
     }
@@ -101,10 +112,63 @@ export default function NoteDetail() {
   const handleShowOcrText = async (imageId: number, name: string) => {
     try {
       const result = await apiClient.get<{ text: string }>(`/images/${imageId}/text`)
-      setOcrText({ text: result.text, name })
+      setTextModal({ title: name, text: result.text })
     } catch {
       // ignore
     }
+  }
+
+  const handleAttachmentContextMenu = (
+    e: React.MouseEvent,
+    opts: { type: 'attachment' | 'image'; id: string | number; status: string | null; name: string; isPdf: boolean; pageCount?: number | null }
+  ) => {
+    e.preventDefault()
+    setContextMenu({ x: e.clientX, y: e.clientY, ...opts })
+  }
+
+  const getContextMenuItems = (): ContextMenuItem[] => {
+    if (!contextMenu) return []
+    const { type, id, status, name, isPdf, pageCount } = contextMenu
+    const isFile = type === 'attachment'
+
+    if (status === 'completed') {
+      return [{
+        icon: <Eye className="h-4 w-4" />,
+        label: isPdf ? t('files.viewExtractedText') : t('ocr.viewExtractedText'),
+        onClick: () => {
+          if (isFile) handleShowPdfText(id as string, name, pageCount)
+          else handleShowOcrText(id as number, name)
+        },
+      }]
+    }
+    if (status === 'pending' || (isFile && extractingFileId === id) || (!isFile && extractingImageId === id)) {
+      return [{
+        icon: <ScanText className="h-4 w-4" />,
+        label: isPdf ? t('files.extracting') : t('ocr.extracting'),
+        disabled: true,
+        loading: true,
+        onClick: () => {},
+      }]
+    }
+    if (status === 'failed') {
+      return [{
+        icon: <RotateCcw className="h-4 w-4" />,
+        label: t('common.retry'),
+        onClick: () => {
+          if (isFile) handleExtractPdf(id as string)
+          else handleExtractImage(id as number)
+        },
+      }]
+    }
+    // No extraction yet
+    return [{
+      icon: <ScanText className="h-4 w-4" />,
+      label: isPdf ? t('files.extractText') : t('ocr.extractText'),
+      onClick: () => {
+        if (isFile) handleExtractPdf(id as string)
+        else handleExtractImage(id as number)
+      },
+    }]
   }
 
   const handlePushSync = async (force = false) => {
@@ -621,61 +685,34 @@ export default function NoteDetail() {
                 const isPdf = ext === 'pdf'
                 const isImage = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'].includes(ext)
                 const Icon = isPdf ? FileText : isImage ? Image : File
+                const fileId = attachment.file_id ?? attachment.url.split('/').pop()
+                const canExtract = isPdf || isImage
+                const status = attachment.extraction_status ?? (extractingFileId === fileId ? 'pending' : null)
                 return (
                   <div
                     key={index}
-                    className="flex items-center gap-3 rounded-lg border border-border bg-muted/30 px-3 py-2.5"
+                    className={`flex items-center gap-3 rounded-lg border border-border bg-muted/30 px-3 py-2.5${canExtract ? ' cursor-context-menu' : ''}`}
+                    onContextMenu={canExtract && fileId ? (e) => handleAttachmentContextMenu(e, {
+                      type: 'attachment', id: fileId, status, name: attachment.name, isPdf, pageCount: attachment.page_count,
+                    }) : undefined}
                   >
                     <Icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                     <span className="text-sm text-foreground truncate">{attachment.name}</span>
                     <span className="ml-auto text-xs text-muted-foreground uppercase shrink-0">{ext}</span>
 
-                    {/* Text extraction UI (PDF or image OCR) */}
-                    {(isPdf || isImage) && (
-                      <>
-                        {attachment.extraction_status === 'completed' && (
-                          <button
-                            onClick={() => {
-                              const fileId = attachment.file_id ?? attachment.url.split('/').pop()
-                              if (fileId) handleShowPdfText(fileId)
-                            }}
-                            className="text-xs text-primary hover:underline"
-                          >
-                            {isPdf ? t('files.viewExtractedText') : t('ocr.viewExtractedText')}
-                            {isPdf && attachment.page_count != null && (
-                              <span className="text-muted-foreground ml-1">
-                                ({attachment.page_count}{t('files.pages')})
-                              </span>
-                            )}
-                          </button>
-                        )}
-                        {(attachment.extraction_status === 'pending' || extractingFileId === (attachment.file_id ?? attachment.url.split('/').pop())) && (
-                          <span className="text-xs text-amber-600 animate-pulse">
-                            {isPdf ? t('files.extracting') : t('ocr.extracting')}
-                          </span>
-                        )}
-                        {attachment.extraction_status === 'failed' && (
-                          <span className="text-xs text-destructive">
-                            {isPdf ? t('files.extractionFailed') : t('ocr.extractionFailed')}
-                          </span>
-                        )}
-                        {!attachment.extraction_status && !extractingFileId && (
-                          <button
-                            onClick={() => {
-                              const fileId = attachment.file_id ?? attachment.url.split('/').pop()
-                              if (fileId) handleExtractPdf(fileId)
-                            }}
-                            className="text-xs text-primary hover:underline"
-                          >
-                            {isPdf ? t('files.extractText') : t('ocr.extractText')}
-                          </button>
-                        )}
-                      </>
+                    {/* Extraction status icon */}
+                    {canExtract && status === 'completed' && (
+                      <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-green-600" title={isPdf ? t('files.viewExtractedText') : t('ocr.viewExtractedText')} />
+                    )}
+                    {canExtract && status === 'pending' && (
+                      <Loader2 className="h-3.5 w-3.5 shrink-0 text-amber-600 animate-spin" title={isPdf ? t('files.extracting') : t('ocr.extracting')} />
+                    )}
+                    {canExtract && status === 'failed' && (
+                      <AlertCircle className="h-3.5 w-3.5 shrink-0 text-destructive" title={isPdf ? t('files.extractionFailed') : t('ocr.extractionFailed')} />
                     )}
 
                     <button
                       onClick={async () => {
-                        const fileId = attachment.file_id ?? attachment.url.split('/').pop()
                         if (!fileId) return
                         await apiClient.delete(`/notes/${note.note_id}/attachments/${fileId}`)
                         window.location.reload()
@@ -689,22 +726,6 @@ export default function NoteDetail() {
               })}
             </div>
 
-            {/* PDF extracted text preview */}
-            {pdfText && (
-              <div className="mt-4 border border-border rounded-lg p-4 bg-muted/20">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-medium">
-                    {t('files.extractedText')} ({pdfText.pageCount} {t('files.pages')})
-                  </h3>
-                  <button onClick={() => setPdfText(null)} className="text-muted-foreground hover:text-foreground">
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-                <pre className="text-xs text-muted-foreground whitespace-pre-wrap max-h-[300px] overflow-y-auto">
-                  {pdfText.text}
-                </pre>
-              </div>
-            )}
           </section>
         )}
 
@@ -719,60 +740,33 @@ export default function NoteDetail() {
               </span>
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {note.images?.map((img) => (
-                <div
-                  key={img.id}
-                  className="flex items-center gap-3 rounded-lg border border-border bg-muted/30 px-3 py-2.5"
-                >
-                  <Image className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-                  <span className="text-sm text-foreground truncate">{img.name}</span>
+              {note.images?.map((img) => {
+                const imgStatus = img.extraction_status ?? (extractingImageId === img.id ? 'pending' : null)
+                return (
+                  <div
+                    key={img.id}
+                    className="flex items-center gap-3 rounded-lg border border-border bg-muted/30 px-3 py-2.5 cursor-context-menu"
+                    onContextMenu={(e) => handleAttachmentContextMenu(e, {
+                      type: 'image', id: img.id, status: imgStatus, name: img.name, isPdf: false,
+                    })}
+                  >
+                    <Image className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                    <span className="text-sm text-foreground truncate">{img.name}</span>
 
-                  {img.extraction_status === 'completed' && (
-                    <button
-                      onClick={() => handleShowOcrText(img.id, img.name)}
-                      className="ml-auto text-xs text-primary hover:underline"
-                    >
-                      {t('ocr.viewExtractedText')}
-                    </button>
-                  )}
-                  {(img.extraction_status === 'pending' || extractingImageId === img.id) && (
-                    <span className="ml-auto text-xs text-amber-600 animate-pulse">
-                      {t('ocr.extracting')}
-                    </span>
-                  )}
-                  {img.extraction_status === 'failed' && (
-                    <span className="ml-auto text-xs text-destructive">
-                      {t('ocr.extractionFailed')}
-                    </span>
-                  )}
-                  {!img.extraction_status && extractingImageId !== img.id && (
-                    <button
-                      onClick={() => handleExtractImage(img.id)}
-                      className="ml-auto text-xs text-primary hover:underline"
-                    >
-                      {t('ocr.extractText')}
-                    </button>
-                  )}
-                </div>
-              ))}
+                    {/* Extraction status icon */}
+                    {imgStatus === 'completed' && (
+                      <CheckCircle2 className="ml-auto h-3.5 w-3.5 shrink-0 text-green-600" title={t('ocr.viewExtractedText')} />
+                    )}
+                    {imgStatus === 'pending' && (
+                      <Loader2 className="ml-auto h-3.5 w-3.5 shrink-0 text-amber-600 animate-spin" title={t('ocr.extracting')} />
+                    )}
+                    {imgStatus === 'failed' && (
+                      <AlertCircle className="ml-auto h-3.5 w-3.5 shrink-0 text-destructive" title={t('ocr.extractionFailed')} />
+                    )}
+                  </div>
+                )
+              })}
             </div>
-
-            {/* OCR text preview */}
-            {ocrText && (
-              <div className="mt-4 border border-border rounded-lg p-4 bg-muted/20">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-medium">
-                    {t('ocr.extractedText')} — {ocrText.name}
-                  </h3>
-                  <button onClick={() => setOcrText(null)} className="text-muted-foreground hover:text-foreground">
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-                <pre className="text-xs text-muted-foreground whitespace-pre-wrap max-h-[300px] overflow-y-auto">
-                  {ocrText.text}
-                </pre>
-              </div>
-            )}
           </section>
         )}
       </div>
@@ -782,6 +776,26 @@ export default function NoteDetail() {
         isOpen={isSharingOpen}
         onClose={() => setIsSharingOpen(false)}
       />
+
+      {/* Attachment context menu */}
+      {contextMenu && (
+        <AttachmentContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          items={getContextMenuItems()}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
+
+      {/* Extracted text modal */}
+      {textModal && (
+        <ExtractedTextModal
+          title={textModal.title}
+          text={textModal.text}
+          pageCount={textModal.pageCount}
+          onClose={() => setTextModal(null)}
+        />
+      )}
 
       {/* Conflict resolution dialog */}
       {note.sync_status === 'conflict' && (() => {
