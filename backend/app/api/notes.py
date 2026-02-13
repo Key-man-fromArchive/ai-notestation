@@ -619,22 +619,33 @@ async def get_note(
         except Exception:
             logger.warning("Failed to fetch images for note %s", note_id)
 
-        # Fetch NAS attachment metadata for NAS image proxy (if note has NAS link data)
+        # Fetch NAS attachment metadata for NAS image proxy.
+        # Always attempt NAS fetch so notes imported via NSX (which lack
+        # link_id / nas_ver) can self-heal on first access.
         nas_attachments: dict[str, dict] | None = None
-        if db_note.link_id and db_note.nas_ver:
-            try:
-                nas_detail = await ns_service.get_note(note_id)
-                att_raw = nas_detail.get("attachment")
-                if isinstance(att_raw, dict):
-                    nas_attachments = att_raw
-                # Keep nas_ver in sync so image proxy uses the correct version
-                latest_ver = nas_detail.get("ver", "")
-                if latest_ver and latest_ver != db_note.nas_ver:
+        try:
+            nas_detail = await ns_service.get_note(note_id)
+            att_raw = nas_detail.get("attachment")
+            if isinstance(att_raw, dict):
+                nas_attachments = att_raw
+            # Self-heal: populate missing link_id / nas_ver from NAS
+            needs_commit = False
+            latest_ver = nas_detail.get("ver", "")
+            latest_link = nas_detail.get("link_id", "")
+            if latest_link and not db_note.link_id:
+                db_note.link_id = latest_link
+                needs_commit = True
+            if latest_ver and latest_ver != (db_note.nas_ver or ""):
+                if db_note.nas_ver:
                     logger.info("Updating nas_ver for note %s: %s -> %s", note_id, db_note.nas_ver[:12], latest_ver[:12])
-                    db_note.nas_ver = latest_ver
-                    await db.commit()
-            except Exception:
-                logger.debug("Could not fetch NAS attachment metadata for note %s", note_id)
+                else:
+                    logger.info("Self-healing: setting link_id/nas_ver for note %s", note_id)
+                db_note.nas_ver = latest_ver
+                needs_commit = True
+            if needs_commit:
+                await db.commit()
+        except Exception:
+            logger.debug("Could not fetch NAS attachment metadata for note %s", note_id)
 
         raw_html = db_note.content_html or ""
 

@@ -151,7 +151,20 @@ class SyncService:
                     self._update_note(db_note, merged, synced_at=now)
                     updated += 1
 
-                # else: local only changed (already pushed in Step 1) or no change → skip
+                else:
+                    # No content change – but backfill link_id / nas_ver if missing
+                    # (covers notes originally imported via NSX without NAS metadata)
+                    if not db_note.link_id or not db_note.nas_ver:
+                        try:
+                            detail = await self._notestation.get_note(note_id)
+                        except Exception:
+                            detail = note_summary
+                        new_link = detail.get("link_id", "")
+                        new_ver = detail.get("ver", "")
+                        if new_link and not db_note.link_id:
+                            db_note.link_id = new_link
+                        if new_ver and not db_note.nas_ver:
+                            db_note.nas_ver = new_ver
 
             # Step 3: Handle deletions
             deleted = 0
@@ -281,6 +294,10 @@ class SyncService:
                         push_content = nas_note["content"]
                 except Exception:
                     logger.warning("Failed to fetch updated note %s after push", note.synology_note_id)
+
+                # Extract data URI images the NAS may have left in the content
+                from app.utils.note_utils import extract_data_uri_images
+                push_content = extract_data_uri_images(push_content)
 
                 # Update DB with NAS-format content to keep it clean
                 note.content_html = push_content
