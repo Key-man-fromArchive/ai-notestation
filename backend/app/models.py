@@ -4,7 +4,18 @@
 from datetime import datetime
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -146,6 +157,13 @@ class NoteAttachment(Base):
     mime_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     size: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    # PDF text extraction fields
+    extracted_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    extraction_status: Mapped[str | None] = mapped_column(
+        String(20), nullable=True
+    )  # None | "pending" | "completed" | "failed"
+    page_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     __table_args__ = (Index("idx_note_attachments_note_id", "note_id"),)
 

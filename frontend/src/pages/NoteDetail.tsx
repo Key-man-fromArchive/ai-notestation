@@ -4,7 +4,7 @@
 
 import { useCallback, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Notebook, Tag, Paperclip, Image, File, AlertCircle, Calendar, Share2, AlertTriangle, CloudOff, CloudUpload, CloudDownload, Loader2, Check, Sparkles, X, Plus, Wand2, Link2 } from 'lucide-react'
+import { ArrowLeft, Notebook, Tag, Paperclip, Image, File, FileText, AlertCircle, Calendar, Share2, AlertTriangle, CloudOff, CloudUpload, CloudDownload, Loader2, Check, Sparkles, X, Plus, Wand2, Link2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { apiClient } from '@/lib/api'
 import { useNote } from '@/hooks/useNote'
@@ -40,6 +40,39 @@ export default function NoteDetail() {
   const [suggestedTitle, setSuggestedTitle] = useState('')
   const [suggestedTags, setSuggestedTags] = useState<string[]>([])
   const [isApplying, setIsApplying] = useState(false)
+  const [pdfText, setPdfText] = useState<{ text: string; pageCount: number } | null>(null)
+  const [extractingFileId, setExtractingFileId] = useState<string | null>(null)
+
+  const handleExtractPdf = async (fileId: string) => {
+    setExtractingFileId(fileId)
+    try {
+      await apiClient.post(`/files/${fileId}/extract`)
+      const poll = setInterval(async () => {
+        try {
+          const result = await apiClient.get<{ extraction_status: string; page_count: number; text: string }>(`/files/${fileId}/text`)
+          if (result.extraction_status === 'completed' || result.extraction_status === 'failed') {
+            clearInterval(poll)
+            setExtractingFileId(null)
+            queryClient.invalidateQueries({ queryKey: ['note', id] })
+          }
+        } catch {
+          clearInterval(poll)
+          setExtractingFileId(null)
+        }
+      }, 2000)
+    } catch {
+      setExtractingFileId(null)
+    }
+  }
+
+  const handleShowPdfText = async (fileId: string) => {
+    try {
+      const result = await apiClient.get<{ text: string; page_count: number }>(`/files/${fileId}/text`)
+      setPdfText({ text: result.text, pageCount: result.page_count })
+    } catch {
+      // ignore
+    }
+  }
 
   const handlePushSync = async (force = false) => {
     if (!id || syncState === 'syncing') return
@@ -552,8 +585,9 @@ export default function NoteDetail() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {note.attachments?.map((attachment, index) => {
                 const ext = attachment.name.split('.').pop()?.toLowerCase() ?? ''
+                const isPdf = ext === 'pdf'
                 const isImage = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'].includes(ext)
-                const Icon = isImage ? Image : File
+                const Icon = isPdf ? FileText : isImage ? Image : File
                 return (
                   <div
                     key={index}
@@ -562,6 +596,48 @@ export default function NoteDetail() {
                     <Icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                     <span className="text-sm text-foreground truncate">{attachment.name}</span>
                     <span className="ml-auto text-xs text-muted-foreground uppercase shrink-0">{ext}</span>
+
+                    {/* PDF extraction UI */}
+                    {isPdf && (
+                      <>
+                        {attachment.extraction_status === 'completed' && (
+                          <button
+                            onClick={() => {
+                              const fileId = attachment.file_id ?? attachment.url.split('/').pop()
+                              if (fileId) handleShowPdfText(fileId)
+                            }}
+                            className="text-xs text-primary hover:underline"
+                          >
+                            {t('files.viewExtractedText')}
+                            <span className="text-muted-foreground ml-1">
+                              ({attachment.page_count}{t('files.pages')})
+                            </span>
+                          </button>
+                        )}
+                        {(attachment.extraction_status === 'pending' || extractingFileId === (attachment.file_id ?? attachment.url.split('/').pop())) && (
+                          <span className="text-xs text-amber-600 animate-pulse">
+                            {t('files.extracting')}
+                          </span>
+                        )}
+                        {attachment.extraction_status === 'failed' && (
+                          <span className="text-xs text-destructive">
+                            {t('files.extractionFailed')}
+                          </span>
+                        )}
+                        {!attachment.extraction_status && !extractingFileId && (
+                          <button
+                            onClick={() => {
+                              const fileId = attachment.file_id ?? attachment.url.split('/').pop()
+                              if (fileId) handleExtractPdf(fileId)
+                            }}
+                            className="text-xs text-primary hover:underline"
+                          >
+                            {t('files.extractText')}
+                          </button>
+                        )}
+                      </>
+                    )}
+
                     <button
                       onClick={async () => {
                         const fileId = attachment.file_id ?? attachment.url.split('/').pop()
@@ -577,6 +653,23 @@ export default function NoteDetail() {
                 )
               })}
             </div>
+
+            {/* PDF extracted text preview */}
+            {pdfText && (
+              <div className="mt-4 border border-border rounded-lg p-4 bg-muted/20">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-medium">
+                    {t('files.extractedText')} ({pdfText.pageCount} {t('files.pages')})
+                  </h3>
+                  <button onClick={() => setPdfText(null)} className="text-muted-foreground hover:text-foreground">
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+                <pre className="text-xs text-muted-foreground whitespace-pre-wrap max-h-[300px] overflow-y-auto">
+                  {pdfText.text}
+                </pre>
+              </div>
+            )}
           </section>
         )}
       </div>

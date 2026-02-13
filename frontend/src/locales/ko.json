@@ -758,6 +758,14 @@
     "exampleQuery3": "시퀀싱 데이터 분석",
     "exampleQuery4": "DNA 추출 과정"
   },
+  "files": {
+    "extractText": "텍스트 추출",
+    "extracting": "추출 중...",
+    "extractionFailed": "추출 실패",
+    "viewExtractedText": "추출된 텍스트 보기",
+    "extractedText": "추출된 텍스트",
+    "pages": "페이지"
+  },
   "errors": {
     "somethingWentWrong": "Something went wrong",
     "unexpectedError": "An unexpected error occurred",

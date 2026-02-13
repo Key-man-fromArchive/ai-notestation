@@ -758,6 +758,14 @@
     "exampleQuery3": "Sequencing data analysis",
     "exampleQuery4": "DNA extraction process"
   },
+  "files": {
+    "extractText": "Extract text",
+    "extracting": "Extracting...",
+    "extractionFailed": "Extraction failed",
+    "viewExtractedText": "View extracted text",
+    "extractedText": "Extracted text",
+    "pages": " pages"
+  },
   "errors": {
     "somethingWentWrong": "Something went wrong",
     "unexpectedError": "An unexpected error occurred",

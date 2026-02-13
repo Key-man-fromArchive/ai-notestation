@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Note, NoteEmbedding
+from app.models import Note, NoteAttachment, NoteEmbedding
 from app.search.embeddings import EmbeddingService
 
 logger = logging.getLogger(__name__)
@@ -93,6 +93,12 @@ class NoteIndexer:
         text = (note.content_text or "").strip()
         if not text:
             text = (note.title or "").strip()
+
+        # Append PDF extracted text from attachments (if any)
+        pdf_text = await self._get_attachment_texts(note_id)
+        if pdf_text:
+            text = f"{text}\n\n---\n\n{pdf_text}" if text else pdf_text
+
         if not text:
             logger.debug("Note %d has no content or title, skipping embedding", note_id)
             return 0
@@ -200,6 +206,26 @@ class NoteIndexer:
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    async def _get_attachment_texts(self, note_id: int) -> str:
+        """Collect extracted PDF text from all completed attachments for a note."""
+        stmt = select(NoteAttachment.extracted_text, NoteAttachment.name).where(
+            NoteAttachment.note_id == note_id,
+            NoteAttachment.extraction_status == "completed",
+            NoteAttachment.extracted_text.isnot(None),
+        )
+        result = await self._session.execute(stmt)
+        rows = result.fetchall()
+
+        if not rows:
+            return ""
+
+        parts = []
+        for text, name in rows:
+            if text and text.strip():
+                parts.append(f"[PDF: {name}]\n{text.strip()}")
+
+        return "\n\n---\n\n".join(parts)
 
     async def _get_note(self, note_id: int) -> Note:
         """Fetch a note by ID or raise ValueError.

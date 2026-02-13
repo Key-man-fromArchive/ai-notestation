@@ -30,6 +30,8 @@ export interface Note {
     file_id?: string
     name: string
     url: string
+    extraction_status?: string | null
+    page_count?: number | null
   }>
 }
 
