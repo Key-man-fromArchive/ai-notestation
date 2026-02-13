@@ -352,7 +352,12 @@ _VISION_PROMPT = (
     "describe the experimental content."
 )
 
-_VISION_MODEL = "glm-4.6v"
+def _get_vision_model() -> str:
+    """Read vision_model from the settings cache."""
+    from app.api.settings import _get_store
+
+    store = _get_store()
+    return store.get("vision_model", "glm-4.6v")
 
 
 async def _run_image_vision(image_id: int) -> None:
@@ -388,7 +393,7 @@ async def _run_image_vision(image_id: int) -> None:
             )
             request = AIRequest(
                 messages=[message],
-                model=_VISION_MODEL,
+                model=_get_vision_model(),
                 temperature=0.3,
             )
             response = await router.chat(request)

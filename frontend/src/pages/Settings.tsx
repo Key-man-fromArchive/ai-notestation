@@ -166,6 +166,8 @@ export default function Settings() {
 
       <OcrEngineSection />
 
+      <VisionModelSection />
+
       <QualityGateSection />
 
       <AiModelSection />
@@ -1306,6 +1308,62 @@ function OcrEngineSection() {
         <option value="ai_vision">{t('settings.ocrEngineAiVision')}</option>
         <option value="paddleocr_vl">{t('settings.ocrEnginePaddleOcr')}</option>
         <option value="glm_ocr">{t('settings.ocrEngineGlmOcr')}</option>
+      </select>
+    </div>
+  )
+}
+
+function VisionModelSection() {
+  const { t } = useTranslation()
+  const queryClient = useQueryClient()
+  const [saving, setSaving] = useState(false)
+
+  const { data: visionSetting } = useQuery<SettingResponse>({
+    queryKey: ['settings', 'vision_model'],
+    queryFn: () => apiClient.get('/settings/vision_model'),
+  })
+
+  const currentModel = typeof visionSetting?.value === 'string'
+    ? visionSetting.value
+    : 'glm-4.6v'
+
+  const handleChange = async (value: string) => {
+    setSaving(true)
+    try {
+      await apiClient.put('/settings/vision_model', { value })
+      queryClient.invalidateQueries({ queryKey: ['settings', 'vision_model'] })
+      queryClient.invalidateQueries({ queryKey: ['settings'] })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="p-4 border border-input rounded-md">
+      <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
+        <Sparkles className="h-5 w-5" aria-hidden="true" />
+        {t('settings.visionModel')}
+      </h3>
+      <p className="text-sm text-muted-foreground mb-4">
+        {t('settings.visionModelDesc')}
+      </p>
+
+      <select
+        value={currentModel}
+        onChange={(e) => handleChange(e.target.value)}
+        disabled={saving}
+        className={cn(
+          'w-full px-3 py-2 text-sm rounded-md',
+          'border border-input bg-background',
+          'focus:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+          'disabled:opacity-50',
+        )}
+      >
+        <option value="glm-4.6v">GLM-4.6V (ZhipuAI)</option>
+        <option value="glm-4.6v-flash">GLM-4.6V Flash (ZhipuAI, {t('settings.visionModelFree')})</option>
+        <option value="glm-4.5v">GLM-4.5V (ZhipuAI)</option>
+        <option value="gpt-4o">GPT-4o (OpenAI)</option>
+        <option value="gemini-2.0-flash">Gemini 2.0 Flash (Google)</option>
       </select>
     </div>
   )

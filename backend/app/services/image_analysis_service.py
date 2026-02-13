@@ -27,7 +27,12 @@ _VISION_PROMPT = (
     "describe the experimental content."
 )
 
-VISION_MODEL = "glm-4.6v"
+def _get_vision_model() -> str:
+    """Read vision_model from the settings cache."""
+    from app.api.settings import _get_store
+
+    store = _get_store()
+    return store.get("vision_model", "glm-4.6v")
 
 
 class ImageAnalysisService:
@@ -190,8 +195,8 @@ class ImageAnalysisService:
 
                 # Check if vision model is available
                 available_ids = {m.id for m in router.all_models()}
-                if VISION_MODEL not in available_ids:
-                    logger.warning("Vision model %s not available", VISION_MODEL)
+                if _get_vision_model() not in available_ids:
+                    logger.warning("Vision model %s not available", _get_vision_model())
                     img.vision_status = "failed"
                     await db.flush()
                     return False
@@ -204,7 +209,7 @@ class ImageAnalysisService:
                 )
                 request = AIRequest(
                     messages=[message],
-                    model=VISION_MODEL,
+                    model=_get_vision_model(),
                     temperature=0.3,
                 )
                 response = await router.chat(request)
