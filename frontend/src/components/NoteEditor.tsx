@@ -263,6 +263,33 @@ export function NoteEditor({ noteId, initialContent, onAutoSave }: NoteEditorPro
     return () => document.removeEventListener('keydown', handler)
   }, [save])
 
+  // Auto-retry failed NAS images in the TipTap editor.
+  // When NAS is overloaded (many images), some requests fail intermittently.
+  // This listener catches img error events and retries up to 2 times.
+  useEffect(() => {
+    if (!editor) return
+    const el = editor.view.dom
+
+    const handleImgError = (e: Event) => {
+      const img = e.target as HTMLImageElement
+      if (!img?.src?.includes('/api/nas-images/')) return
+
+      const retries = parseInt(img.dataset.retryCount || '0', 10)
+      if (retries >= 2) return // give up after 2 retries
+
+      img.dataset.retryCount = String(retries + 1)
+      const delay = (retries + 1) * 2000 // 2s, 4s
+      setTimeout(() => {
+        const base = img.src.replace(/[&?]_retry=\d+/, '')
+        const sep = base.includes('?') ? '&' : '?'
+        img.src = `${base}${sep}_retry=${retries + 1}`
+      }, delay)
+    }
+
+    el.addEventListener('error', handleImgError, true) // capture phase
+    return () => el.removeEventListener('error', handleImgError, true)
+  }, [editor])
+
   const handleInsertLink = () => {
     if (!editor) return
     const existing = editor.getAttributes('link').href

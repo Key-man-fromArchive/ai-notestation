@@ -16,6 +16,7 @@ This endpoint maps:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from io import BytesIO
 
@@ -31,6 +32,15 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/nas-images", tags=["nas-images"])
 
+# Limit concurrent NAS image fetches to prevent overwhelming the NAS
+# when notes have hundreds of images (e.g. 260 images in one note).
+_NAS_FETCH_SEMAPHORE = asyncio.Semaphore(8)
+
+# 1x1 transparent GIF that NoteStation returns for deleted/empty attachments.
+# GIF89a header (47 49 46 38 39 61), 1x1 pixel, 43 bytes total.
+_PLACEHOLDER_GIF_MD5 = "325472601571f31e1bf00674c368d335"
+_MIN_VALID_IMAGE_SIZE = 100  # bytes; anything smaller is likely a placeholder
+
 
 async def _get_user_flexible(
     request: Request,
@@ -38,6 +48,7 @@ async def _get_user_flexible(
 ) -> dict:
     """Accept auth via ``?token=`` query param or ``Authorization: Bearer`` header."""
     from jose import JWTError
+
     from app.services.auth_service import verify_token
 
     # Try Bearer header first
@@ -98,36 +109,46 @@ async def proxy_nas_image(
     if not note or not note.link_id or not note.nas_ver:
         raise HTTPException(status_code=404, detail="Note or NAS metadata not found")
 
-    try:
-        from app.api.sync import _create_sync_service
-
-        service, session, _ = await _create_sync_service()
+    # Throttle concurrent NAS fetches to prevent overload
+    async with _NAS_FETCH_SEMAPHORE:
         try:
-            # Try with stored version first
-            nas_path = f"/note/ns/dv/{note.link_id}/{note.nas_ver}/{att_key}/{filename}"
-            image_bytes, content_type = await service._notestation._client.fetch_binary(nas_path)
+            from app.api.sync import _create_sync_service
 
-            # If NAS returns HTML, the version is likely stale — refresh and retry
-            if content_type and "text/html" in content_type:
-                logger.info("Stale nas_ver for note %s, fetching latest from NAS", note_id)
-                try:
-                    nas_note = await service._notestation.get_note(note_id)
-                    latest_ver = nas_note.get("ver", "")
-                    if latest_ver and latest_ver != note.nas_ver:
-                        note.nas_ver = latest_ver
-                        await db.commit()
-                        nas_path = f"/note/ns/dv/{note.link_id}/{latest_ver}/{att_key}/{filename}"
-                        image_bytes, content_type = await service._notestation._client.fetch_binary(nas_path)
-                except Exception:
-                    logger.debug("Could not refresh nas_ver for note %s", note_id)
-        finally:
-            await session.close()
-    except Exception as exc:
-        logger.exception("Failed to fetch NAS image: %s", exc)
-        raise HTTPException(status_code=502, detail="NAS 이미지 로드 실패") from exc
+            service, session, _ = await _create_sync_service()
+            try:
+                # Try with stored version first
+                nas_path = f"/note/ns/dv/{note.link_id}/{note.nas_ver}/{att_key}/{filename}"
+                image_bytes, content_type = await service._notestation._client.fetch_binary(nas_path)
+
+                # If NAS returns HTML, the version is likely stale — refresh and retry
+                if content_type and "text/html" in content_type:
+                    logger.info("Stale nas_ver for note %s, fetching latest from NAS", note_id)
+                    try:
+                        nas_note = await service._notestation.get_note(note_id)
+                        latest_ver = nas_note.get("ver", "")
+                        if latest_ver and latest_ver != note.nas_ver:
+                            note.nas_ver = latest_ver
+                            await db.commit()
+                            nas_path = f"/note/ns/dv/{note.link_id}/{latest_ver}/{att_key}/{filename}"
+                            image_bytes, content_type = await service._notestation._client.fetch_binary(nas_path)
+                    except Exception:
+                        logger.debug("Could not refresh nas_ver for note %s", note_id)
+            finally:
+                await session.close()
+        except Exception as exc:
+            logger.exception("Failed to fetch NAS image: %s", exc)
+            raise HTTPException(status_code=502, detail="NAS 이미지 로드 실패") from exc
 
     if not image_bytes or (content_type and "text/html" in content_type):
         raise HTTPException(status_code=404, detail="Image not found on NAS")
+
+    # Detect NoteStation placeholder images (1x1 transparent GIF, ~43 bytes).
+    # These are returned for deleted or empty attachments.
+    if len(image_bytes) < _MIN_VALID_IMAGE_SIZE and image_bytes[:6] == b"GIF89a":
+        raise HTTPException(
+            status_code=404,
+            detail="Placeholder image (original deleted from NAS)",
+        )
 
     # Return with cache headers (images rarely change)
     return StreamingResponse(

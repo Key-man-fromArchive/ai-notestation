@@ -105,8 +105,12 @@ function ImagePlaceholder({
 }
 
 /**
- * Image component with loading/error states for NoteStation images.
+ * Image component with loading/error/retry states for NoteStation images.
+ * Automatically retries failed loads up to 2 times with exponential backoff,
+ * handling intermittent NAS overload when notes have many images.
  */
+const MAX_RETRIES = 2
+
 function NoteStationImage({
   src,
   alt,
@@ -119,6 +123,23 @@ function NoteStationImage({
   height?: string | number
 }) {
   const [status, setStatus] = React.useState<'loading' | 'loaded' | 'error'>('loading')
+  const retryCount = React.useRef(0)
+  const [retrySrc, setRetrySrc] = React.useState(src)
+
+  const handleError = React.useCallback(() => {
+    if (retryCount.current < MAX_RETRIES) {
+      retryCount.current += 1
+      const delay = retryCount.current * 2000 // 2s, 4s
+      setTimeout(() => {
+        // Append cache-buster to force re-fetch
+        const sep = src.includes('?') ? '&' : '?'
+        setRetrySrc(`${src}${sep}_retry=${retryCount.current}`)
+        setStatus('loading')
+      }, delay)
+    } else {
+      setStatus('error')
+    }
+  }, [src])
 
   return (
     <span className="relative inline-block my-3">
@@ -135,13 +156,13 @@ function NoteStationImage({
         />
       ) : (
         <img
-          src={src}
+          src={retrySrc}
           alt={alt}
           width={width}
           height={height}
           loading="lazy"
           onLoad={() => setStatus('loaded')}
-          onError={() => setStatus('error')}
+          onError={handleError}
           className={cn(
             'rounded-lg border border-border max-w-full h-auto',
             status === 'loading' && 'opacity-0'
