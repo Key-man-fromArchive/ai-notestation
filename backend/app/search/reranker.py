@@ -131,6 +131,9 @@ class CohereReranker(BaseReranker):
                         snippet=original.snippet,
                         score=float(item["relevance_score"]),
                         search_type="reranked",
+                        created_at=original.created_at,
+                        updated_at=original.updated_at,
+                        match_explanation=original.match_explanation,
                     )
                 )
 

@@ -59,6 +59,30 @@ textarea {
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* TipTap editor — restore list/blockquote styles stripped by Tailwind preflight */
+.tiptap ul {
+  list-style-type: disc;
+  padding-left: 1.5em;
+  margin: 0.5em 0;
+}
+
+.tiptap ol {
+  list-style-type: decimal;
+  padding-left: 1.5em;
+  margin: 0.5em 0;
+}
+
+.tiptap ul ul { list-style-type: circle; }
+.tiptap ul ul ul { list-style-type: square; }
+
+.tiptap blockquote {
+  border-left: 3px solid var(--color-primary);
+  padding-left: 1em;
+  margin: 0.5em 0;
+  color: var(--color-muted-foreground);
+  font-style: italic;
+}
+
 /* 애니메이션 줄이기 선호 사용자 지원 */
 @media (prefers-reduced-motion: reduce) {
   *,
