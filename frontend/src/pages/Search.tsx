@@ -8,13 +8,24 @@ import { useTranslation } from 'react-i18next'
 import DOMPurify from 'dompurify'
 import { useSearch } from '@/hooks/useSearch'
 import { useNotebooks } from '@/hooks/useNotebooks'
+import { useSearchRefine, type RefineResponse } from '@/hooks/useSearchRefine'
 import { SearchBar } from '@/components/SearchBar'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
 import { EmptyState } from '@/components/EmptyState'
 import { useSearchIndex } from '@/hooks/useSearchIndex'
-import { Search as SearchIcon, FileText, AlertCircle, Loader2, Filter, X, Sparkles, TextSearch, Calendar, Zap, Brain, Layers } from 'lucide-react'
+import { Search as SearchIcon, FileText, AlertCircle, Loader2, Filter, X, Sparkles, TextSearch, Calendar, Zap, Brain, Layers, Wand2, ArrowRight, Expand, Target, Link2, RotateCcw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useTimezone } from '@/hooks/useTimezone'
+
+const MAX_REFINE_TURNS = 4
+
+interface RefineHistoryItem {
+  query: string
+  strategy: string
+  reasoning: string
+  resultCount: number
+  turn: number
+}
 
 export default function Search() {
   const { t, i18n } = useTranslation()
@@ -25,6 +36,12 @@ export default function Search() {
   const [notebook, setNotebook] = useState(searchParams.get('notebook') || '')
   const [dateFrom, setDateFrom] = useState(searchParams.get('date_from') || '')
   const [dateTo, setDateTo] = useState(searchParams.get('date_to') || '')
+
+  // Refine state
+  const [refineFeedback, setRefineFeedback] = useState<string | null>(null)
+  const [customFeedback, setCustomFeedback] = useState('')
+  const [refineHistory, setRefineHistory] = useState<RefineHistoryItem[]>([])
+  const [refinedResults, setRefinedResults] = useState<RefineResponse | null>(null)
 
   const filters = useMemo(() => ({
     notebook: notebook || undefined,
@@ -43,6 +60,8 @@ export default function Search() {
     hasNextPage,
     isFetchingNextPage,
   } = useSearch(query, searchMode, filters)
+
+  const refine = useSearchRefine()
 
   const {
     indexedNotes,
@@ -94,6 +113,14 @@ export default function Search() {
     setSearchParams(params)
   }, [query, notebook, dateFrom, dateTo, setSearchParams])
 
+  // Reset refine state when query changes
+  useEffect(() => {
+    setRefineHistory([])
+    setRefinedResults(null)
+    setRefineFeedback(null)
+    setCustomFeedback('')
+  }, [query])
+
   const clearFilters = () => {
     setNotebook('')
     setDateFrom('')
@@ -104,6 +131,71 @@ export default function Search() {
   const allResults = data?.pages.flatMap((page) => page.results) ?? []
   const totalCount = data?.pages[0]?.total ?? 0
   const judgeInfo = data?.pages[0]?.judge_info
+
+  const currentTurn = refineHistory.length + 1
+  const canRefine = currentTurn <= MAX_REFINE_TURNS && allResults.length > 0
+
+  const handleRefine = useCallback(() => {
+    if (!canRefine) return
+
+    const feedback = customFeedback.trim() || refineFeedback || undefined
+    const currentQuery = refinedResults?.refined_query || query
+    const resultsForContext = refinedResults?.results?.length
+      ? refinedResults.results
+      : allResults
+
+    refine.mutate(
+      {
+        query: currentQuery,
+        results: resultsForContext.slice(0, 10).map((r) => ({
+          note_id: r.note_id,
+          title: r.title,
+          snippet: r.snippet,
+        })),
+        feedback: feedback,
+        search_type: searchMode,
+        turn: currentTurn,
+      },
+      {
+        onSuccess: (data) => {
+          setRefineHistory((prev) => [
+            ...prev,
+            {
+              query: data.refined_query,
+              strategy: data.strategy,
+              reasoning: data.reasoning,
+              resultCount: data.total,
+              turn: currentTurn,
+            },
+          ])
+          setRefinedResults(data)
+          setRefineFeedback(null)
+          setCustomFeedback('')
+        },
+      }
+    )
+  }, [canRefine, customFeedback, refineFeedback, refinedResults, query, allResults, refine, searchMode, currentTurn])
+
+  const handleHistoryClick = useCallback((index: number) => {
+    if (index === -1) {
+      // Go back to original
+      setRefineHistory([])
+      setRefinedResults(null)
+      return
+    }
+    // Truncate history to the clicked point
+    setRefineHistory((prev) => prev.slice(0, index + 1))
+    // We don't re-fetch here; just show the truncated history
+  }, [])
+
+  const strategyIcon = (strategy: string) => {
+    switch (strategy) {
+      case 'broaden': return <Expand className="h-3 w-3" />
+      case 'narrow': return <Target className="h-3 w-3" />
+      case 'related': return <Link2 className="h-3 w-3" />
+      default: return <RotateCcw className="h-3 w-3" />
+    }
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -337,6 +429,41 @@ export default function Search() {
               )}
             </div>
 
+            {/* 리파인 히스토리 */}
+            {refineHistory.length > 0 && (
+              <div className="flex items-center gap-2 mb-4 flex-wrap">
+                <span className="text-xs text-muted-foreground">{t('search.refineHistory')}:</span>
+                <button
+                  onClick={() => handleHistoryClick(-1)}
+                  className={cn(
+                    'inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs',
+                    'border border-border hover:bg-muted transition-colors',
+                    !refinedResults && 'bg-primary/10 border-primary/30 text-primary'
+                  )}
+                >
+                  {t('search.refineOriginal')}
+                </button>
+                {refineHistory.map((item, idx) => (
+                  <span key={idx} className="contents">
+                    <ArrowRight className="h-3 w-3 text-muted-foreground shrink-0" />
+                    <button
+                      onClick={() => handleHistoryClick(idx)}
+                      className={cn(
+                        'inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs',
+                        'border border-border hover:bg-muted transition-colors',
+                        idx === refineHistory.length - 1 && refinedResults && 'bg-primary/10 border-primary/30 text-primary'
+                      )}
+                      title={item.reasoning}
+                    >
+                      {strategyIcon(item.strategy)}
+                      <span className="max-w-[120px] truncate">{item.query}</span>
+                      <span className="text-muted-foreground">({item.resultCount})</span>
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+
             <ul className="space-y-3" role="list">
               {allResults.map((result) => (
                 <li key={result.note_id}>
@@ -423,6 +550,194 @@ export default function Search() {
                 <p className="text-sm text-muted-foreground">{t('search.results')}</p>
               )}
             </div>
+
+            {/* AI 추천 결과 */}
+            {refinedResults && refinedResults.results.length > 0 && (
+              <div className="mt-2 pt-4 border-t border-border">
+                <div className="flex items-center gap-2 mb-3">
+                  <Wand2 className="h-4 w-4 text-violet-600" />
+                  <h3 className="text-sm font-semibold text-violet-700">{t('search.refinedResults')}</h3>
+                  <span className="text-xs text-muted-foreground">
+                    {t('search.refineNewResults', { count: refinedResults.results.length })}
+                  </span>
+                </div>
+                <div className="mb-3 p-2.5 rounded-md bg-violet-50 border border-violet-200 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-violet-700">{t('search.refinedQuery')}:</span>
+                    <span className="text-violet-900">{refinedResults.refined_query}</span>
+                    <span className={cn(
+                      'inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium',
+                      'bg-violet-100 text-violet-700'
+                    )}>
+                      {strategyIcon(refinedResults.strategy)}
+                      {t(`search.refineStrategy_${refinedResults.strategy}`)}
+                    </span>
+                  </div>
+                  <div className="mt-1 text-violet-600">
+                    <span className="font-medium">{t('search.refineReasoning')}:</span> {refinedResults.reasoning}
+                  </div>
+                </div>
+                <ul className="space-y-3" role="list">
+                  {refinedResults.results.map((result) => (
+                    <li key={result.note_id}>
+                      <Link
+                        to={`/notes/${result.note_id}`}
+                        className={cn(
+                          'block p-4 border border-violet-200 rounded-lg',
+                          'hover:border-violet-300 hover:bg-violet-50/50 transition-colors duration-200',
+                          'motion-reduce:transition-none'
+                        )}
+                      >
+                        <div className="flex items-start gap-3">
+                          <FileText className="h-5 w-5 mt-0.5 shrink-0 text-violet-400" aria-hidden="true" />
+                          <div className="min-w-0 flex-1">
+                            <h3 className="font-semibold text-foreground mb-1 truncate">
+                              {result.title}
+                            </h3>
+                            <p
+                              className="text-sm text-muted-foreground line-clamp-2 [&_b]:font-semibold [&_b]:text-foreground"
+                              dangerouslySetInnerHTML={{
+                                __html: DOMPurify.sanitize(result.snippet, {
+                                  ALLOWED_TAGS: ['b'],
+                                }),
+                              }}
+                            />
+                            <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
+                              <span className="inline-flex items-center gap-1">
+                                <span
+                                  className={cn(
+                                    'inline-block h-1.5 w-1.5 rounded-full',
+                                    result.score >= 0.7 ? 'bg-green-500' :
+                                    result.score >= 0.4 ? 'bg-yellow-500' : 'bg-muted-foreground'
+                                  )}
+                                />
+                                {(result.score * 100).toFixed(0)}%
+                              </span>
+                              {result.created_at && (
+                                <span className="inline-flex items-center gap-1">
+                                  <Calendar className="h-3 w-3" />
+                                  {new Date(result.created_at).toLocaleDateString(i18n.language === 'ko' ? 'ko-KR' : 'en-US', { timeZone: timezone })}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* AI로 더 찾기 섹션 */}
+            {canRefine && (
+              <div className="mt-6 p-4 border border-dashed border-violet-300 rounded-lg bg-violet-50/50">
+                <div className="flex items-center gap-2 mb-3">
+                  <Wand2 className="h-4 w-4 text-violet-600" />
+                  <span className="text-sm font-semibold text-violet-700">
+                    {t('search.refineTitle')}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    ({currentTurn}/{MAX_REFINE_TURNS})
+                  </span>
+                </div>
+
+                {/* 퀵 피드백 버튼 */}
+                <div className="flex flex-wrap items-center gap-2 mb-3">
+                  <button
+                    onClick={() => setRefineFeedback(refineFeedback === 'broaden' ? null : 'broaden')}
+                    className={cn(
+                      'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
+                      'border',
+                      refineFeedback === 'broaden'
+                        ? 'bg-violet-100 border-violet-300 text-violet-700'
+                        : 'border-border hover:bg-muted text-muted-foreground'
+                    )}
+                  >
+                    <Expand className="h-3 w-3" />
+                    {t('search.refineBroaden')}
+                  </button>
+                  <button
+                    onClick={() => setRefineFeedback(refineFeedback === 'narrow' ? null : 'narrow')}
+                    className={cn(
+                      'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
+                      'border',
+                      refineFeedback === 'narrow'
+                        ? 'bg-violet-100 border-violet-300 text-violet-700'
+                        : 'border-border hover:bg-muted text-muted-foreground'
+                    )}
+                  >
+                    <Target className="h-3 w-3" />
+                    {t('search.refineNarrow')}
+                  </button>
+                  <button
+                    onClick={() => setRefineFeedback(refineFeedback === 'related' ? null : 'related')}
+                    className={cn(
+                      'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
+                      'border',
+                      refineFeedback === 'related'
+                        ? 'bg-violet-100 border-violet-300 text-violet-700'
+                        : 'border-border hover:bg-muted text-muted-foreground'
+                    )}
+                  >
+                    <Link2 className="h-3 w-3" />
+                    {t('search.refineRelated')}
+                  </button>
+                </div>
+
+                {/* 자유 텍스트 입력 + 실행 버튼 */}
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={customFeedback}
+                    onChange={(e) => setCustomFeedback(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleRefine()}
+                    placeholder={t('search.refineFeedbackPlaceholder')}
+                    className={cn(
+                      'flex-1 px-3 py-2 text-sm rounded-md',
+                      'border border-input bg-background',
+                      'focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400',
+                      'placeholder:text-muted-foreground'
+                    )}
+                  />
+                  <button
+                    onClick={handleRefine}
+                    disabled={refine.isPending}
+                    className={cn(
+                      'inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium',
+                      'bg-violet-600 text-white hover:bg-violet-700 transition-colors',
+                      'disabled:opacity-50 disabled:cursor-not-allowed'
+                    )}
+                  >
+                    {refine.isPending ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        {t('search.refining')}
+                      </>
+                    ) : (
+                      <>
+                        <Wand2 className="h-4 w-4" />
+                        {t('search.refineButton')}
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* 에러 표시 */}
+                {refine.isError && (
+                  <p className="mt-2 text-xs text-red-600">
+                    {refine.error instanceof Error ? refine.error.message : t('common.unknownError')}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* 최대 턴 도달 */}
+            {!canRefine && refineHistory.length >= MAX_REFINE_TURNS && (
+              <p className="mt-4 text-xs text-center text-muted-foreground">
+                {t('search.refineTurnLimit')}
+              </p>
+            )}
           </div>
         )}
       </div>

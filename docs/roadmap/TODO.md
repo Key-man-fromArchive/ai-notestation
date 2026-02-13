@@ -40,11 +40,11 @@
 - [x] Backend: 메트릭 로깅 (semantic 스킵 비율)
 - [x] Frontend: 적응형 검색 파라미터 UI
 
-### 1-3. Multi-turn Search Refinement `★★★★ 난이도`
-- [ ] Backend: SearchRefiner 모듈 (`search/refinement.py`)
-- [ ] Backend: 리파인 프롬프트 (`ai_router/prompts/search_refine.py`)
-- [ ] Backend: POST /search/refine 엔드포인트
-- [ ] Frontend: "AI로 더 찾기" 버튼 + 피드백 옵션
+### 1-3. Multi-turn Search Refinement `★★★★ 난이도` ✅
+- [x] Backend: SearchRefiner 모듈 (`search/refinement.py`)
+- [x] Backend: 리파인 프롬프트 (`ai_router/prompts/search_refine.py`)
+- [x] Backend: POST /search/refine 엔드포인트
+- [x] Frontend: "AI로 더 찾기" 버튼 + 피드백 옵션 + 리파인 히스토리
 
 ---
 

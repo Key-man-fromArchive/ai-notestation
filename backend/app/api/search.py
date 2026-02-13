@@ -362,6 +362,153 @@ async def search(
     )
 
 
+# ---------------------------------------------------------------------------
+# Refine endpoint (Multi-turn Search Refinement)
+# ---------------------------------------------------------------------------
+
+
+class RefineResultItem(BaseModel):
+    """A single result item sent for refinement context."""
+
+    note_id: str
+    title: str
+    snippet: str
+
+
+class RefineRequest(BaseModel):
+    """Request body for search query refinement."""
+
+    query: str
+    results: list[RefineResultItem]
+    feedback: str | None = None  # "broaden" | "narrow" | "related" | free text
+    search_type: SearchType = SearchType.search
+    turn: int = 1
+
+
+class RefineResponse(BaseModel):
+    """Response for search query refinement."""
+
+    results: list[SearchResultResponse]
+    refined_query: str
+    strategy: str
+    reasoning: str
+    query: str  # original query echo
+    search_type: str
+    total: int
+    turn: int
+    judge_info: JudgeInfoResponse | None = None
+
+
+@router.post("/refine", response_model=RefineResponse)
+async def refine_search(
+    request: RefineRequest,
+    req: Request,
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> RefineResponse:
+    """Refine search query using AI and re-execute search.
+
+    1. AI analyzes current results and generates improved query
+    2. Re-executes search with the refined query
+    3. Removes duplicates (by note_id) from original results
+    """
+    from app.api.ai import get_ai_router
+    from app.search.refinement import MAX_TURNS, SearchRefiner
+
+    username = current_user.get("username", "")
+    lang = get_language(req)
+    turn = min(request.turn, MAX_TURNS)
+
+    logger.info(
+        "Refine request: user=%s, query=%r, feedback=%s, turn=%d",
+        username,
+        request.query,
+        request.feedback,
+        turn,
+    )
+
+    # 1. AI refinement
+    ai_router = get_ai_router()
+    refiner = SearchRefiner(ai_router)
+    refinement = await refiner.refine_query(
+        original_query=request.query,
+        current_results=[
+            {"title": r.title, "snippet": r.snippet} for r in request.results
+        ],
+        user_feedback=request.feedback,
+        turn=turn,
+        lang=lang,
+    )
+
+    # 2. Re-search with refined query
+    api_key = await _get_openai_api_key(db, username)
+    search_type = request.search_type
+
+    if search_type == SearchType.exact:
+        engine = _build_exact_engine(db)
+    elif search_type == SearchType.semantic:
+        engine = _build_semantic_engine(db, api_key=api_key)
+    elif search_type == SearchType.fts:
+        engine = _build_fts_engine(db)
+    elif search_type == SearchType.trigram:
+        engine = _build_trigram_engine(db)
+    elif search_type == SearchType.hybrid:
+        engine = _build_hybrid_engine(db, api_key=api_key)
+    else:
+        engine = _build_unified_engine(db)
+
+    page: SearchPage = await engine.search(refinement.refined_query, limit=20)
+
+    # 3. Remove duplicates (note_ids already in original results)
+    existing_ids = {r.note_id for r in request.results}
+    unique_results = [r for r in page.results if r.note_id not in existing_ids]
+
+    return RefineResponse(
+        results=[
+            SearchResultResponse(
+                note_id=r.note_id,
+                title=r.title,
+                snippet=r.snippet,
+                score=r.score,
+                search_type=r.search_type,
+                created_at=r.created_at,
+                updated_at=r.updated_at,
+                match_explanation=MatchExplanationResponse(
+                    engines=[
+                        EngineContributionResponse(
+                            engine=e.engine,
+                            rank=e.rank,
+                            raw_score=e.raw_score,
+                            rrf_score=e.rrf_score,
+                        )
+                        for e in r.match_explanation.engines
+                    ],
+                    matched_terms=r.match_explanation.matched_terms,
+                    combined_score=r.match_explanation.combined_score,
+                )
+                if r.match_explanation
+                else None,
+            )
+            for r in unique_results
+        ],
+        refined_query=refinement.refined_query,
+        strategy=refinement.strategy,
+        reasoning=refinement.reasoning,
+        query=request.query,
+        search_type=search_type.value,
+        total=len(unique_results),
+        turn=turn,
+        judge_info=JudgeInfoResponse(
+            strategy=page.judge_info.strategy,
+            engines=page.judge_info.engines,
+            skip_reason=page.judge_info.skip_reason,
+            confidence=page.judge_info.confidence,
+        )
+        if page.judge_info
+        else None,
+    )
+
+
 @router.get("/suggestions", response_model=SuggestionResponse)
 async def search_suggestions(
     prefix: str = Query(..., min_length=1, max_length=100, description="Search prefix"),  # noqa: B008
