@@ -1362,6 +1362,8 @@ function VisionModelSection() {
         <option value="glm-4.6v">GLM-4.6V (ZhipuAI)</option>
         <option value="glm-4.6v-flash">GLM-4.6V Flash (ZhipuAI, {t('settings.visionModelFree')})</option>
         <option value="glm-4.5v">GLM-4.5V (ZhipuAI)</option>
+        <option value="claude-sonnet-4-5">Claude Sonnet 4.5 (Anthropic)</option>
+        <option value="claude-haiku-4-5">Claude Haiku 4.5 (Anthropic)</option>
         <option value="gpt-4o">GPT-4o (OpenAI)</option>
         <option value="gemini-2.0-flash">Gemini 2.0 Flash (Google)</option>
       </select>
