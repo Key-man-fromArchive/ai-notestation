@@ -180,7 +180,10 @@ export function DiscoveryGraph({
             typeof link.weight === 'number' ? link.weight : 1
           return Math.sqrt(weight)
         }}
-        linkColor={() => '#e5e7eb'}
+        linkColor={(link: GraphLinkObject) => {
+          const weight = typeof link.weight === 'number' ? link.weight : 0
+          return weight > 0.5 ? '#93c5fd' : '#e5e7eb'
+        }}
         onNodeClick={handleNodeClick}
         width={dimensions.width}
         height={dimensions.height}

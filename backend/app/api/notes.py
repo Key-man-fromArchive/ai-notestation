@@ -35,6 +35,7 @@ from app.database import async_session_factory, get_db
 from app.models import Note, NoteAttachment, NoteImage
 from app.services.activity_log import get_trigger_name, log_activity
 from app.services.auth_service import get_current_user
+from app.services.related_notes import RelatedNotesService
 from app.synology_gateway.client import SynologyApiError, SynologyClient
 from app.synology_gateway.notestation import NoteStationService
 from app.utils.datetime_utils import datetime_to_iso, unix_to_iso
@@ -126,6 +127,18 @@ class NotebooksListResponse(BaseModel):
     """List of notebooks."""
 
     items: list[NotebookItem]
+
+
+class RelatedNoteItemResponse(BaseModel):
+    note_id: str
+    title: str
+    snippet: str
+    similarity: float
+    notebook: str | None = None
+
+
+class RelatedNotesResponse(BaseModel):
+    items: list[RelatedNoteItemResponse]
 
 
 # ---------------------------------------------------------------------------
@@ -745,6 +758,35 @@ async def get_note(
             nas_attachments=att_lookup if att_lookup else None,
         ),
         attachments=attachments,
+    )
+
+
+@router.get("/notes/{note_id}/related", response_model=RelatedNotesResponse)
+async def get_related_notes(
+    note_id: str,
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    limit: int = Query(default=5, ge=1, le=20),
+) -> RelatedNotesResponse:
+    """Return notes semantically related to the given note."""
+    service = RelatedNotesService(db)
+    try:
+        items = await service.get_related(note_id=note_id, limit=limit)
+    except Exception:
+        logger.exception("Related notes query failed for %s", note_id)
+        return RelatedNotesResponse(items=[])
+
+    return RelatedNotesResponse(
+        items=[
+            RelatedNoteItemResponse(
+                note_id=item.note_id,
+                title=item.title,
+                snippet=item.snippet,
+                similarity=item.similarity,
+                notebook=item.notebook,
+            )
+            for item in items
+        ]
     )
 
 

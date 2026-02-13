@@ -4,7 +4,7 @@
 
 import { useCallback, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Notebook, Tag, Paperclip, Image, File, AlertCircle, Calendar, Share2, AlertTriangle, CloudOff, CloudUpload, CloudDownload, Loader2, Check, Sparkles, X, Plus, Wand2 } from 'lucide-react'
+import { ArrowLeft, Notebook, Tag, Paperclip, Image, File, AlertCircle, Calendar, Share2, AlertTriangle, CloudOff, CloudUpload, CloudDownload, Loader2, Check, Sparkles, X, Plus, Wand2, Link2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { apiClient } from '@/lib/api'
 import { useNote } from '@/hooks/useNote'
@@ -18,6 +18,7 @@ import { ConflictDialog } from '@/components/ConflictDialog'
 import { useConflicts } from '@/hooks/useConflicts'
 import { useTimezone, formatDateWithTz } from '@/hooks/useTimezone'
 import { useAutoTagNote } from '@/hooks/useAutoTag'
+import { useRelatedNotes } from '@/hooks/useRelatedNotes'
 
 export default function NoteDetail() {
   const { t } = useTranslation()
@@ -34,6 +35,7 @@ export default function NoteDetail() {
   const { conflicts } = useConflicts()
   const timezone = useTimezone()
   const autoTagNote = useAutoTagNote()
+  const { data: relatedData, isLoading: relatedLoading } = useRelatedNotes(id)
   const [summarizeState, setSummarizeState] = useState<'idle' | 'loading' | 'preview'>('idle')
   const [suggestedTitle, setSuggestedTitle] = useState('')
   const [suggestedTags, setSuggestedTags] = useState<string[]>([])
@@ -488,6 +490,54 @@ export default function NoteDetail() {
             onAutoSave={handleAutoSave}
           />
         </article>
+
+        {/* 관련 노트 */}
+        {(relatedData?.items?.length ?? 0) > 0 && (
+          <section className="border-t border-border pt-6 mb-8">
+            <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
+              <Link2 className="h-5 w-5" aria-hidden="true" />
+              {t('relatedNotes.title')}
+              <span className="text-sm font-normal text-muted-foreground">
+                ({relatedData!.items.length})
+              </span>
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {relatedData!.items.map((item) => (
+                <button
+                  key={item.note_id}
+                  onClick={() => navigate(`/notes/${item.note_id}`)}
+                  className="flex flex-col gap-1.5 rounded-lg border border-border bg-muted/30 px-4 py-3 text-left hover:bg-muted/60 hover:border-primary/30 transition-colors"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-medium text-foreground truncate">
+                      {item.title || t('notes.unknown')}
+                    </span>
+                    <span className="shrink-0 text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
+                      {t('relatedNotes.similarity', { percent: Math.round(item.similarity * 100) })}
+                    </span>
+                  </div>
+                  {item.snippet && (
+                    <p className="text-xs text-muted-foreground line-clamp-2">{item.snippet}</p>
+                  )}
+                  {item.notebook && (
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground/70">
+                      <Notebook className="h-3 w-3" />
+                      <span>{item.notebook}</span>
+                    </div>
+                  )}
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
+        {relatedLoading && (
+          <section className="border-t border-border pt-6 mb-8">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              {t('relatedNotes.loading')}
+            </div>
+          </section>
+        )}
 
         {/* 첨부파일 */}
         {(note.attachments?.length ?? 0) > 0 && (

@@ -9,7 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models import Note, Notebook, NoteCluster
+from app.models import Note, Notebook, NoteCluster, NoteEmbedding
 from app.services.auth_service import get_current_user
 from app.services.clustering import get_cached_clusters
 from app.services.notebook_access_control import check_notebook_access
@@ -190,6 +190,48 @@ async def get_graph_data(
             for i, nid1 in enumerate(cluster_notes):
                 for nid2 in cluster_notes[i + 1 :]:
                     links.append(GraphLink(source=nid1, target=nid2, weight=0.5))
+
+    # Add similarity-based edges from embeddings
+    if len(nodes) > 1:
+        node_ids_list = [n.id for n in nodes]
+        try:
+            import numpy as np
+
+            emb_stmt = (
+                select(NoteEmbedding.note_id, NoteEmbedding.embedding)
+                .where(NoteEmbedding.note_id.in_(node_ids_list))
+            )
+            emb_result = await db.execute(emb_stmt)
+            emb_rows = emb_result.all()
+
+            # Average embeddings per note (for multi-chunk)
+            note_vectors: dict[int, list] = {}
+            for nid, emb in emb_rows:
+                note_vectors.setdefault(nid, []).append(np.array(emb, dtype=np.float32))
+
+            centroids: dict[int, np.ndarray] = {}
+            for nid, vecs in note_vectors.items():
+                centroids[nid] = np.mean(vecs, axis=0)
+
+            # Compute pairwise cosine similarities
+            existing_edges = {(lk.source, lk.target) for lk in links} | {(lk.target, lk.source) for lk in links}
+            centroid_ids = list(centroids.keys())
+            sim_threshold = 0.4
+
+            for i, nid1 in enumerate(centroid_ids):
+                for nid2 in centroid_ids[i + 1 :]:
+                    if (nid1, nid2) in existing_edges:
+                        continue
+                    v1, v2 = centroids[nid1], centroids[nid2]
+                    dot = float(np.dot(v1, v2))
+                    norm = float(np.linalg.norm(v1) * np.linalg.norm(v2))
+                    if norm == 0:
+                        continue
+                    similarity = dot / norm
+                    if similarity >= sim_threshold:
+                        links.append(GraphLink(source=nid1, target=nid2, weight=round(similarity, 3)))
+        except Exception:
+            logger.debug("Could not compute similarity edges", exc_info=True)
 
     return GraphDataResponse(nodes=nodes, links=links, total_notes=total_notes)
 

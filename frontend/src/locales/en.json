@@ -192,6 +192,14 @@
     "clearTagFilter": "Clear tag filter",
     "untaggedNotes": "{{count}} untagged"
   },
+  "relatedNotes": {
+    "title": "Related Notes",
+    "empty": "No related notes found",
+    "emptyDesc": "Related notes will appear after embedding indexing",
+    "similarity": "{{percent}}% similar",
+    "viewNote": "View note",
+    "loading": "Finding related notes..."
+  },
   "notebooks": {
     "title": "Notebooks",
     "newNotebook": "New Notebook",

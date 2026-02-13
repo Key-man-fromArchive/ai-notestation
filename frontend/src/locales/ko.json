@@ -192,6 +192,14 @@
     "clearTagFilter": "태그 필터 해제",
     "untaggedNotes": "미태깅 {{count}}개"
   },
+  "relatedNotes": {
+    "title": "관련 노트",
+    "empty": "관련 노트가 없습니다",
+    "emptyDesc": "임베딩 인덱싱 후 유사한 노트를 찾아드립니다",
+    "similarity": "유사도 {{percent}}%",
+    "viewNote": "노트 보기",
+    "loading": "관련 노트 검색 중..."
+  },
   "notebooks": {
     "title": "노트북",
     "newNotebook": "새 노트북",
