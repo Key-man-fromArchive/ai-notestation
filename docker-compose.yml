@@ -13,7 +13,7 @@ services:
       POSTGRES_USER: labnote
       POSTGRES_PASSWORD: labnote
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - ./data/pgdata:/var/lib/postgresql/data
     ports:
       - "5432:5432"
     healthcheck:
@@ -45,10 +45,10 @@ services:
         condition: service_healthy
     volumes:
       - ./backend:/app
-      - nsx_images:/data/nsx_images
-      - nsx_exports:/data/nsx_exports
-      - uploads:/data/uploads
-      - paddle_models:/root/.paddleocr
+      - ./data/nsx_images:/data/nsx_images
+      - ./data/nsx_exports:/data/nsx_exports
+      - ./data/uploads:/data/uploads
+      - ./data/paddle_models:/root/.paddleocr
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     restart: unless-stopped
     networks:
@@ -71,12 +71,8 @@ services:
     networks:
       - labnote-net
 
-volumes:
-  pgdata:
-  nsx_images:
-  nsx_exports:
-  uploads:
-  paddle_models:
+## Data is stored in ./data/ (bind mounts) — survives `docker compose down -v`
+## To truly reset: rm -rf ./data/
 
 networks:
   labnote-net:

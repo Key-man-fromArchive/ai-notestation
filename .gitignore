@@ -41,7 +41,8 @@ frontend/dist/
 Thumbs.db
 Desktop.ini
 
-# Docker
+# Docker persistent data (bind mounts)
+data/
 pgdata/
 
 # Logs
