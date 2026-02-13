@@ -1,220 +1,206 @@
 <p align="right">
-  <a href="README.md"><img src="https://img.shields.io/badge/🌐_한국어-여기_클릭-blue?style=for-the-badge&logoColor=white" alt="Korean Version" /></a>
+  <a href="README.md"><img src="https://img.shields.io/badge/한국어-blue?style=flat-square" alt="Korean" /></a>
 </p>
 
-<p align="center">
-  <h1 align="center">LabNote AI</h1>
-  <p align="center">
-    <strong>An AI research platform that brings your Synology NAS notes to life</strong>
+# LabNote AI
 
-  AI-powered note-taking for Synology Note Station, Synology NAS, Note Station, LLM integration synology, note-station, nas, llm, ai-notes, note-taking, obsidian-like
-  </p>
-  <p align="center">
-    <a href="#quickstart">Quick Start</a> · <a href="#features">Features</a> · <a href="#architecture">Architecture</a> · <a href="#api">API Docs</a>
-  </p>
-</p>
+**A self-hosted research platform that integrates AI search, analysis, and knowledge discovery into Synology NAS notes**
 
-<p align="center">
-  <img src="https://img.shields.io/badge/version-1.2.0-blue?style=for-the-badge" alt="v1.2.0" />
-  <img src="https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI" />
-  <img src="https://img.shields.io/badge/React_19-61DAFB?style=for-the-badge&logo=react&logoColor=black" alt="React 19" />
-  <img src="https://img.shields.io/badge/PostgreSQL_16-4169E1?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL" />
-  <img src="https://img.shields.io/badge/pgvector-336791?style=for-the-badge&logo=postgresql&logoColor=white" alt="pgvector" />
-  <img src="https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker" />
-  <img src="https://img.shields.io/badge/TailwindCSS-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white" alt="TailwindCSS" />
+<p align="left">
+  <img src="https://img.shields.io/badge/version-1.2.0-blue?style=flat-square" alt="v1.2.0" />
+  <img src="https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" />
+  <img src="https://img.shields.io/badge/React_19-61DAFB?style=flat-square&logo=react&logoColor=black" alt="React 19" />
+  <img src="https://img.shields.io/badge/PostgreSQL_16-4169E1?style=flat-square&logo=postgresql&logoColor=white" alt="PostgreSQL" />
+  <img src="https://img.shields.io/badge/pgvector-336791?style=flat-square&logo=postgresql&logoColor=white" alt="pgvector" />
+  <img src="https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker" />
 </p>
 
 ---
 
-## Why LabNote AI?
+## Overview
 
-Synology NoteStation is a great note-taking tool. But once you've accumulated hundreds or thousands of notes, have you ever thought **"I know I wrote it down somewhere..."** and just couldn't find it?
+LabNote AI is a web application that combines Synology NoteStation notes with a hybrid search engine, multiple AI providers, and knowledge graph visualization. It operates on existing notes stored on the user's NAS, employing a self-hosted architecture that requires no external cloud dependency.
 
-LabNote AI imports your NoteStation notes and adds **AI-powered search**, **insight extraction**, **research note writing**, and **knowledge graph visualization**. Your dormant notes finally become **living, actionable knowledge**.
+> Full stack deployment with a single command: `docker compose up -d`
 
-> Get started with a single command: `docker compose up -d`
-
-<p align="center">
-  <img src="docs/screenshots/dashboard.png" alt="Dashboard" width="800" />
-</p>
+See [CHANGELOG.md](CHANGELOG.md) for version history.
 
 ---
 
-## What's New in v1.2.0
+## Features
 
-### Always-Editable Notes with Auto-Save
-Notes now feel like a real notebook, not a bulletin board. No more clicking "Edit" — just open and start writing.
+### 1. Hybrid Search Engine
 
-- **Always editable**: Editor is active the moment you open a note
-- **Auto-save**: Saves automatically 3 seconds after you stop typing
-- **Periodic save**: Saves every 30 seconds during continuous editing
-- **Save on navigate**: Auto-saves when leaving the page
-- **Ctrl+S**: Manual save still works
-- **Status indicator**: Subtle "Saved" / "Saving..." / "Save failed" in the footer
+Three search methods are combined within a single PostgreSQL instance, supporting both keyword and semantic search without a separate vector database.
 
-### Note Editor UX Improvements
-- Real-time word/character count updates
-- Toolbar active state reflects current formatting
-- New "Create Note" UI with notebook selection
-- Local-only notes can now be synced to NAS
-- Login page language selector
+| Method | Engine | Description |
+|--------|--------|-------------|
+| Full-Text Search (FTS) | tsvector + BM25 | Precise keyword matching with Korean morphological analysis |
+| Fuzzy Search | pg_trgm | Typo-tolerant string similarity matching |
+| Semantic Search | pgvector + Embeddings | Discovers notes with similar meaning and context |
 
----
+FTS + Trigram results are merged via **Reciprocal Rank Fusion (RRF)** for the primary search. Semantic search operates on the AI Librarian page through natural language queries.
 
-## What's New in v1.1.0
+**Adaptive Search**: A JUDGE module evaluates FTS result coverage and automatically skips unnecessary embedding calls when coverage is sufficient, optimizing both speed and cost.
 
-### Internationalization (i18n)
-- **Korean / English** UI switching — full frontend + backend i18n via react-i18next
-- 15+ files, ~150 translation keys applied
+**Search Result Explanation (Why this matched)**: Each result displays the contributing engine, keyword highlights, and similarity scores, providing transparent justification for rankings.
 
-### Search Parameter Tuning UI
-- **12 search algorithm parameters** adjustable directly from the UI (weights, thresholds, RRF k, etc.)
-- Search parameter help modal — visual guide for each parameter's role and recommended values
+**Multi-turn Search Refinement**: When initial results are insufficient, the AI automatically expands or narrows queries for additional searches. Supports iterative improvement based on user feedback.
 
-### NAS Image Sync Stabilization
-- Editor display + push round-trip stabilization
-- Automatic extraction fix for large data URI images (365KB+)
+**12-Parameter Search Tuning**: Weights, thresholds, and RRF k values are adjustable directly from the UI, with per-parameter documentation and recommended values.
 
-### Other Fixes
-- i18n TypeScript build error fixes
-- Settings.tsx missing useEffect import fix
-
----
-
-<h2 id="features">Features</h2>
-
-### 1. Search — Keyword Search & AI Semantic Search
-
-| Mode | Engine | Description |
-|------|--------|-------------|
-| **Full-Text Search (FTS)** | PostgreSQL tsvector + BM25 | Precise keyword matching with Korean morphological analysis |
-| **Fuzzy Search (Trigram)** | pg_trgm | Typo-tolerant string similarity matching |
-| **Semantic Search** | pgvector + OpenAI Embeddings | Finds notes with similar meaning and context (AI Librarian) |
-
-The main search merges FTS + Trigram results using RRF (Reciprocal Rank Fusion) for fast, accurate keyword search. Semantic search is available on the AI Librarian page for natural language queries.
-
-**New in v1.1.0**: 12-parameter search algorithm tuning UI with a help modal. Adjust weights, thresholds, and RRF k values directly to optimize search quality.
-
-<p align="center">
-  <img src="docs/screenshots/search.png" alt="Search" width="800" />
-</p>
-
-### 2. AI Analysis — 4 AI Providers, One Interface
+### 2. Multi-Provider AI Integration
 
 ```
 OpenAI · Anthropic · Google · ZhipuAI
 ```
 
-Register a single API key and start using AI instantly. Register multiple providers simultaneously and **switch models freely**. Responses stream in real time via SSE. Anthropic supports OAuth integration with 8 models (Claude Opus 4.6 through Claude 3 Haiku).
+API keys registered via environment variables are auto-detected and corresponding providers are activated. Multiple providers can be used simultaneously with free model switching. Responses are delivered in real time via SSE streaming.
 
-**5 AI Features** — available on the AI Analysis page and directly from the **Note Detail page**:
+**5 AI Tasks**:
 
-| Feature | Description |
-|---------|-------------|
-| **Insight** | Automatically extract key insights from notes |
-| **Search QA** | Question-answering based on search results |
-| **Writing Assist** | Research note draft writing assistance |
-| **Proofreading** | Spelling and grammar correction |
-| **Templates** | Generate note templates for specific purposes |
+| Task | Description |
+|------|-------------|
+| Insight | Automatic extraction of key insights from notes |
+| Search QA | Question-answering based on search results |
+| Writing Assist | Research note draft writing assistance |
+| Proofreading | Spelling and grammar correction |
+| Templates | Purpose-specific note template generation |
 
-Also supports multimodal image analysis and automatic title/tag generation.
+Multimodal image analysis and automatic title/tag generation are also supported.
 
-<p align="center">
-  <img src="docs/screenshots/note-ai-panel.png" alt="Note AI Analysis Panel" width="800" />
-</p>
+### 3. AI Quality Assurance System
 
-### 3. AI Librarian — Ask in Natural Language, Get Answers from Your Notes
+AI response reliability is verified through three mechanisms.
 
-Instead of keywords, **ask a question** in the search bar.
+- **Checklist-Based Quality Gate**: Decomposes each task into verifiable checklist items and performs self-evaluation after generation. Items that fail evaluation trigger automatic regeneration.
+- **Search QA Dual Evaluation**: Evaluates QA responses for Correctness and Utility independently, displaying confidence badges (High / Medium / Low).
+- **Streaming Quality Monitor**: Detects language mismatches, repetition patterns, and format deviations during SSE streaming in real time, triggering early termination and regeneration.
 
-> *"What was the migration schedule we discussed in last month's meeting?"*
+### 4. Content Intelligence
 
-The AI Librarian uses semantic search to find relevant notes and displays results with relevance scores. Monitor indexing status in real time, and trigger re-indexing directly from the UI when needed.
+Automatically discovers relationships between notes and supports classification.
 
-<p align="center">
-  <img src="docs/screenshots/librarian.png" alt="AI Librarian" width="800" />
-</p>
+- **AI Auto-Tagging**: AI generates tags automatically upon note creation or synchronization. Supports individual and batch tagging with manual editing. Tag-based filtering is available on Notes and Search pages.
+- **Related Notes Discovery**: Recommends related notes based on pgvector cosine similarity. Reflected in the note detail side panel and knowledge graph.
+- **Forgotten Note Rediscovery**: Automatically surfaces old but contextually relevant notes on the Dashboard. Combines daily recommendations with context-based suggestions.
 
-### 4. Knowledge Graph — Discover Hidden Connections Between Notes
+### 5. Multimodal Processing
 
-A **force-directed graph** visually reveals similarity between notes. Connection lines are computed using pgvector-based cosine similarity, letting you see your knowledge network at a glance.
+Extracts searchable text from non-text content.
 
-- **Global Graph**: A map of all note relationships (Obsidian-style)
-- **Discovery**: AI clustering by notebook — automatically groups similar notes, with AI cluster insights
+- **PDF Text Extraction**: Extracts text from PDF attachments using pymupdf, feeding results into the embedding pipeline.
+- **OCR Pipeline**: Extracts text from images via AI Vision models or the PaddleOCR-VL local engine. Results are automatically indexed for search. Individual image OCR is accessible via right-click context menu, with results displayed in markdown format.
+
+### 6. AI Librarian
+
+Enter natural language questions instead of keywords in the search bar. The AI Librarian uses semantic search to find relevant notes and returns results with relevance scores. Indexing status is monitored in real time, and re-indexing can be triggered directly from the UI.
+
+### 7. Knowledge Graph
+
+A force-directed graph visually represents inter-note similarity.
+
+- **Global Graph**: Relationship map of all notes (Obsidian-style)
+- **Discovery**: AI clustering by notebook — automatically groups similar notes with cluster insights
 - Adjustable similarity threshold (30%–95%) and note count (50–500)
-- Auto-refresh after indexing completes
 
-<p align="center">
-  <img src="docs/screenshots/graph.png" alt="Knowledge Graph" width="800" />
-</p>
+### 8. Synology NAS Integration
 
-### 5. Full Synology NAS Integration
+- **Bidirectional Sync**: Pull & Push synchronization of NoteStation note/notebook structures
+- **Image Sync**: Extract and display attached images from FileStation
+- **NSX Import**: Direct import of NoteStation export files (.nsx)
+- Sync status tracking with change logging (added / modified / deleted)
 
-- **Bidirectional Sync**: Import note/notebook structure directly from NoteStation (Pull & Push)
-- **Image Sync**: Extract and display attached images from FileStation, with stabilized NAS image round-trip
-- **NSX Import**: Directly import NoteStation export files (.nsx)
-- Sync status tracking with detailed change logging (added/modified/deleted)
+### 9. Note Editor
 
-### 6. Note Sharing — Share with a Single Link
+Provides a Tiptap-based rich text editor.
 
-Generate token-based public links. Set expiration (1 day / 7 days / 30 days / unlimited) and revoke anytime. Provides a public view accessible to anyone without login.
+- Notes are immediately editable upon opening (always-edit mode)
+- Auto-save: 3-second debounce, 30-second periodic, save-on-navigate
+- Real-time word/character count display
+- Local notes can be synced to NAS
 
-### 7. OAuth Integration — Use Your Existing Subscriptions
+### 10. Note Sharing
+
+Generate token-based public links with configurable expiration (1 day / 7 days / 30 days / unlimited), revocable at any time. Provides a public view accessible without authentication.
+
+### 11. OAuth Integration
 
 | Provider | Method | Benefit |
 |----------|--------|---------|
-| **Google** | OAuth 2.0 | Use Gemini with your own Google API quota |
-| **OpenAI** | PKCE Flow | Make API calls with your ChatGPT Plus/Pro subscription |
+| Google | OAuth 2.0 | Use Gemini with your own Google API quota |
+| OpenAI | PKCE Flow | Make API calls with your ChatGPT Plus/Pro subscription |
 
-No separate API keys needed — leverage **subscriptions you're already paying for**. Tokens are securely stored with Fernet encryption.
+Leverages existing subscriptions without separate API keys. Tokens are stored with Fernet encryption.
 
-### 8. Admin Dashboard & Operations Console
+### 12. Administration & Collaboration
 
-**Admin Dashboard** — System status at a glance:
+**Admin Dashboard**: User/note/embedding/storage statistics, per-table DB details, NAS and LLM provider monitoring.
 
-- User count, note count, embedding count, storage usage
-- Per-table database statistics (row count, size, indexes)
-- User management (roles: Owner / Admin / Member / Viewer)
-- NAS connection status and LLM provider monitoring
+**Operations Console**: One-click NAS sync and embedding indexing, search engine availability monitoring, activity logs across 10 categories.
 
-**Operations Console** — Real-time operational management:
+**Team Collaboration**: 4-tier role system (Owner → Admin → Member → Viewer), email invitation-based member management, signup approval and account management.
 
-- One-click trigger for NAS sync and embedding indexing
-- Search engine availability monitoring (FTS / Semantic / Hybrid)
-- Activity logs across 10 categories (sync, embedding, auth, note, etc.)
+### 13. Internationalization
 
-### 9. Team Collaboration
-
-- **Multi-role system**: Owner → Admin → Member → Viewer
-- Email invitation-based member management
-- Role-based permission separation (settings changes require Admin or above)
-- Signup approval and account activation/deactivation
-
-### 10. Internationalization (i18n)
-
-- **Korean / English** UI switching — automatic browser language detection
-- react-i18next-based frontend + backend message internationalization
-- Language can be changed from the settings page
+Supports Korean/English UI switching with automatic browser language detection. Manual override is available in the settings page. Frontend and backend messages are internationalized via react-i18next.
 
 ---
 
 ## Tech Stack
 
-| Area | Technology | Rationale |
-|------|-----------|-----------|
-| **Backend** | FastAPI + SQLAlchemy 2.0 (async) | High-performance async, automatic OpenAPI docs |
-| **Frontend** | React 19 + Vite + TailwindCSS + shadcn/ui | Latest React, fast builds, consistent design |
-| **Database** | PostgreSQL 16 + pgvector | Native vector search — no separate vector DB needed |
-| **AI** | OpenAI, Anthropic, Google, ZhipuAI | Multi-provider — no vendor lock-in |
-| **Auth** | JWT + OAuth 2.0 (Google, OpenAI PKCE) | Token-based auth + external AI subscription reuse |
-| **Search** | tsvector + pgvector + RRF | Keyword and semantic search in a single database |
-| **Infra** | Docker Compose (3 containers) | Full stack deployment with a single command |
-| **Visualization** | react-force-graph-2d | Interactive knowledge graph |
-| **i18n** | react-i18next | Frontend multilingual support |
+| Area | Technology | Notes |
+|------|-----------|-------|
+| Backend | FastAPI + SQLAlchemy 2.0 (async) | Async high-performance, auto OpenAPI docs |
+| Frontend | React 19 + Vite + TailwindCSS + shadcn/ui | Code splitting, virtualized lists |
+| Database | PostgreSQL 16 + pgvector | Native vector search support |
+| AI | OpenAI, Anthropic, Google, ZhipuAI | Multi-provider, vendor-agnostic |
+| Auth | JWT + OAuth 2.0 (Google, OpenAI PKCE) | Token-based authentication |
+| Search | tsvector + pg_trgm + pgvector + RRF | Single-DB hybrid search |
+| Infra | Docker Compose (3 containers) | Single-command deployment |
+| Visualization | react-force-graph-2d | Interactive knowledge graph |
+| i18n | react-i18next | Multilingual support |
 
 ---
 
-<h2 id="quickstart">Quick Start</h2>
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        Frontend (React 19)                  │
+│  ┌──────────┬──────────┬───────────┬──────────┬──────────┐  │
+│  │Dashboard │  Notes   │  Search   │    AI    │  Graph   │  │
+│  │          │ Notebooks│ Librarian │ Analysis │Discovery │  │
+│  └──────────┴──────────┴───────────┴──────────┴──────────┘  │
+│         TanStack Query  ·  SSE Streaming  ·  shadcn/ui      │
+└─────────────────────────┬───────────────────────────────────┘
+                          │ REST API + SSE
+┌─────────────────────────┴───────────────────────────────────┐
+│                      Backend (FastAPI)                       │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │  API Layer: auth · notes · search · ai · sync · ...  │   │
+│  ├──────────────────────────────────────────────────────┤   │
+│  │  AI Router ─── OpenAI │ Anthropic │ Google │ ZhipuAI │   │
+│  ├──────────────────────────────────────────────────────┤   │
+│  │  Search Engine ─── FTS + Trigram + Semantic (RRF)    │   │
+│  ├──────────────────────────────────────────────────────┤   │
+│  │  Quality Gate ─── Checklist │ QA Eval │ Stream Mon   │   │
+│  ├──────────────────────────────────────────────────────┤   │
+│  │  Synology Gateway ─── NoteStation + FileStation API  │   │
+│  └──────────────────────────────────────────────────────┘   │
+└─────────────────────────┬───────────────────────────────────┘
+                          │
+          ┌───────────────┼───────────────┐
+          ▼               ▼               ▼
+┌──────────────┐ ┌──────────────┐ ┌──────────────┐
+│ PostgreSQL   │ │ Synology NAS │ │  AI Provider │
+│ 16 + pgvec  │ │ NoteStation  │ │   APIs (4)   │
+└──────────────┘ └──────────────┘ └──────────────┘
+```
+
+---
+
+## Quick Start
 
 ### Prerequisites
 
@@ -232,9 +218,9 @@ cd labnote-ai
 bash install.sh
 ```
 
-Follow the prompts to enter your NAS address and AI API keys (press Enter to skip). After completion, sign up at http://localhost:3000 to start using the app.
+Follow the prompts to enter your NAS address and AI API keys (press Enter to skip). After completion, sign up at http://localhost:3000 to start using the application.
 
-> **Non-interactive mode**: `bash install.sh -y` — installs with defaults, no prompts. You can add NAS and AI keys later by editing the `.env` file or through the web UI settings.
+> **Non-interactive mode**: `bash install.sh -y` — installs with defaults, no prompts. NAS and AI keys can be added later by editing `.env` or through the web UI settings.
 
 <details>
 <summary><strong>Manual Installation</strong></summary>
@@ -278,41 +264,6 @@ npm run dev
 
 ---
 
-<h2 id="architecture">Architecture</h2>
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        Frontend (React 19)                  │
-│  ┌──────────┬──────────┬───────────┬──────────┬──────────┐  │
-│  │Dashboard │  Notes   │  Search   │    AI    │  Graph   │  │
-│  │          │ Notebooks│ Librarian │ Analysis │Discovery │  │
-│  └──────────┴──────────┴───────────┴──────────┴──────────┘  │
-│         TanStack Query  ·  SSE Streaming  ·  shadcn/ui      │
-└─────────────────────────┬───────────────────────────────────┘
-                          │ REST API + SSE
-┌─────────────────────────┴───────────────────────────────────┐
-│                      Backend (FastAPI)                       │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │  API Layer: auth · notes · search · ai · sync · ...  │   │
-│  ├──────────────────────────────────────────────────────┤   │
-│  │  AI Router ─── OpenAI │ Anthropic │ Google │ ZhipuAI │   │
-│  ├──────────────────────────────────────────────────────┤   │
-│  │  Search Engine ─── FTS (tsvector) + Semantic (pgvec) │   │
-│  ├──────────────────────────────────────────────────────┤   │
-│  │  Synology Gateway ─── NoteStation + FileStation API  │   │
-│  └──────────────────────────────────────────────────────┘   │
-└─────────────────────────┬───────────────────────────────────┘
-                          │
-          ┌───────────────┼───────────────┐
-          ▼               ▼               ▼
-┌──────────────┐ ┌──────────────┐ ┌──────────────┐
-│ PostgreSQL   │ │ Synology NAS │ │  AI Provider │
-│ 16 + pgvec  │ │ NoteStation  │ │   APIs (4)   │
-└──────────────┘ └──────────────┘ └──────────────┘
-```
-
----
-
 ## Project Structure
 
 ```
@@ -324,17 +275,26 @@ labnote-ai/
 │   ├── app/
 │   │   ├── main.py             # FastAPI entrypoint
 │   │   ├── models.py           # SQLAlchemy ORM models
-│   │   ├── api/                # REST API routers (18 endpoint modules)
+│   │   ├── api/                # REST API routers
 │   │   ├── ai_router/          # Multi-provider AI integration
 │   │   │   ├── router.py       # Provider auto-detection & routing
 │   │   │   ├── providers/      # OpenAI, Anthropic, Google, ZhipuAI
-│   │   │   └── prompts/        # Task-specific prompt templates
+│   │   │   ├── prompts/        # Task-specific prompt templates
+│   │   │   ├── quality_gate.py # Checklist-based quality gate
+│   │   │   └── stream_monitor.py # Streaming quality monitor
 │   │   ├── search/             # Hybrid search engine
 │   │   │   ├── engine.py       # FTS + Semantic + RRF fusion
+│   │   │   ├── judge.py        # Adaptive search JUDGE
+│   │   │   ├── refinement.py   # Multi-turn refinement
 │   │   │   ├── embeddings.py   # Text → vector conversion
-│   │   │   └── indexer.py      # Batch indexing + progress tracking
-│   │   ├── synology_gateway/   # Synology NAS API wrappers
-│   │   └── services/           # Business logic (sync, auth, OAuth)
+│   │   │   └── indexer.py      # Batch indexing
+│   │   ├── services/           # Business logic
+│   │   │   ├── auto_tagger.py  # AI auto-tagging
+│   │   │   ├── related_notes.py # Related notes discovery
+│   │   │   ├── rediscovery.py  # Note rediscovery
+│   │   │   ├── pdf_extractor.py # PDF text extraction
+│   │   │   └── ocr_service.py  # OCR pipeline
+│   │   └── synology_gateway/   # Synology NAS API wrappers
 │   ├── alembic/                # DB migrations
 │   └── tests/                  # pytest tests
 │
@@ -344,12 +304,13 @@ labnote-ai/
 │   │   ├── components/         # shadcn/ui + custom components
 │   │   ├── hooks/              # TanStack Query, SSE, OAuth hooks
 │   │   ├── lib/                # API client, utilities
-│   │   └── i18n/               # Translation resources (ko, en)
+│   │   └── i18n/               # Translation resources
 │   └── e2e/                    # Playwright E2E tests
 │
 └── docs/
     ├── screenshots/            # Feature screenshots
-    └── plans/                  # Design documents
+    ├── plans/                  # Design documents
+    └── roadmap/                # Detailed roadmap plans
 ```
 
 ---
@@ -371,7 +332,7 @@ labnote-ai/
 | `GOOGLE_OAUTH_CLIENT_ID` | Google OAuth client ID | - |
 | `GOOGLE_OAUTH_CLIENT_SECRET` | Google OAuth client secret | - |
 
-> NAS and AI keys are optional. Without NAS, you can still import notes via NSX files. Without AI keys, search and note management features remain fully functional.
+> NAS and AI keys are optional. Without NAS, notes can still be used via NSX file import. Without AI keys, search and note management features remain fully functional.
 
 ---
 
@@ -397,7 +358,7 @@ cd frontend && npm run lint
 
 ---
 
-<h2 id="api">API Docs</h2>
+## API Documentation
 
 After launching the backend, access the auto-generated API documentation:
 
@@ -408,17 +369,17 @@ After launching the backend, access the auto-generated API documentation:
 
 ## Roadmap
 
-- [x] Anthropic OAuth integration (leverage Claude Pro/Max subscriptions) — 8 models supported
-- [x] Multilingual UI (Korean / English) — react-i18next-based full frontend + backend i18n
-- [x] Search algorithm parameter tuning UI — 12 parameters adjustable
-- [x] NAS image sync stabilization — editor display + push round-trip
-- [ ] Note version history
-- [ ] Mobile-optimized PWA
-- [ ] Plugin system
-- [ ] Note export (Markdown / PDF)
+See [ROADMAP.md](ROADMAP.md) for the detailed roadmap.
+
+- [x] Phase 1 — Search Enhancement (Why matched, Adaptive Search, Multi-turn Refinement)
+- [x] Phase 2 — AI Quality Gates (Checklist, QA Evaluation, Stream Monitor)
+- [x] Phase 3 — Content Intelligence (Auto-Tagging, Related Notes, Rediscovery)
+- [ ] Phase 4 — Multimodal (PDF extraction done, OCR done, external content capture pending)
+- [ ] Phase 5 — Evaluation Infrastructure (A/B framework, metrics dashboard, feedback loop)
 
 ---
 
 ## License
 
-MIT License — free to use and modify.
+This project is licensed under the [GNU Affero General Public License v3.0](LICENSE).
+The obligation to disclose modified source code applies even when the software is offered as a network service.

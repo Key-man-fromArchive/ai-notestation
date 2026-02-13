@@ -121,7 +121,7 @@ class TestAIVisionExtract:
     @pytest.mark.asyncio
     async def test_success_first_model(self):
         resp = self._make_response("Extracted text here")
-        router = self._make_mock_router(["glm-4.7", "gpt-4o"], chat_return=resp)
+        router = self._make_mock_router(["glm-4.6v-flash", "gpt-4o"], chat_return=resp)
 
         with patch("app.ai_router.router.AIRouter", return_value=router):
             svc = OCRService()
@@ -129,14 +129,14 @@ class TestAIVisionExtract:
 
         assert result.text == "Extracted text here"
         assert result.confidence == 0.8
-        assert result.method == "glm-4.7"
+        assert result.method == "glm-4.6v-flash"
         router.chat.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_fallback_second_model(self):
         resp = self._make_response("Fallback text")
         router = self._make_mock_router(
-            ["glm-4.7", "gpt-4o"],
+            ["glm-4.6v-flash", "gpt-4o"],
             chat_side_effect=[RuntimeError("glm failed"), resp],
         )
 
@@ -151,7 +151,7 @@ class TestAIVisionExtract:
     @pytest.mark.asyncio
     async def test_all_models_fail(self):
         router = self._make_mock_router(
-            ["glm-4.7", "gpt-4o"],
+            ["glm-4.6v-flash", "gpt-4o"],
             chat_side_effect=RuntimeError("fail"),
         )
 
@@ -173,7 +173,7 @@ class TestAIVisionExtract:
     @pytest.mark.asyncio
     async def test_empty_text_zero_confidence(self):
         resp = self._make_response("   ")
-        router = self._make_mock_router(["glm-4.7"], chat_return=resp)
+        router = self._make_mock_router(["glm-4.6v-flash"], chat_return=resp)
 
         with patch("app.ai_router.router.AIRouter", return_value=router):
             svc = OCRService()
