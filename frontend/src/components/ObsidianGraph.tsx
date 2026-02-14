@@ -170,6 +170,15 @@ export function ObsidianGraph({
     return new Set(data.nodes.filter(n => !connected.has(n.id)).map(n => n.id))
   }, [data?.nodes, degreeMap])
 
+  const fitConnected = useCallback(() => {
+    const hasConnected = liveNodesRef.current.some(n => (n._degree ?? 0) > 0)
+    if (hasConnected) {
+      graphRef.current?.zoomToFit(400, 50, (node: GraphNodeObject) => (node._degree ?? 0) > 0)
+    } else {
+      graphRef.current?.zoomToFit(400, 50)
+    }
+  }, [])
+
   // Auto-save all node positions when d3-force simulation finishes
   const handleEngineStop = useCallback(() => {
     setSimulationRunning(false)
@@ -178,14 +187,9 @@ export function ObsidianGraph({
         positionCache.set(node.id, { x: node.x, y: node.y })
       }
     }
-    // Fit only connected nodes to viewport (orphans scatter too far)
-    const connectedNodes = liveNodesRef.current.filter(n => (n._degree ?? 0) > 0)
-    if (connectedNodes.length > 0) {
-      graphRef.current?.zoomToFit(400, 50, (node: GraphNodeObject) => (node._degree ?? 0) > 0)
-    } else {
-      graphRef.current?.zoomToFit(400, 50)
-    }
-  }, [])
+    // Delay to ensure canvas render cycle completes before fitting
+    setTimeout(() => fitConnected(), 500)
+  }, [fitConnected])
 
   const handleNodeClick = useCallback(
     (node: GraphNodeObject) => {
@@ -218,7 +222,7 @@ export function ObsidianGraph({
 
   const handleZoomIn = () => graphRef.current?.zoom(1.5, 300)
   const handleZoomOut = () => graphRef.current?.zoom(0.67, 300)
-  const handleFit = () => graphRef.current?.zoomToFit(400, 50)
+  const handleFit = () => fitConnected()
 
   // Collect unique notebooks for legend
   const notebooks = useMemo(() => {
@@ -264,11 +268,11 @@ export function ObsidianGraph({
           (node as any).fx = undefined;
           (node as any).fy = undefined;
         }
-        graphRef.current?.zoomToFit(400, 50, (node: GraphNodeObject) => (node._degree ?? 0) > 0)
-      }, 300)
+        fitConnected()
+      }, 500)
       return () => clearTimeout(timer)
     }
-  }, [hasCache, graphData.nodes.length])
+  }, [hasCache, graphData.nodes.length, fitConnected])
 
   // Stable link color callback — skip typeof checks when search is inactive
   const linkColor = useCallback(
@@ -550,7 +554,7 @@ export function ObsidianGraph({
           onNodeRightClick={handleNodeRightClick}
           onNodeHover={(node: GraphNodeObject | null) => setHoveredNode(node)}
           onEngineStop={handleEngineStop}
-          cooldownTicks={hasCache ? 0 : (isHugeGraph ? 30 : isLargeGraph ? 50 : 80)}
+          cooldownTicks={hasCache ? 0 : (isHugeGraph ? 100 : isLargeGraph ? 80 : 80)}
           d3AlphaDecay={isHugeGraph ? 0.08 : isLargeGraph ? 0.05 : 0.03}
           d3VelocityDecay={isHugeGraph ? 0.5 : isLargeGraph ? 0.4 : 0.3}
           warmupTicks={isHugeGraph ? 50 : isLargeGraph ? 30 : 0}
