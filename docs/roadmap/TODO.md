@@ -1,6 +1,6 @@
 # LabNote AI — Master TODO
 
-> 리서치 기반 로드맵 종합 TODO | 현재 v1.4.0-dev
+> 리서치 기반 로드맵 종합 TODO | 현재 v1.3.1 | 최종 갱신: 2026-02-14
 
 ## Overview
 
@@ -104,20 +104,20 @@
 
 ## Phase 4 — 멀티모달 확장 (v2.0.0)
 
-### 4-1. PDF 텍스트 추출 `★★★ 난이도`
-- [ ] Backend: PDFExtractor 서비스
-- [ ] Backend: NoteAttachmentText DB 모델 + 마이그레이션
-- [ ] Backend: POST /files/{id}/extract, GET /files/{id}/text
-- [ ] Backend: 임베딩 파이프라인에 PDF 텍스트 포함
-- [ ] Backend: pymupdf 의존성 추가
-- [ ] Frontend: PDF "텍스트 추출" 버튼 + 미리보기
+### 4-1. PDF 텍스트 추출 `★★★ 난이도` ✅ 완료 (v1.2.0)
+- [x] Backend: `PDFExtractor` 서비스 (`services/pdf_extractor.py`) — PyMuPDF + OCR 폴백
+- [x] Backend: NoteAttachment.extracted_text/extraction_status 필드 + 마이그레이션 (017)
+- [x] Backend: POST /files/{id}/extract, GET /files/{id}/text
+- [x] Backend: 임베딩 파이프라인에 PDF 텍스트 포함
+- [x] Frontend: PDF 텍스트 추출 UI
 
-### 4-2. OCR 파이프라인 `★★★★ 난이도`
-- [ ] Backend: OCRService (Tesseract + AI Vision 하이브리드)
-- [ ] Backend: NoteImage.ocr_text 필드 추가 + 마이그레이션
-- [ ] Backend: FTS/임베딩에 OCR 텍스트 포함
-- [ ] Backend: Docker에 tesseract-ocr 패키지
-- [ ] Frontend: 이미지 OCR 뱃지 + 텍스트 오버레이
+### 4-2. OCR + Vision 파이프라인 `★★★★ 난이도` ✅ 완료 (v1.2.0 ~ v1.3.1)
+- [x] Backend: `OCRService` (`services/ocr_service.py`) — GLM-OCR / PaddleOCR-VL / AI Vision 하이브리드
+- [x] Backend: NoteImage.extracted_text/extraction_status 필드 + 마이그레이션 (018)
+- [x] Backend: `ImageAnalysisService` (`services/image_analysis_service.py`) — 배치 OCR + Vision
+- [x] Backend: Vision 설명 필드 + 마이그레이션 (019)
+- [x] Backend: FTS/임베딩에 OCR + Vision 텍스트 포함
+- [x] Frontend: 배치 처리 UI + 실패 상세 + Dashboard 현황 카드
 
 ### 4-3. 외부 콘텐츠 캡처 `★★★ 난이도`
 - [ ] Backend: ContentCaptureService (URL → 마크다운)

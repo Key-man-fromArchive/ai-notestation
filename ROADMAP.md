@@ -27,11 +27,10 @@
 
 > 핵심 근거: ReSeek 논문 — "neural reranker >> lexical matching", "self-correction으로 monotonic improvement"
 
-### 1-1. 검색 결과 설명 ("Why this matched")
-- 검색 결과마다 **왜 매칭되었는지** 하이라이트 + 설명 표시
-- FTS 매칭 키워드, semantic similarity 스코어, 어떤 엔진이 기여했는지 분해
-- Reseek 제품의 "Intelligent highlighting" 패턴 차용
-- **구현**: SearchResult 응답에 `match_explanation` 필드 추가
+### 1-1. 검색 결과 설명 ("Why this matched") ✅
+- ~~검색 결과마다 **왜 매칭되었는지** 하이라이트 + 설명 표시~~
+- FTS 매칭 키워드, semantic similarity 스코어, 엔진별 기여도 분해
+- **구현**: `MatchSource` 모델 + SearchResult 응답 확장 + NoteCard 매칭 설명 UI
 
 ### 1-2. Adaptive Search Strategy (적응형 검색) ✅
 - Phase 1(FTS) 결과를 **JUDGE** 단계로 평가 → 충분하면 Phase 2(semantic) 스킵
@@ -39,11 +38,10 @@
 - 불필요한 임베딩 호출 절감 → 속도 향상 + 비용 절감
 - **구현**: `search/judge.py` — FTS 결과 커버리지 점수 계산, 임계값 미달 시에만 semantic 실행
 
-### 1-3. Multi-turn Search Refinement
-- 첫 검색 결과 기반으로 **쿼리 자동 확장/축소**
-- ReSeek 핵심 패턴: 1→4 턴까지 일관된 성능 향상 (baseline은 2턴에서 정체)
-- 사용자가 원하면 "더 찾기" 버튼 → AI가 쿼리 리파인 후 추가 검색
-- **구현**: `search/refinement.py` + 프론트엔드 "Refine Search" UI
+### 1-3. Multi-turn Search Refinement ✅
+- ~~첫 검색 결과 기반으로 **쿼리 자동 확장/축소**~~
+- ReSeek 핵심 패턴: 1→4 턴까지 일관된 성능 향상
+- **구현**: `search/refinement.py` + "AI로 더 찾기" 버튼 + 피드백 옵션 + 리파인 히스토리
 
 ---
 
@@ -55,17 +53,15 @@
 - ~~AI 응답 생성 전, 요청을 검증 가능한 체크리스트로 분해~~
 - `ai_router/quality_gate.py` 구현 완료 — Settings에서 ON/OFF + 자동 재생성 토글
 
-### 2-2. Search QA 결과 품질 평가
-- search_qa 응답의 **정확성(Correctness) + 유용성(Utility)** 분리 평가
-- ReSeek의 dense reward 분해: 사실 정확성 ↔ 쿼리 관련성 독립 측정
-- 낮은 점수의 응답은 사용자에게 "신뢰도 낮음" 표시 또는 자동 재생성
-- **구현**: reranker 스코어를 활용한 경량 평가 로직
+### 2-2. Search QA 결과 품질 평가 ✅
+- ~~search_qa 응답의 **정확성(Correctness) + 유용성(Utility)** 분리 평가~~
+- ReSeek의 dense reward 분해 적용
+- **구현**: `SearchQAEvaluator` + 신뢰도 뱃지 (높음/보통/낮음) + 소스 커버리지 표시
 
-### 2-3. 스트리밍 중간 품질 체크
-- SSE 스트리밍 도중 **중간 지점에서 품질 평가** (process reward)
-- Web-Shepherd 핵심: outcome reward(최종 결과만)보다 process reward(단계별)가 우수
-- 초반에 잘못된 방향으로 가면 조기 중단 + 재생성
-- **구현**: 스트리밍 청크 누적 후 n번째 청크마다 경량 평가
+### 2-3. 스트리밍 중간 품질 체크 ✅
+- ~~SSE 스트리밍 도중 **중간 지점에서 품질 평가** (process reward)~~
+- Web-Shepherd 핵심: process reward > outcome reward
+- **구현**: `StreamMonitor` — 언어 불일치/반복 감지/형식 체크 + 자동 재시도
 
 ---
 
@@ -73,17 +69,13 @@
 
 > 핵심 근거: Reseek 제품 분석 — 경쟁 제품의 핵심 차별 기능 중 우리에게 없는 것들
 
-### 3-1. Auto-Tagging (AI 자동 태그)
-- 노트 생성/동기화 시 AI가 **자동으로 태그 생성**
-- Reseek의 핵심 기능 차용 + 우리의 multi-provider AI 강점 활용
-- 기존 노트북 태그와 통합, 수동 편집 가능
-- **구현**: `services/auto_tagger.py` — 동기화 훅 + 배치 태깅
+### 3-1. Auto-Tagging (AI 자동 태그) ✅
+- ~~노트 생성/동기화 시 AI가 **자동으로 태그 생성**~~
+- **구현**: `services/auto_tagger.py` — 동기화 훅 + 배치 태깅 + 태그 필터 + 인라인 편집
 
-### 3-2. 노트 간 관계 발견 (Content Relationship Graph)
-- 기존 지식 그래프를 확장: **의미적 유사성 기반 자동 연결**
-- 사용자가 인식하지 못한 노트 간 숨겨진 연결 발견
-- "이 노트와 관련된 노트" 추천 패널
-- **구현**: 임베딩 코사인 유사도 + 그래프 클러스터링 강화
+### 3-2. 노트 간 관계 발견 (Content Relationship Graph) ✅
+- ~~기존 지식 그래프를 확장: **의미적 유사성 기반 자동 연결**~~
+- **구현**: `services/related_notes.py` — pgvector 코사인 유사도 + 관련 노트 패널 + 그래프 시각화
 
 ### 3-3. 잊혀진 노트 재발견 (Rediscovery) ✅ (v1.2.0)
 - ~~오래됐지만 현재 작업과 관련 있는 노트 주기적 서피스~~
@@ -152,17 +144,22 @@
 
 | Phase | 기능 | 상태 | 영향도 | 난이도 | 근거 |
 |-------|------|------|--------|--------|------|
-| 1-1 | Why this matched | 🔲 | ★★★★★ | ★★☆☆☆ | Reseek 제품 핵심 UX, 기존 인프라 활용 |
-| 1-2 | Adaptive Search | ✅ | ★★★★☆ | ★★★☆☆ | ReSeek post-retrieval JUDGE 패턴 (원본 의도), 비용 절감 |
+| 1-1 | Why this matched | ✅ | ★★★★★ | ★★☆☆☆ | 구현 완료 — MatchSource + 엔진 뱃지 |
+| 1-2 | Adaptive Search | ✅ | ★★★★☆ | ★★★☆☆ | 구현 완료 — post-retrieval JUDGE |
+| 1-3 | Multi-turn Refinement | ✅ | ★★★☆☆ | ★★★★☆ | 구현 완료 — AI 쿼리 리파인 + 리파인 히스토리 |
 | 2-1 | Checklist Quality Gate | ✅ | ★★★★★ | ★★★☆☆ | v1.2.0 구현 완료 |
-| 3-1 | Auto-Tagging | 🔲 | ★★★★☆ | ★★☆☆☆ | Reseek 핵심 기능, 즉각적 UX 개선 |
-| 3-2 | Content Relationships | 🔲 | ★★★★☆ | ★★★☆☆ | 기존 그래프/임베딩 인프라 활용 |
-| 1-3 | Multi-turn Refinement | 🔲 | ★★★☆☆ | ★★★★☆ | ReSeek 핵심이나 UX 복잡도 높음 |
+| 2-2 | Search QA 품질 평가 | ✅ | ★★★★☆ | ★★★☆☆ | 구현 완료 — Correctness + Utility 분리 |
+| 2-3 | 스트리밍 중간 품질 체크 | ✅ | ★★★☆☆ | ★★★★☆ | 구현 완료 — StreamMonitor 자동 재시도 |
+| 3-1 | Auto-Tagging | ✅ | ★★★★☆ | ★★☆☆☆ | 구현 완료 — 동기화 훅 + 배치 + 필터 |
+| 3-2 | Content Relationships | ✅ | ★★★★☆ | ★★★☆☆ | 구현 완료 — pgvector 유사도 + 그래프 |
 | 3-3 | Rediscovery | ✅ | ★★★☆☆ | ★★☆☆☆ | v1.2.0 구현 완료 |
+| 3-4 | 그래프 인사이트 영속화 | ✅ | ★★★☆☆ | ★★☆☆☆ | v1.3.1 구현 완료 |
 | 4-1 | PDF 추출 | ✅ | ★★★★☆ | ★★★☆☆ | v1.2.0 구현 완료 |
-| 4-2 | OCR + Vision 파이프라인 | ✅ | ★★★☆☆ | ★★★★☆ | v1.3.1 최적화 완료 — 독립 파이프라인 + 성능 6배 향상 |
-| 4-3 | 외부 콘텐츠 캡처 | 🔲 | ★★★☆☆ | ★★★☆☆ | URL 북마크/학술 메타데이터 |
-| 5-1 | 평가 프레임워크 | 🔲 | ★★★★★ | ★★★★★ | 장기적 품질 기반, 높은 초기 투자 |
+| 4-2 | OCR + Vision 파이프라인 | ✅ | ★★★☆☆ | ★★★★☆ | v1.3.1 최적화 완료 |
+| **4-3** | **외부 콘텐츠 캡처** | **🔲** | ★★★☆☆ | ★★★☆☆ | URL 북마크/학술 메타데이터 |
+| **5-1** | **평가 프레임워크** | **🔲** | ★★★★★ | ★★★★★ | 장기적 품질 기반, 높은 초기 투자 |
+| **5-2** | **검색 품질 메트릭** | **🔲** | ★★★★☆ | ★★★☆☆ | Correctness vs Utility 대시보드 |
+| **5-3** | **사용자 피드백 루프** | **🔲** | ★★★★☆ | ★★★☆☆ | 엄지 up/down + 자동 최적화 |
 
 ---
 
