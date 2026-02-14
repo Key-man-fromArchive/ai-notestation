@@ -7,7 +7,7 @@
 **Thousands of research notes on your NAS. Now you can actually find them.**
 
 <p align="left">
-  <img src="https://img.shields.io/badge/version-1.3.0-blue?style=flat-square" alt="v1.3.0" />
+  <img src="https://img.shields.io/badge/version-1.3.1-blue?style=flat-square" alt="v1.3.1" />
   <img src="https://img.shields.io/badge/license-AGPL--3.0-green?style=flat-square" alt="AGPL-3.0" />
   <img src="https://img.shields.io/badge/docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker" />
   <img src="https://img.shields.io/badge/self--hosted-black?style=flat-square" alt="Self-hosted" />
@@ -82,7 +82,7 @@ Insight extraction, auto-tagging, related note recommendations, rediscovery of f
 
 **Content Intelligence** — Auto-tagging, related note discovery, forgotten note rediscovery. AI maps relationships between notes automatically.
 
-**Multimodal** — PDF text extraction (pymupdf). Image OCR (AI Vision models or PaddleOCR-VL). Extracted text is automatically indexed for search.
+**Multimodal Image Analysis** — PDF text extraction (PyMuPDF). 3-engine hybrid OCR (GLM-OCR → PaddleOCR-VL → AI Vision) with automatic fallback. Batch processing runs OCR and Vision description generation as independent parallel pipelines. Extracted text and image descriptions are auto-indexed, making images searchable by their visual content.
 
 **Synology Integration** — Bidirectional sync with NoteStation. Image attachments. Direct NSX file import. Works without a NAS too — create notes locally.
 
@@ -97,6 +97,7 @@ Insight extraction, auto-tagging, related note recommendations, rediscovery of f
 | Database | PostgreSQL 16 + pgvector |
 | Search | tsvector + pg_trgm + pgvector + RRF |
 | AI | OpenAI, Anthropic, Google, ZhipuAI (auto-detected) |
+| OCR/Vision | GLM-OCR, PaddleOCR-VL, AI Vision (auto-fallback) |
 | Auth | JWT + OAuth 2.0 (Google, OpenAI PKCE) |
 | Deploy | Docker Compose (3 containers) |
 
@@ -169,6 +170,8 @@ cd frontend && npm install && npm run dev
 │  ├──────────────────────────────────────────────────────┤   │
 │  │  Quality Gate ─── Checklist │ QA Eval │ Stream Mon   │   │
 │  ├──────────────────────────────────────────────────────┤   │
+│  │  Image Analysis ─── 3-Engine OCR │ Vision │ Batch    │   │
+│  ├──────────────────────────────────────────────────────┤   │
 │  │  Synology Gateway ─── NoteStation + FileStation API  │   │
 │  └──────────────────────────────────────────────────────┘   │
 └─────────────────────────┬───────────────────────────────────┘
@@ -212,7 +215,7 @@ labnote-ai/
 │       ├── api/                 # REST API routers
 │       ├── ai_router/           # Multi-provider AI (providers, prompts, quality gate)
 │       ├── search/              # Hybrid search (FTS, semantic, RRF, JUDGE)
-│       ├── services/            # Business logic (tagging, OCR, related notes)
+│       ├── services/            # Business logic (OCR, Vision, tagging, related notes, PDF)
 │       └── synology_gateway/    # NAS API wrappers
 ├── frontend/src/
 │   ├── pages/                   # Pages (code-split)
@@ -243,7 +246,7 @@ cd backend && ruff check . && ruff format --check .           # Lint
 - [x] Phase 1 — Search Enhancement (Why matched, Adaptive Search, Multi-turn Refinement)
 - [x] Phase 2 — AI Quality Gates (Checklist, QA Evaluation, Stream Monitor)
 - [x] Phase 3 — Content Intelligence (Auto-Tagging, Related Notes, Rediscovery)
-- [x] Phase 4 — Multimodal (PDF extraction, OCR/Vision)
+- [x] Phase 4 — Multimodal (PDF extraction, 3-engine hybrid OCR, dual-pipeline Vision)
 - [ ] Phase 5 — Evaluation Infrastructure (A/B framework, metrics dashboard, feedback loop)
 
 Details: [ROADMAP.md](ROADMAP.md) · Changelog: [CHANGELOG.md](CHANGELOG.md)

@@ -15,7 +15,7 @@
 | **검색** | Hybrid Search (FTS + Trigram + Semantic), RRF 병합, 12개 파라미터 튜닝 UI |
 | **AI** | 6개 태스크 (insight, search_qa, writing, spellcheck, template, summarize), SSE 스트리밍, AI 품질 게이트 |
 | **AI 프로바이더** | OpenAI, Anthropic, Google, ZhipuAI 자동 감지 + OAuth |
-| **멀티모달** | OCR (AI Vision / PaddleOCR-VL / GLM-OCR), Vision 설명 (glm-4.6v), 배치 일괄 분석, 캐시 기반 AI Insight 최적화 |
+| **멀티모달** | 3엔진 하이브리드 OCR (GLM-OCR → PaddleOCR-VL → AI Vision 자동 폴백), Vision 설명 생성, 듀얼 파이프라인 배치 분석, 캐시 기반 AI Insight 최적화 |
 | **에디터** | Tiptap 리치텍스트, 항상 편집 가능, 자동 저장 (3초/30초/이탈 시), 너비 4단계 조절 |
 | **동기화** | Synology NoteStation 양방향 동기화, NSX 포맷 지원 |
 | **기타** | 지식 그래프 + 인사이트 영속화, 노트 발견, 공유/협업, i18n (한/영), 가상화 리스트 |

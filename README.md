@@ -7,7 +7,7 @@
 **NAS에 쌓인 수천 개의 연구노트, 다시 찾을 수 있게.**
 
 <p align="left">
-  <img src="https://img.shields.io/badge/version-1.3.0-blue?style=flat-square" alt="v1.3.0" />
+  <img src="https://img.shields.io/badge/version-1.3.1-blue?style=flat-square" alt="v1.3.1" />
   <img src="https://img.shields.io/badge/license-AGPL--3.0-green?style=flat-square" alt="AGPL-3.0" />
   <img src="https://img.shields.io/badge/docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker" />
   <img src="https://img.shields.io/badge/self--hosted-black?style=flat-square" alt="Self-hosted" />
@@ -82,7 +82,7 @@ TipTap 에디터로 연구 노트를 작성합니다. 이미지 첨부, 표, 코
 
 **콘텐츠 인텔리전스** — 자동 태깅, 관련 노트 발견, 잊혀진 노트 재발견. 노트 간 관계를 AI가 자동으로 파악합니다.
 
-**멀티모달** — PDF에서 텍스트를 추출합니다(pymupdf). 이미지에서 OCR을 수행합니다(AI Vision 또는 PaddleOCR-VL). 추출 결과는 검색 인덱스에 자동 반영됩니다.
+**멀티모달 이미지 분석** — PDF 텍스트 추출(PyMuPDF). 3엔진 하이브리드 OCR(GLM-OCR → PaddleOCR-VL → AI Vision)이 자동 폴백으로 동작합니다. 배치 처리 시 OCR과 Vision 설명 생성이 독립 파이프라인으로 병렬 실행됩니다. 추출된 텍스트와 이미지 설명이 검색 인덱스에 자동 반영되어 이미지 내용으로도 검색됩니다.
 
 **Synology 연동** — NoteStation과 양방향 동기화. 이미지 첨부파일 표시. NSX 파일 직접 임포트. NAS 없이도 로컬 노트 생성이 가능합니다.
 
@@ -97,6 +97,7 @@ TipTap 에디터로 연구 노트를 작성합니다. 이미지 첨부, 표, 코
 | Database | PostgreSQL 16 + pgvector |
 | Search | tsvector + pg_trgm + pgvector + RRF |
 | AI | OpenAI, Anthropic, Google, ZhipuAI (자동 감지) |
+| OCR/Vision | GLM-OCR, PaddleOCR-VL, AI Vision (자동 폴백) |
 | Auth | JWT + OAuth 2.0 (Google, OpenAI PKCE) |
 | Deploy | Docker Compose (3 containers) |
 
@@ -169,6 +170,8 @@ cd frontend && npm install && npm run dev
 │  ├──────────────────────────────────────────────────────┤   │
 │  │  Quality Gate ─── Checklist │ QA Eval │ Stream Mon   │   │
 │  ├──────────────────────────────────────────────────────┤   │
+│  │  Image Analysis ─── 3-Engine OCR │ Vision │ Batch    │   │
+│  ├──────────────────────────────────────────────────────┤   │
 │  │  Synology Gateway ─── NoteStation + FileStation API  │   │
 │  └──────────────────────────────────────────────────────┘   │
 └─────────────────────────┬───────────────────────────────────┘
@@ -212,7 +215,7 @@ labnote-ai/
 │       ├── api/                 # REST API 라우터
 │       ├── ai_router/           # 멀티 프로바이더 AI (프로바이더, 프롬프트, 품질 게이트)
 │       ├── search/              # 하이브리드 검색 (FTS, 시맨틱, RRF, JUDGE)
-│       ├── services/            # 비즈니스 로직 (태깅, OCR, 관련노트)
+│       ├── services/            # 비즈니스 로직 (OCR, Vision, 태깅, 관련노트, PDF)
 │       └── synology_gateway/    # NAS API 래퍼
 ├── frontend/src/
 │   ├── pages/                   # 페이지 (코드 스플리팅)
@@ -243,7 +246,7 @@ cd backend && ruff check . && ruff format --check .           # 린트
 - [x] Phase 1 — 검색 고도화 (Why matched, Adaptive Search, Multi-turn Refinement)
 - [x] Phase 2 — AI 품질 게이트 (Checklist, QA Evaluation, Stream Monitor)
 - [x] Phase 3 — 콘텐츠 인텔리전스 (Auto-Tagging, Related Notes, Rediscovery)
-- [x] Phase 4 — 멀티모달 (PDF 추출, OCR/Vision)
+- [x] Phase 4 — 멀티모달 (PDF 추출, 3엔진 하이브리드 OCR, 듀얼 파이프라인 Vision)
 - [ ] Phase 5 — 평가 인프라 (A/B 프레임워크, 메트릭 대시보드, 피드백 루프)
 
 상세: [ROADMAP.md](ROADMAP.md) · 변경 이력: [CHANGELOG.md](CHANGELOG.md)
