@@ -9,6 +9,11 @@ from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
+# Pages with fewer characters than this are considered scan/image pages
+# and will be sent to OCR. Filters out blank pages and header/footer-only
+# pages (typically 10-30 chars) while keeping real text pages (hundreds+).
+MIN_TEXT_LENGTH = 50
+
 
 class PDFExtractionResult(BaseModel):
     """PDF text extraction result."""
@@ -22,11 +27,14 @@ class PDFExtractor:
     """PDF → text extraction service.
 
     Uses PyMuPDF (fitz) for fast, accurate pure-text extraction.
-    Falls back to AI Vision OCR for image-only PDFs.
+    Falls back to AI Vision OCR per page for scan/image pages.
     """
 
     async def extract(self, file_path: str | Path) -> PDFExtractionResult:
         """Extract text from a PDF file.
+
+        Uses a per-page hybrid strategy: PyMuPDF text extraction first,
+        OCR fallback only for pages with insufficient text.
 
         Args:
             file_path: Path to the PDF file.
@@ -50,10 +58,17 @@ class PDFExtractor:
             raise ValueError(f"Failed to open PDF: {exc}") from exc
 
         pages_text: list[str] = []
-        for page in doc:
-            text = page.get_text("text")
-            if text.strip():
-                pages_text.append(text.strip())
+        ocr_pages: list[int] = []
+
+        for i, page in enumerate(doc):
+            text = page.get_text("text").strip()
+            if len(text) >= MIN_TEXT_LENGTH:
+                pages_text.append(text)
+            else:
+                ocr_text = await self._ocr_page(page)
+                if ocr_text:
+                    pages_text.append(ocr_text)
+                    ocr_pages.append(i + 1)  # 1-based page number
 
         metadata = {}
         if doc.metadata:
@@ -62,23 +77,17 @@ class PDFExtractor:
                 if val:
                     metadata[key] = val
 
+        if ocr_pages:
+            metadata["ocr"] = True
+            metadata["ocr_pages"] = ocr_pages
+            logger.info("PDF %s: OCR used on pages %s", path.name, ocr_pages)
+
         page_count = doc.page_count
-        combined_text = "\n\n".join(pages_text)
-
-        if not combined_text.strip():
-            # Image-only PDF → OCR fallback
-            logger.info("No text in PDF %s, attempting OCR fallback", path.name)
-            ocr_text = await self._ocr_fallback(doc)
-            doc.close()
-            if ocr_text:
-                return PDFExtractionResult(
-                    text=ocr_text,
-                    page_count=page_count,
-                    metadata={**metadata, "ocr": True},
-                )
-            raise ValueError("PDF contains no extractable text (may be image-only)")
-
         doc.close()
+
+        combined_text = "\n\n".join(pages_text)
+        if not combined_text.strip():
+            raise ValueError("PDF contains no extractable text (may be image-only)")
 
         return PDFExtractionResult(
             text=combined_text,
@@ -86,29 +95,24 @@ class PDFExtractor:
             metadata=metadata,
         )
 
-    async def _ocr_fallback(self, doc: object) -> str:
-        """Render each PDF page to an image and run AI Vision OCR.
+    async def _ocr_page(self, page: object, dpi: int = 150) -> str:
+        """Render a single page to PNG and run OCR.
 
         Args:
-            doc: An open fitz.Document instance.
+            page: A fitz.Page instance.
+            dpi: Resolution for rendering. Default 150.
 
         Returns:
-            Combined OCR text from all pages, or empty string on failure.
+            OCR text for the page, or empty string on failure.
         """
         from app.services.ocr_service import OCRService
 
-        ocr = OCRService()
-        pages: list[str] = []
-
         try:
-            for page in doc:  # type: ignore[attr-defined]
-                pix = page.get_pixmap(dpi=150)
-                png_bytes = pix.tobytes("png")
-                result = await ocr.extract_text(png_bytes, "image/png")
-                if result.text.strip():
-                    pages.append(result.text.strip())
+            pixmap = page.get_pixmap(dpi=dpi)  # type: ignore[attr-defined]
+            png_bytes = pixmap.tobytes("png")
+            ocr = OCRService()
+            result = await ocr.extract_text(png_bytes, "image/png")
+            return result.text.strip() if result.text else ""
         except Exception:
-            logger.exception("OCR fallback failed")
+            logger.exception("OCR failed for page")
             return ""
-
-        return "\n\n".join(pages)
