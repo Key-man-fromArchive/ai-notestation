@@ -22,7 +22,7 @@ Synology NoteStation에 노트가 2,000개 넘어가면 검색이 안 된다. �
 LabNote AI는 NAS의 기존 노트를 그대로 두고, 위에 AI 검색과 지식 발견 기능을 얹는다. 클라우드 없이, 내 서버에서.
 
 ```bash
-git clone https://github.com/your-org/labnote-ai.git && cd labnote-ai
+git clone https://github.com/Key-man-fromArchive/ai-notestation.git && cd ai-notestation
 bash install.sh        # 대화형 설치. NAS 주소와 AI 키 입력 (Enter로 스킵 가능)
 # → http://localhost:3000
 ```
@@ -53,15 +53,15 @@ FTS + 퍼지 + 시맨틱 검색을 하나의 PostgreSQL에서 돌린다. 키워�
 <tr>
 <td width="50%">
 
-<img src="docs/screenshots/graph.png" alt="지식 그래프" width="100%" />
+<img src="docs/screenshots/note-detail.png" alt="노트 상세 — 이미지 첨부, 리치 에디터" width="100%" />
 
-**노트 간 관계를 본다**
-지식 그래프가 노트 사이의 유사도를 시각화한다. 어떤 주제가 어떤 주제와 연결되는지, 고립된 노트는 뭔지 한눈에 보인다.
+**이미지도, 표도, 수식도**
+TipTap 에디터로 연구 노트를 작성한다. 이미지 첨부, 표, 코드 블록을 지원하고, 첨부 이미지는 OCR/Vision으로 자동 분석된다.
 
 </td>
 <td width="50%">
 
-<img src="docs/screenshots/dashboard.png" alt="대시보드" width="100%" />
+<img src="docs/screenshots/note-ai-panel.png" alt="AI 자동 태깅 + 구조화된 노트" width="100%" />
 
 **AI가 노트를 분석한다**
 인사이트 추출, 자동 태깅, 관련 노트 추천, 잊혀진 노트 재발견. 맞춤법 교정과 연구노트 초안 작성도 도와준다.
@@ -107,8 +107,8 @@ FTS + 퍼지 + 시맨틱 검색을 하나의 PostgreSQL에서 돌린다. 키워�
 Docker만 있으면 된다. NAS와 AI 키는 선택사항.
 
 ```bash
-git clone https://github.com/your-org/labnote-ai.git
-cd labnote-ai
+git clone https://github.com/Key-man-fromArchive/ai-notestation.git
+cd ai-notestation
 bash install.sh
 ```
 

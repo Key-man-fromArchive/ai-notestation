@@ -22,7 +22,7 @@ Once you pass 2,000 notes in Synology NoteStation, search breaks down. Misspell 
 LabNote AI sits on top of your existing NAS notes and adds AI-powered search and knowledge discovery. No cloud. Your server. Your data.
 
 ```bash
-git clone https://github.com/your-org/labnote-ai.git && cd labnote-ai
+git clone https://github.com/Key-man-fromArchive/ai-notestation.git && cd ai-notestation
 bash install.sh        # Interactive setup. Enter NAS address and AI keys (or skip)
 # → http://localhost:3000
 ```
@@ -53,15 +53,15 @@ FTS + fuzzy + semantic search running in a single PostgreSQL. Finds notes even w
 <tr>
 <td width="50%">
 
-<img src="docs/screenshots/graph.png" alt="Knowledge Graph" width="100%" />
+<img src="docs/screenshots/note-detail.png" alt="Note detail — image attachments, rich editor" width="100%" />
 
-**See how notes connect**
-A knowledge graph visualizes similarity between notes. Which topics cluster together, which notes are isolated — visible at a glance.
+**Images, tables, code blocks**
+Write research notes with a TipTap rich editor. Supports image attachments, tables, and code blocks. Attached images are automatically analyzed via OCR/Vision.
 
 </td>
 <td width="50%">
 
-<img src="docs/screenshots/dashboard.png" alt="Dashboard" width="100%" />
+<img src="docs/screenshots/note-ai-panel.png" alt="AI auto-tagging + structured notes" width="100%" />
 
 **AI analyzes your notes**
 Insight extraction, auto-tagging, related note recommendations, rediscovery of forgotten notes. Also helps with proofreading and drafting research notes.
@@ -107,8 +107,8 @@ Insight extraction, auto-tagging, related note recommendations, rediscovery of f
 All you need is Docker. NAS and AI keys are optional.
 
 ```bash
-git clone https://github.com/your-org/labnote-ai.git
-cd labnote-ai
+git clone https://github.com/Key-man-fromArchive/ai-notestation.git
+cd ai-notestation
 bash install.sh
 ```
 
