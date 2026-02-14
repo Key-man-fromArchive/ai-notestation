@@ -745,6 +745,9 @@ function BatchImageAnalysisSection() {
     triggerBatch,
   } = useBatchImageAnalysis()
   const { stats } = useImageAnalysisStats()
+  const [showFailedDetail, setShowFailedDetail] = useState(false)
+  const [failedItems, setFailedItems] = useState<Array<{ id: number; name: string | null; type: string }>>([])
+  const [failedLoading, setFailedLoading] = useState(false)
 
   const handleTrigger = async () => {
     try {
@@ -759,7 +762,25 @@ function BatchImageAnalysisSection() {
     return new Date(iso).toLocaleString()
   }
 
+  const handleShowFailed = async () => {
+    if (showFailedDetail) {
+      setShowFailedDetail(false)
+      return
+    }
+    setFailedLoading(true)
+    try {
+      const data = await apiClient.get<{ items: Array<{ id: number; name: string | null; type: string }>; total: number }>('/image-analysis/failed')
+      setFailedItems(data.items)
+      setShowFailedDetail(true)
+    } catch {
+      // ignore
+    } finally {
+      setFailedLoading(false)
+    }
+  }
+
   const allDone = stats && stats.pending === 0 && stats.vision_pending === 0
+  const totalFailed = stats ? stats.ocr_failed + stats.vision_failed : 0
 
   return (
     <div className="p-4 border border-input rounded-md">
@@ -777,7 +798,7 @@ function BatchImageAnalysisSection() {
         <div className="grid grid-cols-3 gap-3 mb-4 p-3 bg-muted/30 rounded-lg">
           <div className="text-center">
             <div className="text-lg font-bold">{stats.total.toLocaleString()}</div>
-            <div className="text-xs text-muted-foreground">{t('settings.totalImages')}</div>
+            <div className="text-xs text-muted-foreground">{t('dashboard.totalImages')}</div>
           </div>
           <div className="text-center">
             <div className="text-lg font-bold text-green-600">{stats.ocr_done.toLocaleString()}</div>
@@ -797,14 +818,47 @@ function BatchImageAnalysisSection() {
                 <div className="text-lg font-bold text-amber-600">{stats.vision_pending.toLocaleString()}</div>
                 <div className="text-xs text-muted-foreground">Vision {t('dashboard.pendingAnalysis')}</div>
               </div>
-              {(stats.ocr_failed > 0 || stats.vision_failed > 0) && (
+              {totalFailed > 0 && (
                 <div className="text-center">
-                  <div className="text-lg font-bold text-destructive">{(stats.ocr_failed + stats.vision_failed).toLocaleString()}</div>
-                  <div className="text-xs text-muted-foreground">{t('settings.failedCount')}</div>
+                  <button
+                    onClick={handleShowFailed}
+                    className="hover:bg-destructive/10 rounded-md px-2 py-1 transition-colors"
+                  >
+                    <div className="text-lg font-bold text-destructive">{totalFailed.toLocaleString()}</div>
+                    <div className="text-xs text-destructive/70 underline underline-offset-2">
+                      {failedLoading ? t('common.loading') : t('settings.failedCount')}
+                    </div>
+                  </button>
                 </div>
               )}
             </>
           )}
+        </div>
+      )}
+
+      {/* Failed detail popup */}
+      {showFailedDetail && failedItems.length > 0 && (
+        <div className="mb-4 p-3 border border-destructive/20 rounded-lg bg-destructive/5 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-destructive">{t('settings.failedDetail')}</span>
+            <button onClick={() => setShowFailedDetail(false)} className="text-xs text-muted-foreground hover:text-foreground">
+              {t('common.close')}
+            </button>
+          </div>
+          <div className="max-h-48 overflow-y-auto space-y-1">
+            {failedItems.map((item) => (
+              <div key={`${item.type}-${item.id}`} className="flex items-center justify-between text-xs py-1 border-b border-border/50 last:border-0">
+                <span className="text-muted-foreground truncate max-w-[200px]">{item.name || `Image #${item.id}`}</span>
+                <span className={cn(
+                  'px-1.5 py-0.5 rounded text-[10px] font-medium',
+                  item.type === 'ocr' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
+                )}>
+                  {item.type.toUpperCase()}
+                </span>
+              </div>
+            ))}
+          </div>
+          <p className="text-[11px] text-muted-foreground">{t('settings.failedRetryHint')}</p>
         </div>
       )}
 

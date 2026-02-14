@@ -161,3 +161,47 @@ async def get_analysis_stats():
     service = ImageAnalysisService()
     stats = await service.get_stats()
     return StatsResponse(**stats)
+
+
+class FailedImageItem(BaseModel):
+    id: int
+    name: str | None
+    type: str  # "ocr" or "vision"
+
+
+class FailedImagesResponse(BaseModel):
+    items: list[FailedImageItem]
+    total: int
+
+
+@router.get("/failed", response_model=FailedImagesResponse)
+async def get_failed_images(limit: int = 50):
+    """Get list of images that failed OCR or Vision analysis."""
+    from sqlalchemy import select, literal, union_all
+
+    from app.db import async_session_factory
+    from app.models import NoteImage
+
+    async with async_session_factory() as db:
+        ocr_q = (
+            select(
+                NoteImage.id,
+                NoteImage.name,
+                literal("ocr").label("type"),
+            )
+            .where(NoteImage.extraction_status == "failed")
+        )
+        vision_q = (
+            select(
+                NoteImage.id,
+                NoteImage.name,
+                literal("vision").label("type"),
+            )
+            .where(NoteImage.vision_status == "failed")
+        )
+        combined = union_all(ocr_q, vision_q).limit(limit)
+        result = await db.execute(combined)
+        rows = result.fetchall()
+
+    items = [FailedImageItem(id=r[0], name=r[1], type=r[2]) for r in rows]
+    return FailedImagesResponse(items=items, total=len(items))

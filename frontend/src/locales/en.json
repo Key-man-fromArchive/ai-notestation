@@ -499,6 +499,8 @@
     "batchAnalysisProgress": "Analyzing images... {{progress}}%",
     "batchAnalysisComplete": "OCR: {{ocr}}, Vision: {{vision}} completed",
     "allAnalyzed": "All images have been analyzed",
+    "failedDetail": "Failed images",
+    "failedRetryHint": "Re-run batch analysis to retry failed images",
     "startedAt": "Started at",
     "completedAt": "Completed at",
     "qualityGate": "AI Quality Gate",
