@@ -1,5 +1,5 @@
-<p align="right">
-  <a href="README.md"><img src="https://img.shields.io/badge/한국어-blue?style=flat-square" alt="Korean" /></a>
+<p align="center">
+  <a href="README.md"><img src="https://img.shields.io/badge/한국어-blue?style=for-the-badge" alt="Korean" height="120" /></a>
 </p>
 
 # LabNote AI

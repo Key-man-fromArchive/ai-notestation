@@ -1,5 +1,5 @@
-<p align="right">
-  <a href="README.en.md"><img src="https://img.shields.io/badge/English-blue?style=flat-square" alt="English" /></a>
+<p align="center">
+  <a href="README.en.md"><img src="https://img.shields.io/badge/English-blue?style=for-the-badge" alt="English" height="120" /></a>
 </p>
 
 # LabNote AI
