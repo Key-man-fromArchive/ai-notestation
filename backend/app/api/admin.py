@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
-from fastapi.responses import FileResponse
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -812,11 +812,8 @@ def _backup_dir() -> Path:
     return backup_path
 
 
-@router.post("/db/backup")
-async def create_db_backup(
-    current_user: dict = Depends(require_admin),  # noqa: B008
-) -> dict:
-    """Create a gzip-compressed pg_dump backup of the database."""
+async def _create_db_backup_internal(triggered_by: str | None = None) -> dict:
+    """Run pg_dump and save as gzip. Reusable by endpoint and full-backup."""
     db_params = _parse_database_url()
     backup_path = _backup_dir()
 
@@ -827,7 +824,6 @@ async def create_db_backup(
     env = os.environ.copy()
     env["PGPASSWORD"] = db_params["password"]
 
-    # pg_dump → gzip via shell pipe (uvloop doesn't support piping asyncio streams)
     proc = await asyncio.create_subprocess_shell(
         f"pg_dump -h {db_params['host']} -p {db_params['port']} -U {db_params['user']} -d {db_params['dbname']} | gzip",
         stdout=asyncio.subprocess.PIPE,
@@ -851,7 +847,7 @@ async def create_db_backup(
         "completed",
         message=f"DB 백업 생성: {filename}",
         details={"filename": filename, "size": file_size},
-        triggered_by=get_trigger_name(current_user),
+        triggered_by=triggered_by,
     )
 
     return {
@@ -860,6 +856,14 @@ async def create_db_backup(
         "size_pretty": _human_size(file_size),
         "created_at": created_at,
     }
+
+
+@router.post("/db/backup")
+async def create_db_backup(
+    current_user: dict = Depends(require_admin),  # noqa: B008
+) -> dict:
+    """Create a gzip-compressed pg_dump backup of the database."""
+    return await _create_db_backup_internal(triggered_by=get_trigger_name(current_user))
 
 
 @router.get("/db/backup/list")
@@ -889,7 +893,7 @@ async def download_db_backup(
     filename: str,
     current_user: dict = Depends(require_admin),  # noqa: B008
 ):
-    """Download a specific backup file."""
+    """Download a specific backup file (streaming)."""
     if not _BACKUP_FILENAME_PATTERN.match(filename):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -903,10 +907,20 @@ async def download_db_backup(
             detail="Backup file not found",
         )
 
-    return FileResponse(
-        path=str(file_path),
-        filename=filename,
+    file_size = file_path.stat().st_size
+
+    def _iter_file():
+        with open(file_path, "rb") as f:
+            while chunk := f.read(1024 * 1024):
+                yield chunk
+
+    return StreamingResponse(
+        _iter_file(),
         media_type="application/gzip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Length": str(file_size),
+        },
     )
 
 

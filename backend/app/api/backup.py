@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import re
@@ -12,11 +13,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
-from fastapi.responses import FileResponse
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.admin import _human_size, require_admin
+from app.api.admin import _create_db_backup_internal, _human_size, require_admin
 from app.api.settings import _load_from_db, _save_to_db, sync_api_keys_to_env
 from app.config import get_settings
 from app.database import async_session_factory, get_db
@@ -32,11 +33,19 @@ settings = get_settings()
 BACKUP_VERSION = "ainx-1"
 
 _SETTINGS_BACKUP_FILENAME_PATTERN = re.compile(r"^settings_backup_\d{8}_\d{6}\.json$")
+_NATIVE_BACKUP_FILENAME_PATTERN = re.compile(r"^ainx_backup_\d{8}_\d{6}\.zip$")
 
 
 def _settings_backup_dir() -> Path:
     """Return (and ensure) the settings backup directory."""
     backup_path = Path(settings.NSX_EXPORTS_PATH) / "settings_backups"
+    backup_path.mkdir(parents=True, exist_ok=True)
+    return backup_path
+
+
+def _native_backup_dir() -> Path:
+    """Return (and ensure) the native backup directory."""
+    backup_path = Path(settings.NSX_EXPORTS_PATH) / "backups"
     backup_path.mkdir(parents=True, exist_ok=True)
     return backup_path
 
@@ -53,14 +62,12 @@ def _compute_md5(file_path: Path) -> str:
     return digest.hexdigest()
 
 
-@router.get("/backup/export")
-async def export_backup(
-    current_user: dict = Depends(get_current_user),  # noqa: B008
-    db: AsyncSession = Depends(get_db),  # noqa: B008
-) -> FileResponse:
-    """Export notes, images, and attachments as a native backup archive."""
-    export_dir = Path(settings.NSX_EXPORTS_PATH) / "backups"
-    export_dir.mkdir(parents=True, exist_ok=True)
+async def _create_native_backup_internal(
+    db: AsyncSession,
+    triggered_by: str | None = None,
+) -> dict:
+    """Create a native backup archive. Reusable by endpoint and full-backup."""
+    export_dir = _native_backup_dir()
     timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     export_path = export_dir / f"ainx_backup_{timestamp}.zip"
 
@@ -149,10 +156,46 @@ async def export_backup(
             if file_path.exists():
                 archive.write(file_path, arcname=f"attachments/{att.file_id}")
 
-    return FileResponse(
-        path=export_path,
+    file_size = export_path.stat().st_size
+    created_at = datetime.now(UTC).isoformat()
+
+    await log_activity(
+        "admin",
+        "completed",
+        message=f"네이티브 백업 생성: {export_path.name}",
+        details={"filename": export_path.name, "size": file_size},
+        triggered_by=triggered_by,
+    )
+
+    return {
+        "filename": export_path.name,
+        "size": file_size,
+        "size_pretty": _human_size(file_size),
+        "created_at": created_at,
+    }
+
+
+@router.get("/backup/export")
+async def export_backup(
+    current_user: dict = Depends(require_admin),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> StreamingResponse:
+    """Export notes, images, and attachments as a native backup archive (streaming)."""
+    result = await _create_native_backup_internal(db, triggered_by=get_trigger_name(current_user))
+    export_path = _native_backup_dir() / result["filename"]
+
+    def _iter_file():
+        with open(export_path, "rb") as f:
+            while chunk := f.read(1024 * 1024):
+                yield chunk
+
+    return StreamingResponse(
+        _iter_file(),
         media_type="application/zip",
-        filename=export_path.name,
+        headers={
+            "Content-Disposition": f'attachment; filename="{result["filename"]}"',
+            "Content-Length": str(result["size"]),
+        },
     )
 
 
@@ -346,6 +389,149 @@ async def import_backup(
 
 
 # ---------------------------------------------------------------------------
+# Native backup management endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.get("/backup/native/list")
+async def list_native_backups(
+    current_user: dict = Depends(require_admin),  # noqa: B008
+) -> dict:
+    """List native backup files on the server, newest first."""
+    backup_path = _native_backup_dir()
+
+    backups = []
+    for f in sorted(backup_path.glob("ainx_backup_*.zip"), reverse=True):
+        stat = f.stat()
+        backups.append(
+            {
+                "filename": f.name,
+                "size": stat.st_size,
+                "size_pretty": _human_size(stat.st_size),
+                "created_at": datetime.fromtimestamp(stat.st_mtime, tz=UTC).isoformat(),
+            }
+        )
+
+    return {"backups": backups, "total": len(backups)}
+
+
+@router.get("/backup/native/download/{filename}")
+async def download_native_backup(
+    filename: str,
+    current_user: dict = Depends(require_admin),  # noqa: B008
+) -> StreamingResponse:
+    """Download a specific native backup file (streaming)."""
+    if not _NATIVE_BACKUP_FILENAME_PATTERN.match(filename):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid native backup filename",
+        )
+
+    file_path = _native_backup_dir() / filename
+    if not file_path.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Native backup file not found",
+        )
+
+    file_size = file_path.stat().st_size
+
+    def _iter_file():
+        with open(file_path, "rb") as f:
+            while chunk := f.read(1024 * 1024):
+                yield chunk
+
+    return StreamingResponse(
+        _iter_file(),
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Length": str(file_size),
+        },
+    )
+
+
+@router.delete("/backup/native/{filename}")
+async def delete_native_backup(
+    filename: str,
+    current_user: dict = Depends(require_admin),  # noqa: B008
+) -> dict:
+    """Delete a specific native backup file."""
+    if not _NATIVE_BACKUP_FILENAME_PATTERN.match(filename):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid native backup filename",
+        )
+
+    file_path = _native_backup_dir() / filename
+    if not file_path.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Native backup file not found",
+        )
+
+    file_size = file_path.stat().st_size
+    file_path.unlink()
+
+    await log_activity(
+        "admin",
+        "completed",
+        message=f"네이티브 백업 삭제: {filename}",
+        details={"filename": filename, "freed_bytes": file_size},
+        triggered_by=get_trigger_name(current_user),
+    )
+
+    return {
+        "status": "ok",
+        "filename": filename,
+        "freed_bytes": file_size,
+        "freed_size": _human_size(file_size),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Full backup (DB + native) endpoint
+# ---------------------------------------------------------------------------
+
+
+@router.post("/backup/full")
+async def create_full_backup(
+    current_user: dict = Depends(require_admin),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> dict:
+    """Create both a DB backup and a native backup in parallel."""
+    triggered_by = get_trigger_name(current_user)
+
+    db_result: dict | None = None
+    native_result: dict | None = None
+    db_error: str | None = None
+    native_error: str | None = None
+
+    async def _run_db():
+        nonlocal db_result, db_error
+        try:
+            db_result = await _create_db_backup_internal(triggered_by=triggered_by)
+        except Exception as exc:
+            db_error = str(exc)
+
+    async def _run_native():
+        nonlocal native_result, native_error
+        try:
+            native_result = await _create_native_backup_internal(db, triggered_by=triggered_by)
+        except Exception as exc:
+            native_error = str(exc)
+
+    await asyncio.gather(_run_db(), _run_native())
+
+    return {
+        "db": db_result,
+        "db_error": db_error,
+        "native": native_result,
+        "native_error": native_error,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Settings backup endpoints
 # ---------------------------------------------------------------------------
 
@@ -477,7 +663,7 @@ async def list_settings_backups(
 async def download_settings_backup(
     filename: str,
     current_user: dict = Depends(require_admin),  # noqa: B008
-) -> FileResponse:
+) -> StreamingResponse:
     """Download a specific settings backup file.
 
     Requires admin access. Validates the filename pattern before serving.
@@ -495,10 +681,17 @@ async def download_settings_backup(
             detail="Settings backup file not found",
         )
 
-    return FileResponse(
-        path=str(file_path),
-        filename=filename,
+    def _iter_file():
+        with open(file_path, "rb") as f:
+            yield from iter(lambda: f.read(1024 * 1024), b"")
+
+    return StreamingResponse(
+        _iter_file(),
         media_type="application/json",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Length": str(file_path.stat().st_size),
+        },
     )
 
 

@@ -15,7 +15,6 @@ import {
   OAuthSection,
   SettingRow,
   NsxImportSection,
-  BackupSection,
   SearchParamsSection,
   GraphSettingsSection,
   nasSettingsList,
@@ -245,7 +244,6 @@ export default function Settings() {
               />
             )}
             {isAdmin && <NsxImportSection />}
-            {isAdmin && <BackupSection />}
             <ApiKeysSection
               data={data}
               editingKey={editingKey}

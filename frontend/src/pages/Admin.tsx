@@ -35,6 +35,7 @@ import {
   FileArchive,
   ChevronDown,
   ChevronUp,
+  Package,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { apiClient } from '@/lib/api'
@@ -143,6 +144,13 @@ interface TrashListResponse {
 }
 
 interface DbBackupItem {
+  filename: string
+  size: number
+  size_pretty: string
+  created_at: string
+}
+
+interface NativeBackupItem {
   filename: string
   size: number
   size_pretty: string
@@ -355,6 +363,21 @@ function DatabaseTab() {
     refetchInterval: 30000,
   })
 
+  // --- Full backup state ---
+  const [fullMsg, setFullMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  const [isCreatingFull, setIsCreatingFull] = useState(false)
+
+  // --- Native backup state ---
+  const { data: nativeBackups, refetch: refetchNativeBackups } = useQuery({
+    queryKey: ['admin', 'native-backups'],
+    queryFn: () => apiClient.get<{ backups: NativeBackupItem[]; total: number }>('/backup/native/list'),
+  })
+  const [nativeMsg, setNativeMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  const [isCreatingNative, setIsCreatingNative] = useState(false)
+  const [showAllNative, setShowAllNative] = useState(false)
+  const [nativeImportFile, setNativeImportFile] = useState<File | null>(null)
+  const [isImportingNative, setIsImportingNative] = useState(false)
+
   // --- Settings backup state ---
   const [settingsFile, setSettingsFile] = useState<File | null>(null)
   const [settingsMsg, setSettingsMsg] = useState<{ ok: boolean; text: string } | null>(null)
@@ -380,6 +403,111 @@ function DatabaseTab() {
   const [restoreConfirmText, setRestoreConfirmText] = useState('')
   const [showRestoreConfirm, setShowRestoreConfirm] = useState(false)
   const [showAllDb, setShowAllDb] = useState(false)
+
+  // --- Full backup create ---
+  const handleCreateFullBackup = async () => {
+    setIsCreatingFull(true)
+    setFullMsg(null)
+    try {
+      const result = await apiClient.post<{ db: unknown; db_error: string | null; native: unknown; native_error: string | null }>('/backup/full', {})
+      if (result.db_error || result.native_error) {
+        setFullMsg({ ok: false, text: t('admin.fullBackupPartial') })
+      } else {
+        setFullMsg({ ok: true, text: t('admin.fullBackupSuccess') })
+      }
+      refetchBackups()
+      refetchNativeBackups()
+    } catch (e) {
+      setFullMsg({ ok: false, text: e instanceof Error ? e.message : t('admin.fullBackupFailed') })
+    } finally {
+      setIsCreatingFull(false)
+    }
+  }
+
+  // --- Native backup create ---
+  const handleCreateNativeBackup = async () => {
+    setIsCreatingNative(true)
+    setNativeMsg(null)
+    try {
+      const token = apiClient.getToken()
+      const response = await fetch('/api/backup/export', {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+      if (!response.ok) throw new Error(await response.text())
+      // Don't download - just refresh the list
+      // The file is saved server-side
+      const blob = await response.blob()
+      const cd = response.headers.get('Content-Disposition')
+      const filename = cd?.split('filename=')[1]?.replace(/"/g, '') || 'ainx_backup.zip'
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      window.URL.revokeObjectURL(url)
+      refetchNativeBackups()
+      setNativeMsg({ ok: true, text: t('settings.backupExportSuccess') })
+    } catch (e) {
+      setNativeMsg({ ok: false, text: e instanceof Error ? e.message : t('settings.backupExportFailed') })
+    } finally {
+      setIsCreatingNative(false)
+    }
+  }
+
+  // --- Native backup download ---
+  const handleDownloadNativeBackup = async (filename: string) => {
+    const token = apiClient.getToken()
+    const response = await fetch(`/api/backup/native/download/${filename}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+    if (!response.ok) return
+    const blob = await response.blob()
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    window.URL.revokeObjectURL(url)
+  }
+
+  // --- Native backup delete ---
+  const handleDeleteNativeBackup = async (filename: string) => {
+    try {
+      await apiClient.delete(`/backup/native/${filename}`)
+      refetchNativeBackups()
+      setNativeMsg({ ok: true, text: t('admin.nativeBackupDeleted') })
+    } catch {
+      setNativeMsg({ ok: false, text: t('admin.nativeBackupDeleteFailed') })
+    }
+  }
+
+  // --- Native backup import ---
+  const handleNativeImport = async () => {
+    if (!nativeImportFile) return
+    setIsImportingNative(true)
+    setNativeMsg(null)
+    try {
+      const token = apiClient.getToken()
+      const formData = new FormData()
+      formData.append('file', nativeImportFile)
+      const response = await fetch('/api/backup/import', {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+      })
+      if (!response.ok) throw new Error(await response.text())
+      setNativeImportFile(null)
+      setNativeMsg({ ok: true, text: t('settings.backupImportSuccess') })
+    } catch (e) {
+      setNativeMsg({ ok: false, text: e instanceof Error ? e.message : t('settings.backupImportFailed') })
+    } finally {
+      setIsImportingNative(false)
+    }
+  }
 
   // --- Settings export ---
   const handleSettingsExport = async () => {
@@ -587,58 +715,108 @@ function DatabaseTab() {
         </div>
       </div>
 
-      {/* Settings Backup */}
-      <div className="border border-border rounded-lg bg-card">
-        <div className="px-4 py-3 bg-muted/50 border-b border-border flex items-center gap-2">
-          <Settings className="h-4 w-4" />
-          <h3 className="font-semibold">{t('admin.settingsBackup')}</h3>
+      {/* Full Backup */}
+      <div className="border-2 border-primary/30 rounded-lg bg-card">
+        <div className="px-4 py-3 bg-primary/5 border-b border-primary/20 flex items-center gap-2">
+          <Package className="h-4 w-4 text-primary" />
+          <h3 className="font-semibold">{t('admin.fullBackup')}</h3>
         </div>
         <div className="p-4 space-y-4">
-          <p className="text-sm text-muted-foreground">{t('admin.settingsBackupDesc')}</p>
+          <p className="text-sm text-muted-foreground">{t('admin.fullBackupDesc')}</p>
+          <button
+            onClick={handleCreateFullBackup}
+            disabled={isCreatingFull}
+            className={cn(
+              'flex items-center gap-2 px-4 py-2 rounded-md text-sm',
+              'bg-primary text-primary-foreground hover:bg-primary/90 transition-colors',
+              'disabled:opacity-50 disabled:cursor-not-allowed',
+            )}
+          >
+            {isCreatingFull ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Package className="h-4 w-4" />
+            )}
+            {isCreatingFull ? t('admin.fullBackupCreating') : t('admin.fullBackupCreate')}
+          </button>
+          {fullMsg && (
+            <div
+              className={cn(
+                'flex items-center gap-2 p-3 rounded-md',
+                fullMsg.ok
+                  ? 'bg-green-500/10 border border-green-500/20'
+                  : 'bg-destructive/10 border border-destructive/20',
+              )}
+            >
+              {fullMsg.ok ? (
+                <CheckCircle className="h-4 w-4 text-green-600" />
+              ) : (
+                <AlertCircle className="h-4 w-4 text-destructive" />
+              )}
+              <span className={cn('text-sm', fullMsg.ok ? 'text-green-700' : 'text-destructive')}>
+                {fullMsg.text}
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Native Backup */}
+      <div className="border border-border rounded-lg bg-card">
+        <div className="px-4 py-3 bg-muted/50 border-b border-border flex items-center gap-2">
+          <FileArchive className="h-4 w-4" />
+          <h3 className="font-semibold">{t('admin.nativeBackup')}</h3>
+        </div>
+        <div className="p-4 space-y-4">
+          <p className="text-sm text-muted-foreground">{t('admin.nativeBackupDesc')}</p>
 
           <div className="flex flex-wrap gap-2">
             <button
-              onClick={handleSettingsExport}
-              disabled={isExportingSettings}
+              onClick={handleCreateNativeBackup}
+              disabled={isCreatingNative}
               className={cn(
                 'flex items-center gap-2 px-4 py-2 rounded-md text-sm',
                 'bg-primary text-primary-foreground hover:bg-primary/90 transition-colors',
                 'disabled:opacity-50 disabled:cursor-not-allowed',
               )}
             >
-              <Download className="h-4 w-4" />
-              {isExportingSettings ? t('common.exporting', 'Exporting...') : t('admin.settingsExport')}
+              {isCreatingNative ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4" />
+              )}
+              {isCreatingNative ? t('admin.nativeBackupCreating') : t('admin.nativeBackupCreate')}
             </button>
           </div>
 
-          {/* Settings backup list */}
-          {settingsBackups && settingsBackups.backups.length > 0 && (
+          {/* Native backup list */}
+          {nativeBackups && nativeBackups.backups.length > 0 && (
             <div className="border border-border rounded-md overflow-hidden">
               <div className="px-3 py-2 bg-muted/30 border-b border-border">
-                <p className="text-sm font-medium">{t('admin.settingsBackupList')}</p>
+                <p className="text-sm font-medium">{t('admin.nativeBackupList')}</p>
               </div>
               <div className="divide-y divide-border">
-                {(showAllSettings ? settingsBackups.backups : settingsBackups.backups.slice(0, 5)).map((b) => (
+                {(showAllNative ? nativeBackups.backups : nativeBackups.backups.slice(0, 5)).map((b) => (
                   <div key={b.filename} className="flex items-center justify-between px-3 py-2 hover:bg-muted/20">
                     <div className="flex items-center gap-3 min-w-0">
                       <FileArchive className="h-4 w-4 text-muted-foreground shrink-0" />
                       <div className="min-w-0">
                         <p className="text-sm font-mono truncate">{b.filename}</p>
                         <p className="text-xs text-muted-foreground">
-                          {b.size_pretty} &middot; {t('admin.settingsCount', { count: b.setting_count })} &middot; {new Date(b.created_at).toLocaleString()}
+                          {b.size_pretty} &middot; {new Date(b.created_at).toLocaleString()}
                         </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
                       <button
-                        onClick={() => handleDownloadSettingsBackup(b.filename)}
+                        onClick={() => handleDownloadNativeBackup(b.filename)}
                         className="p-1.5 rounded hover:bg-muted transition-colors"
                         title="Download"
                       >
                         <Download className="h-4 w-4" />
                       </button>
                       <button
-                        onClick={() => handleDeleteSettingsBackup(b.filename)}
+                        onClick={() => handleDeleteNativeBackup(b.filename)}
                         className="p-1.5 rounded hover:bg-destructive/10 text-destructive transition-colors"
                         title="Delete"
                       >
@@ -648,12 +826,12 @@ function DatabaseTab() {
                   </div>
                 ))}
               </div>
-              {settingsBackups.total > 5 && (
+              {nativeBackups.total > 5 && (
                 <div
-                  onClick={() => setShowAllSettings(!showAllSettings)}
+                  onClick={() => setShowAllNative(!showAllNative)}
                   className="text-xs text-muted-foreground hover:text-foreground text-center py-1.5 cursor-pointer border-t border-border"
                 >
-                  {showAllSettings ? (
+                  {showAllNative ? (
                     <span className="flex items-center justify-center gap-1">
                       <ChevronUp className="h-3 w-3" />
                       {t('admin.hideList')}
@@ -661,51 +839,55 @@ function DatabaseTab() {
                   ) : (
                     <span className="flex items-center justify-center gap-1">
                       <ChevronDown className="h-3 w-3" />
-                      {t('admin.showAll', { count: settingsBackups.total })}
+                      {t('admin.showAll', { count: nativeBackups.total })}
                     </span>
                   )}
                 </div>
               )}
             </div>
           )}
+          {nativeBackups && nativeBackups.backups.length === 0 && (
+            <p className="text-sm text-muted-foreground italic">{t('admin.nativeBackupEmpty')}</p>
+          )}
 
+          {/* Native backup import */}
           <div className="pt-2 border-t border-border space-y-3">
             <p className="text-sm font-medium flex items-center gap-2">
               <RotateCcw className="h-4 w-4" />
-              {t('admin.settingsImport')}
+              {t('admin.nativeBackupImport')}
             </p>
             <label
               className={cn(
                 'flex items-center justify-center gap-2 px-4 py-4 border-2 border-dashed border-input rounded-md cursor-pointer',
                 'hover:border-primary/50 hover:bg-muted/30 transition-colors',
-                isImportingSettings && 'opacity-50 cursor-not-allowed',
+                isImportingNative && 'opacity-50 cursor-not-allowed',
               )}
             >
               <input
                 type="file"
-                accept=".json"
-                onChange={(e) => setSettingsFile(e.target.files?.[0] || null)}
-                disabled={isImportingSettings}
+                accept=".zip"
+                onChange={(e) => setNativeImportFile(e.target.files?.[0] || null)}
+                disabled={isImportingNative}
                 className="sr-only"
               />
               <Upload className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm text-muted-foreground">
-                {settingsFile ? settingsFile.name : t('admin.selectJsonFile')}
+                {nativeImportFile ? nativeImportFile.name : t('common.selectFile', 'Select .zip file')}
               </span>
             </label>
 
-            {settingsFile && (
+            {nativeImportFile && (
               <div className="flex items-center justify-between p-3 bg-muted/50 rounded-md">
                 <div className="flex items-center gap-2">
                   <FileArchive className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm font-medium">{settingsFile.name}</span>
+                  <span className="text-sm font-medium">{nativeImportFile.name}</span>
                   <span className="text-xs text-muted-foreground">
-                    ({(settingsFile.size / 1024).toFixed(1)} KB)
+                    ({(nativeImportFile.size / 1024 / 1024).toFixed(2)} MB)
                   </span>
                 </div>
                 <button
-                  onClick={handleSettingsImport}
-                  disabled={isImportingSettings}
+                  onClick={handleNativeImport}
+                  disabled={isImportingNative}
                   className={cn(
                     'flex items-center gap-2 px-4 py-2 rounded-md text-sm',
                     'bg-primary text-primary-foreground hover:bg-primary/90 transition-colors',
@@ -713,31 +895,31 @@ function DatabaseTab() {
                   )}
                 >
                   <Upload className="h-4 w-4" />
-                  {isImportingSettings ? t('common.importing', 'Importing...') : t('admin.settingsImport')}
+                  {isImportingNative ? t('common.importing', 'Importing...') : t('common.import', 'Import')}
                 </button>
               </div>
             )}
-
-            {settingsMsg && (
-              <div
-                className={cn(
-                  'flex items-center gap-2 p-3 rounded-md',
-                  settingsMsg.ok
-                    ? 'bg-green-500/10 border border-green-500/20'
-                    : 'bg-destructive/10 border border-destructive/20',
-                )}
-              >
-                {settingsMsg.ok ? (
-                  <CheckCircle className="h-4 w-4 text-green-600" />
-                ) : (
-                  <AlertCircle className="h-4 w-4 text-destructive" />
-                )}
-                <span className={cn('text-sm', settingsMsg.ok ? 'text-green-700' : 'text-destructive')}>
-                  {settingsMsg.text}
-                </span>
-              </div>
-            )}
           </div>
+
+          {nativeMsg && (
+            <div
+              className={cn(
+                'flex items-center gap-2 p-3 rounded-md',
+                nativeMsg.ok
+                  ? 'bg-green-500/10 border border-green-500/20'
+                  : 'bg-destructive/10 border border-destructive/20',
+              )}
+            >
+              {nativeMsg.ok ? (
+                <CheckCircle className="h-4 w-4 text-green-600" />
+              ) : (
+                <AlertCircle className="h-4 w-4 text-destructive" />
+              )}
+              <span className={cn('text-sm', nativeMsg.ok ? 'text-green-700' : 'text-destructive')}>
+                {nativeMsg.text}
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -946,6 +1128,160 @@ function DatabaseTab() {
               </span>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Settings Backup */}
+      <div className="border border-border rounded-lg bg-card">
+        <div className="px-4 py-3 bg-muted/50 border-b border-border flex items-center gap-2">
+          <Settings className="h-4 w-4" />
+          <h3 className="font-semibold">{t('admin.settingsBackup')}</h3>
+        </div>
+        <div className="p-4 space-y-4">
+          <p className="text-sm text-muted-foreground">{t('admin.settingsBackupDesc')}</p>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={handleSettingsExport}
+              disabled={isExportingSettings}
+              className={cn(
+                'flex items-center gap-2 px-4 py-2 rounded-md text-sm',
+                'bg-primary text-primary-foreground hover:bg-primary/90 transition-colors',
+                'disabled:opacity-50 disabled:cursor-not-allowed',
+              )}
+            >
+              <Download className="h-4 w-4" />
+              {isExportingSettings ? t('common.exporting', 'Exporting...') : t('admin.settingsExport')}
+            </button>
+          </div>
+
+          {/* Settings backup list */}
+          {settingsBackups && settingsBackups.backups.length > 0 && (
+            <div className="border border-border rounded-md overflow-hidden">
+              <div className="px-3 py-2 bg-muted/30 border-b border-border">
+                <p className="text-sm font-medium">{t('admin.settingsBackupList')}</p>
+              </div>
+              <div className="divide-y divide-border">
+                {(showAllSettings ? settingsBackups.backups : settingsBackups.backups.slice(0, 5)).map((b) => (
+                  <div key={b.filename} className="flex items-center justify-between px-3 py-2 hover:bg-muted/20">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <FileArchive className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-sm font-mono truncate">{b.filename}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {b.size_pretty} &middot; {t('admin.settingsCount', { count: b.setting_count })} &middot; {new Date(b.created_at).toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        onClick={() => handleDownloadSettingsBackup(b.filename)}
+                        className="p-1.5 rounded hover:bg-muted transition-colors"
+                        title="Download"
+                      >
+                        <Download className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteSettingsBackup(b.filename)}
+                        className="p-1.5 rounded hover:bg-destructive/10 text-destructive transition-colors"
+                        title="Delete"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {settingsBackups.total > 5 && (
+                <div
+                  onClick={() => setShowAllSettings(!showAllSettings)}
+                  className="text-xs text-muted-foreground hover:text-foreground text-center py-1.5 cursor-pointer border-t border-border"
+                >
+                  {showAllSettings ? (
+                    <span className="flex items-center justify-center gap-1">
+                      <ChevronUp className="h-3 w-3" />
+                      {t('admin.hideList')}
+                    </span>
+                  ) : (
+                    <span className="flex items-center justify-center gap-1">
+                      <ChevronDown className="h-3 w-3" />
+                      {t('admin.showAll', { count: settingsBackups.total })}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="pt-2 border-t border-border space-y-3">
+            <p className="text-sm font-medium flex items-center gap-2">
+              <RotateCcw className="h-4 w-4" />
+              {t('admin.settingsImport')}
+            </p>
+            <label
+              className={cn(
+                'flex items-center justify-center gap-2 px-4 py-4 border-2 border-dashed border-input rounded-md cursor-pointer',
+                'hover:border-primary/50 hover:bg-muted/30 transition-colors',
+                isImportingSettings && 'opacity-50 cursor-not-allowed',
+              )}
+            >
+              <input
+                type="file"
+                accept=".json"
+                onChange={(e) => setSettingsFile(e.target.files?.[0] || null)}
+                disabled={isImportingSettings}
+                className="sr-only"
+              />
+              <Upload className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">
+                {settingsFile ? settingsFile.name : t('admin.selectJsonFile')}
+              </span>
+            </label>
+
+            {settingsFile && (
+              <div className="flex items-center justify-between p-3 bg-muted/50 rounded-md">
+                <div className="flex items-center gap-2">
+                  <FileArchive className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">{settingsFile.name}</span>
+                  <span className="text-xs text-muted-foreground">
+                    ({(settingsFile.size / 1024).toFixed(1)} KB)
+                  </span>
+                </div>
+                <button
+                  onClick={handleSettingsImport}
+                  disabled={isImportingSettings}
+                  className={cn(
+                    'flex items-center gap-2 px-4 py-2 rounded-md text-sm',
+                    'bg-primary text-primary-foreground hover:bg-primary/90 transition-colors',
+                    'disabled:opacity-50 disabled:cursor-not-allowed',
+                  )}
+                >
+                  <Upload className="h-4 w-4" />
+                  {isImportingSettings ? t('common.importing', 'Importing...') : t('admin.settingsImport')}
+                </button>
+              </div>
+            )}
+
+            {settingsMsg && (
+              <div
+                className={cn(
+                  'flex items-center gap-2 p-3 rounded-md',
+                  settingsMsg.ok
+                    ? 'bg-green-500/10 border border-green-500/20'
+                    : 'bg-destructive/10 border border-destructive/20',
+                )}
+              >
+                {settingsMsg.ok ? (
+                  <CheckCircle className="h-4 w-4 text-green-600" />
+                ) : (
+                  <AlertCircle className="h-4 w-4 text-destructive" />
+                )}
+                <span className={cn('text-sm', settingsMsg.ok ? 'text-green-700' : 'text-destructive')}>
+                  {settingsMsg.text}
+                </span>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

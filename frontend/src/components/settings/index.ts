@@ -1,7 +1,6 @@
 export { OAuthSection } from './OAuthSection'
 export { SettingRow } from './SettingRow'
 export { NsxImportSection } from './NsxImportSection'
-export { BackupSection } from './BackupSection'
 export { SearchParamsSection } from './SearchParamsSection'
 export { GraphSettingsSection } from './GraphSettingsSection'
 export type { Setting, NsxImportStatus } from './types'
