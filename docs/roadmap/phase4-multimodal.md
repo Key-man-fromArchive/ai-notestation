@@ -1,174 +1,111 @@
-# Phase 4 — 멀티모달 확장 (v2.0.0)
+# Phase 4 — 멀티모달 확장
 
 > 근거: Reseek 제품 (OCR, PDF 추출), Web-Shepherd 논문 ("text-only가 더 나을 수도" 주의)
-
-## 현재 상태 분석
-
-### 기존 인프라
-- **NoteImage** — 모델 존재 (`models.py`), NSX 추출 이미지 저장
-- **NoteAttachment** — 모델 존재, 파일 첨부
-- **image_utils.py** — `extract_note_images()` 함수, 멀티모달 AI 지원
-- **NAS Images API** — `api/nas_images.py`, 이미지 프록시/서빙
-- **Files API** — `api/files.py`, 파일 핸들링
-- **임베딩 파이프라인** — `search/indexer.py`, `search/embeddings.py`
-
-### 주의사항 (Web-Shepherd 발견)
-> "멀티모달 입력이 때때로 성능을 저하시킨다" — 구조화된 작업에서는 텍스트 기반 처리 우선
+>
+> **현재 상태**: 4-1 ✅ (v1.2.0), 4-2 ✅ (v1.2.0 → v1.3.0 → v1.3.1), 4-3 🔲
 
 ---
 
-## Task 4-1. PDF 텍스트 추출
+## Task 4-1. PDF 텍스트 추출 ✅ (v1.2.0)
 
-### 목표
-연구 논문, eBook PDF에서 **텍스트 추출 → 검색 가능하게** 인덱싱
+### 구현 완료
 
-### TODO
-
-#### Backend
-
-- [ ] **PDF 추출 서비스** (`services/pdf_extractor.py` — 신규)
-  ```python
-  class PDFExtractor:
-      """PDF → 텍스트 추출 파이프라인"""
-
-      async def extract_text(
-          self,
-          file_path: str | Path,
-      ) -> PDFExtractionResult:
-          """
-          추출 전략 (우선순위):
-          1. pymupdf (PyMuPDF) — 가장 빠르고 정확
-          2. pdfplumber — 테이블 추출에 강함
-          3. Fallback: OCR (이미지 기반 PDF)
-
-          결과:
-          - pages: list[PageContent]  # 페이지별 텍스트
-          - metadata: dict            # 제목, 저자, 날짜 등
-          - total_chars: int
-          """
-
-      async def extract_and_index(
-          self,
-          note_id: int,
-          attachment_id: int,
-          db: AsyncSession,
-      ) -> None:
-          """
-          1. PDF 파일 다운로드/접근
-          2. 텍스트 추출
-          3. Note에 텍스트 저장 (또는 별도 테이블)
-          4. 임베딩 인덱싱 파이프라인 트리거
-          """
-  ```
-
-- [ ] **DB 스키마 확장** (Alembic 마이그레이션)
-  ```python
-  class NoteAttachmentText(Base):
-      """첨부 파일에서 추출된 텍스트"""
-      id: int
-      attachment_id: int  # FK → NoteAttachment
-      extracted_text: str
-      page_count: int
-      extraction_method: str  # "pymupdf", "pdfplumber", "ocr"
-      extracted_at: datetime
-  ```
-
-- [ ] **API 엔드포인트**
-  ```python
-  POST /api/files/{attachment_id}/extract → {"status": "extracting"}
-  GET  /api/files/{attachment_id}/text   → {"text": "...", "pages": 42}
-  ```
-
-- [ ] **임베딩 통합** (`search/indexer.py`)
-  - PDF 추출 텍스트도 임베딩 대상에 포함
-  - 긴 문서는 청크 분할 후 각각 임베딩
-
-- [ ] **의존성 추가** (`pyproject.toml`)
-  - `pymupdf` (또는 `PyMuPDF`)
-  - `pdfplumber` (보조)
-
-#### Frontend
-
-- [ ] **PDF 뷰어/텍스트 토글** (`pages/NoteDetail.tsx`)
-  - PDF 첨부 파일에 "텍스트 추출" 버튼
-  - 추출 완료 후 텍스트 미리보기 표시
-  - 추출된 텍스트 검색 가능 표시
-
-### 파일 변경 목록
-| 파일 | 변경 유형 |
-|------|-----------|
-| `backend/app/services/pdf_extractor.py` | **신규** |
-| `backend/app/models.py` | 수정 — NoteAttachmentText 모델 |
-| `backend/alembic/versions/xxx_add_attachment_text.py` | **신규** — 마이그레이션 |
-| `backend/app/api/files.py` | 수정 — extract, text 엔드포인트 |
-| `backend/app/search/indexer.py` | 수정 — PDF 텍스트 임베딩 |
-| `backend/pyproject.toml` | 수정 — pymupdf 의존성 |
-
-### 예상 난이도: ★★★☆☆
-라이브러리 의존. 긴 문서 청크 전략이 핵심.
+- **`services/pdf_extractor.py`** — `PDFExtractor` 클래스
+  - PyMuPDF 기반 텍스트 추출 + OCR 폴백 (이미지 PDF)
+  - `extract_text()` → `PDFExtractionResult` (pages, metadata, total_chars)
+  - `extract_and_index()` → DB 저장 + 임베딩 인덱싱 트리거
+- **DB**: `NoteAttachment.extracted_text`, `extraction_status` 필드 + 마이그레이션 017
+- **API**: `POST /files/{id}/extract`, `GET /files/{id}/text`
+- **검색 통합**: PDF 추출 텍스트가 FTS + 임베딩 대상에 포함
+- **Frontend**: PDF 첨부 파일 텍스트 추출 UI
 
 ---
 
-## Task 4-2. OCR 파이프라인 (이미지 → 텍스트)
+## Task 4-2. OCR + Vision 이미지 분석 시스템 ✅ (v1.2.0 → v1.3.0 → v1.3.1)
 
-### 목표
-실험실 노트의 사진, 다이어그램, 손글씨를 **검색 가능한 텍스트로**
+### 3세대 아키텍처 진화
 
-### TODO
+#### v1.2.0 — 수동 단건 OCR
+- 우클릭 → "텍스트 인식" 으로 개별 이미지 OCR
+- 3개 엔진 선택 가능 (AI Vision / PaddleOCR-VL / GLM-OCR)
+- `NoteImage.extracted_text` 필드 + 마이그레이션 018
 
-#### Backend
+#### v1.3.0 — 배치 파이프라인 도입
+- `ImageAnalysisService` 신규 — 모든 이미지 일괄 처리
+- Vision 설명 생성 (glm-4.6v) + `vision_description` 필드 + 마이그레이션 019
+- Vision 설명이 검색 임베딩에 포함 → "그래프가 있는 노트" 같은 시각적 검색
+- 캐시된 텍스트로 AI Insight 최적화 (이미지 재전송 불필요)
+- 우클릭 개별 Vision 분석 + FIFO 큐 기반 다중 요청 관리
 
-- [ ] **OCR 서비스** (`services/ocr_service.py` — 신규)
-  ```python
-  class OCRService:
-      """이미지 → 텍스트 추출"""
+#### v1.3.1 — 듀얼 파이프라인 아키텍처 (현재)
+- OCR/Vision을 독립 파이프라인으로 분리 (순차→병렬)
+- **Vision 처리량 ~6배 향상**
+- Settings UI: DB 기준 전체 통계 상시 표시, 시작/완료 시간, 실패 상세 팝업
+- Dashboard: OCR/Vision 미처리 분리 표시
 
-      async def extract_text(
-          self,
-          image_data: bytes,
-          language: str = "kor+eng",
-      ) -> OCRResult:
-          """
-          OCR 전략 (선택적):
-          A. Tesseract OCR (로컬, 무료, 한글 지원)
-          B. AI 프로바이더 Vision API (정확도 높음, 비용 발생)
-             - 기존 image_utils.py + multimodal AI 활용
-          C. 하이브리드: Tesseract 먼저 → 신뢰도 낮으면 AI Vision
+### 핵심 아키텍처 상세
 
-          결과:
-          - text: str
-          - confidence: float
-          - method: str  # "tesseract", "ai_vision"
-          """
+#### OCRService (`services/ocr_service.py`, 307줄)
 
-      async def process_note_images(
-          self,
-          note_id: int,
-          db: AsyncSession,
-      ) -> list[OCRResult]:
-          """노트의 모든 이미지에 OCR 실행"""
-  ```
+3엔진 하이브리드 + 자동 폴백 체인:
 
-- [ ] **NoteImage 모델 확장** (`models.py`)
-  - `ocr_text: str | None` 필드 추가
-  - `ocr_confidence: float | None`
+```
+┌─────────────┐     실패     ┌──────────────┐     실패     ┌─────────────────┐
+│  GLM-OCR    │ ──────────→ │ PaddleOCR-VL │ ──────────→ │ AI Vision Cloud │
+│  (ZhipuAI)  │             │  (로컬 CPU)   │             │  (7모델 우선순위) │
+└─────────────┘             └──────────────┘             └─────────────────┘
+  마크다운 출력               120초 타임아웃              glm-4.6v-flash → ... → claude-sonnet-4-5
+  layout_parsing API          멀티쓰레드 실행              "OCR" 프롬프트로 텍스트 추출
+```
 
-- [ ] **검색 통합**
-  - OCR 텍스트를 FTS 인덱싱 대상에 포함
-  - 임베딩 생성 시 OCR 텍스트도 포함
+- **`GlmOcrEngine`**: ZhipuAI `layout_parsing` API, 마크다운 포맷 출력
+- **`PaddleOCRVLEngine`**: 로컬 CPU 실행, 120초 타임아웃, 멀티쓰레드
+- **AI Vision 클라우드**: 7개 모델 우선순위 (glm-4.6v-flash, glm-4.6v, gemini-2.0-flash, gpt-4o-mini, gpt-4o, claude-haiku-3-5, claude-sonnet-4-5)
+- **`OCRResult`** 모델: text, confidence (0-1), method (엔진/모델 ID)
+- `extract_text()` → 설정된 엔진 디스패치, 실패 시 자동 폴백
 
-- [ ] **의존성** (`pyproject.toml`)
-  - `pytesseract` + Tesseract 시스템 패키지
-  - 또는 Docker에 tesseract-ocr 포함
+#### ImageAnalysisService (`services/image_analysis_service.py`, 331줄)
 
-#### Frontend
+듀얼 파이프라인 배치 프로세서:
 
-- [ ] **이미지에 OCR 뱃지**
-  - OCR 완료된 이미지에 텍스트 아이콘 표시
-  - 클릭 시 추출된 텍스트 오버레이
+```
+                        ┌─── OCR Pipeline (concurrency=1) ───┐
+  전체 이미지 목록 ──→  │   GLM-OCR rate limit 때문에 직렬    │ ──→ 자동 검색 재인덱싱
+  (미처리 필터)    ──→  │                                     │ ──→ (_reindex_affected_notes)
+                        ├─── Vision Pipeline (concurrency=8) ─┤
+                        │   429 rate limit 방지 세마포어       │
+                        │   이미지 설명 텍스트 생성            │
+                        └─────────────────────────────────────┘
+                          asyncio.gather() 독립 실행
+                          한쪽 실패해도 다른 파이프라인 계속
+```
 
-### 예상 난이도: ★★★★☆
-외부 의존성 (Tesseract). Docker 설정 변경 필요. 한글 정확도 이슈.
+- **`run_batch()`**: OCR + Vision 을 `asyncio.gather()` 로 독립 실행
+- **`_run_ocr()`**: `OCRService` 에 위임, `OCR_CONCURRENCY=1`
+- **`_run_vision()`**: `AIRouter` 사용, 설정 가능한 Vision 모델 (기본: glm-4.6v), `VISION_CONCURRENCY=8`
+- **`_reindex_affected_notes()`**: 완료 후 영향받은 노트의 검색 임베딩 자동 갱신
+- **`_get_vision_model()`**: Settings store에서 Vision 모델 읽기
+
+#### API (`api/image_analysis.py`, 207줄)
+
+- `POST /api/image-analysis/trigger` — 배치 분석 시작 (Background task)
+- `GET /api/image-analysis/status` — 진행 상태 (total, processed, ocr_done, vision_done, failed)
+- `GET /api/image-analysis/stats` — DB 기준 전체 통계
+- `GET /api/image-analysis/failed` — 실패 이미지 상세 목록
+- **`ImageAnalysisState`**: 인메모리 진행 추적 (status, timestamps, progress callback)
+
+### 파일 목록 (실제 구현)
+| 파일 | 역할 |
+|------|------|
+| `backend/app/services/ocr_service.py` | 3엔진 하이브리드 OCR + 폴백 체인 |
+| `backend/app/services/image_analysis_service.py` | 듀얼 파이프라인 배치 프로세서 |
+| `backend/app/api/image_analysis.py` | trigger/status/stats/failed 엔드포인트 |
+| `backend/app/api/files.py` | 개별 Vision 분석 엔드포인트 |
+| `backend/app/models.py` | NoteImage.extracted_text, vision_description 필드 |
+| `backend/migrations/versions/018_*.py` | OCR 텍스트 필드 마이그레이션 |
+| `backend/migrations/versions/019_*.py` | Vision 설명 필드 마이그레이션 |
+| `frontend/src/hooks/useBatchImageAnalysis.ts` | 배치 처리 훅 |
+| `frontend/src/hooks/useImageAnalysisStats.ts` | 통계 훅 |
 
 ---
 

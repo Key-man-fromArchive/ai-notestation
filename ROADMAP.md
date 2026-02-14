@@ -97,20 +97,25 @@
 - ~~연구 논문, eBook PDF에서 텍스트 추출 → 검색 가능하게~~
 - `PDFExtractor` + 첨부 파일 인덱싱 완료
 
-### 4-2. OCR 파이프라인 (이미지 → 텍스트) ✅ (v1.2.0 ~ v1.3.0)
+### 4-2. OCR + Vision 이미지 분석 시스템 ✅ (v1.2.0 → v1.3.0 → v1.3.1)
 - ~~실험실 노트의 사진, 다이어그램, 손글씨를 검색 가능한 텍스트로~~
-- v1.2.0: 수동 OCR (우클릭 → 텍스트 인식), 3개 엔진 (AI Vision / PaddleOCR-VL / GLM-OCR)
-- v1.3.0: **배치 OCR + Vision 파이프라인 추가**
-  - `ImageAnalysisService` — 배치 OCR + Vision 설명 (glm-4.6v)
-  - Vision 설명이 검색 임베딩에 포함 → 이미지 내용으로도 검색 가능
-  - 캐시된 텍스트로 AI Insight 최적화 (이미지 재전송 불필요)
-  - Settings 배치 처리 UI + Dashboard 현황 카드
-  - 우클릭 개별 Vision 분석 + FIFO 큐 기반 다중 요청 관리
-- v1.3.1: **배치 파이프라인 성능 최적화**
-  - OCR/Vision 독립 파이프라인 분리 (순차→병렬, Vision 처리량 ~6배 향상)
-  - 동시성 조정: OCR 1 (GLM-OCR 제한), Vision 8 (429 rate limit 방지)
-  - Settings UI 개선: DB 기준 전체 통계 상시 표시, 시작/완료 시간, 실패 상세 팝업
-  - Dashboard 미처리 표시 OCR/Vision 분리
+- **3세대에 걸친 아키텍처 진화**:
+- v1.2.0: **수동 단건 OCR** — 우클릭 → 텍스트 인식, 3엔진 선택
+- v1.3.0: **배치 파이프라인 도입** — OCR+Vision 일괄 처리, 검색 통합
+- v1.3.1: **듀얼 파이프라인 아키텍처** — 독립 병렬 처리, 6배 처리량 향상
+- **핵심 아키텍처**:
+  - `OCRService` — 3엔진 하이브리드 + 자동 폴백 체인:
+    - 1차: GLM-OCR (ZhipuAI layout_parsing, 마크다운 출력)
+    - 2차: PaddleOCR-VL (로컬 CPU, 120초 타임아웃)
+    - 3차: AI Vision 클라우드 (7개 모델 우선순위: glm-4.6v-flash → claude-sonnet-4-5)
+  - `ImageAnalysisService` — 듀얼 파이프라인 배치 프로세서:
+    - OCR 파이프라인 (동시성=1, GLM-OCR rate limit)
+    - Vision 파이프라인 (동시성=8, 429 방지) — 이미지 설명 생성
+    - `asyncio.gather()` 독립 실행 → 한 파이프라인 실패해도 다른 쪽 계속
+    - 완료 후 자동 검색 재인덱싱 (`_reindex_affected_notes`)
+  - Vision 설명이 검색 임베딩에 포함 → "그래프가 있는 노트" 같은 시각적 검색 가능
+  - 캐시된 OCR+Vision 텍스트로 AI Insight 최적화 (이미지 재전송 불필요)
+  - Settings UI: OCR 엔진 선택, Vision 모델 선택, 배치 제어, DB 기준 전체 통계
 
 ### 4-3. 외부 콘텐츠 캡처
 - URL 북마크 → 콘텐츠 자동 추출 (Reseek의 Smart Bookmarks)
@@ -155,7 +160,7 @@
 | 3-3 | Rediscovery | ✅ | ★★★☆☆ | ★★☆☆☆ | v1.2.0 구현 완료 |
 | 3-4 | 그래프 인사이트 영속화 | ✅ | ★★★☆☆ | ★★☆☆☆ | v1.3.1 구현 완료 |
 | 4-1 | PDF 추출 | ✅ | ★★★★☆ | ★★★☆☆ | v1.2.0 구현 완료 |
-| 4-2 | OCR + Vision 파이프라인 | ✅ | ★★★☆☆ | ★★★★☆ | v1.3.1 최적화 완료 |
+| 4-2 | OCR + Vision 이미지 분석 | ✅ | ★★★★★ | ★★★★☆ | v1.3.1 — 3엔진 하이브리드 OCR + 듀얼 파이프라인 |
 | **4-3** | **외부 콘텐츠 캡처** | **🔲** | ★★★☆☆ | ★★★☆☆ | URL 북마크/학술 메타데이터 |
 | **5-1** | **평가 프레임워크** | **🔲** | ★★★★★ | ★★★★★ | 장기적 품질 기반, 높은 초기 투자 |
 | **5-2** | **검색 품질 메트릭** | **🔲** | ★★★★☆ | ★★★☆☆ | Correctness vs Utility 대시보드 |

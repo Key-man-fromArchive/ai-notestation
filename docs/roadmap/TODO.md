@@ -111,13 +111,21 @@
 - [x] Backend: 임베딩 파이프라인에 PDF 텍스트 포함
 - [x] Frontend: PDF 텍스트 추출 UI
 
-### 4-2. OCR + Vision 파이프라인 `★★★★ 난이도` ✅ 완료 (v1.2.0 ~ v1.3.1)
-- [x] Backend: `OCRService` (`services/ocr_service.py`) — GLM-OCR / PaddleOCR-VL / AI Vision 하이브리드
+### 4-2. OCR + Vision 이미지 분석 시스템 `★★★★ 난이도` ✅ 완료 (v1.2.0 → v1.3.0 → v1.3.1)
+- [x] Backend: `OCRService` (`services/ocr_service.py`) — 3엔진 하이브리드 + 자동 폴백 체인
+  - GLM-OCR (layout_parsing, 마크다운) → PaddleOCR-VL (로컬 CPU) → AI Vision (7모델 우선순위)
+  - `OCRResult` 모델: text, confidence (0-1), method (엔진/모델 ID)
 - [x] Backend: NoteImage.extracted_text/extraction_status 필드 + 마이그레이션 (018)
-- [x] Backend: `ImageAnalysisService` (`services/image_analysis_service.py`) — 배치 OCR + Vision
-- [x] Backend: Vision 설명 필드 + 마이그레이션 (019)
-- [x] Backend: FTS/임베딩에 OCR + Vision 텍스트 포함
-- [x] Frontend: 배치 처리 UI + 실패 상세 + Dashboard 현황 카드
+- [x] Backend: `ImageAnalysisService` (`services/image_analysis_service.py`) — 듀얼 파이프라인 배치 프로세서
+  - OCR 파이프라인 (동시성=1) + Vision 파이프라인 (동시성=8) 독립 병렬 실행
+  - `asyncio.gather()` 기반 — 한쪽 실패해도 다른 파이프라인 계속
+  - 완료 후 `_reindex_affected_notes()` 자동 검색 재인덱싱
+  - Settings에서 Vision 모델 선택 가능 (기본: glm-4.6v)
+- [x] Backend: Vision 설명 필드 (`vision_description`) + 마이그레이션 (019)
+- [x] Backend: FTS/임베딩에 OCR + Vision 텍스트 포함 → 시각적 검색 가능
+- [x] Backend: API — trigger/status/stats/failed 엔드포인트 + 인메모리 진행 추적
+- [x] Frontend: 배치 처리 UI + 실패 상세 팝업 + Dashboard OCR/Vision 분리 현황 카드
+- [x] Frontend: Settings OCR 엔진 선택, Vision 모델 선택, 배치 제어 UI
 
 ### 4-3. 외부 콘텐츠 캡처 `★★★ 난이도`
 - [ ] Backend: ContentCaptureService (URL → 마크다운)
