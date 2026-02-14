@@ -5,6 +5,8 @@
 > 현재 버전: **v1.5.1** | 최종 갱신: 2026-02-14
 >
 > **상세 계획**: [docs/roadmap/](docs/roadmap/) | **마스터 TODO**: [docs/roadmap/TODO.md](docs/roadmap/TODO.md)
+>
+> **차세대 로드맵**: [NEXT_GENERATION_ROADMAP.md](NEXT_GENERATION_ROADMAP.md) | **차세대 TODO**: [docs/roadmap/NEXT_GEN_TODO.md](docs/roadmap/NEXT_GEN_TODO.md)
 
 ---
 
