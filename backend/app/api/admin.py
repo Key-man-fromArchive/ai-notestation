@@ -827,48 +827,22 @@ async def create_db_backup(
     env = os.environ.copy()
     env["PGPASSWORD"] = db_params["password"]
 
-    # pg_dump → gzip pipeline
-    dump_proc = await asyncio.create_subprocess_exec(
-        "pg_dump",
-        "-h",
-        db_params["host"],
-        "-p",
-        db_params["port"],
-        "-U",
-        db_params["user"],
-        "-d",
-        db_params["dbname"],
+    # pg_dump → gzip via shell pipe (uvloop doesn't support piping asyncio streams)
+    proc = await asyncio.create_subprocess_shell(
+        f"pg_dump -h {db_params['host']} -p {db_params['port']} -U {db_params['user']} -d {db_params['dbname']} | gzip",
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
         env=env,
     )
+    stdout, stderr = await proc.communicate()
 
-    gzip_proc = await asyncio.create_subprocess_exec(
-        "gzip",
-        stdin=dump_proc.stdout,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-
-    # Allow dump_proc to receive SIGPIPE if gzip exits early
-    if dump_proc.stdout:
-        dump_proc.stdout.close()  # type: ignore[unused-ignore]
-
-    gzip_stdout, gzip_stderr = await gzip_proc.communicate()
-    _, dump_stderr = await dump_proc.communicate()
-
-    if dump_proc.returncode != 0:
+    if proc.returncode != 0:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"pg_dump failed: {dump_stderr.decode().strip()}",
-        )
-    if gzip_proc.returncode != 0:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"gzip failed: {gzip_stderr.decode().strip()}",
+            detail=f"pg_dump failed: {stderr.decode().strip()}",
         )
 
-    dest.write_bytes(gzip_stdout)
+    dest.write_bytes(stdout)
     file_size = dest.stat().st_size
     created_at = datetime.now(UTC).isoformat()
 
@@ -963,47 +937,21 @@ async def restore_db_backup(
         env = os.environ.copy()
         env["PGPASSWORD"] = db_params["password"]
 
-        # gunzip → psql pipeline
-        gunzip_proc = await asyncio.create_subprocess_exec(
-            "gunzip",
-            "-c",
-            str(tmp_file),
+        # gunzip → psql via shell pipe (uvloop doesn't support piping asyncio streams)
+        proc = await asyncio.create_subprocess_shell(
+            f"gunzip -c {tmp_file} | psql -h {db_params['host']}"
+            f" -p {db_params['port']} -U {db_params['user']}"
+            f" -d {db_params['dbname']}",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=env,
         )
+        _, stderr = await proc.communicate()
 
-        psql_proc = await asyncio.create_subprocess_exec(
-            "psql",
-            "-h",
-            db_params["host"],
-            "-p",
-            db_params["port"],
-            "-U",
-            db_params["user"],
-            "-d",
-            db_params["dbname"],
-            stdin=gunzip_proc.stdout,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            env=env,
-        )
-
-        if gunzip_proc.stdout:
-            gunzip_proc.stdout.close()  # type: ignore[unused-ignore]
-
-        psql_stdout, psql_stderr = await psql_proc.communicate()
-        _, gunzip_stderr = await gunzip_proc.communicate()
-
-        if gunzip_proc.returncode != 0:
+        if proc.returncode != 0:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"gunzip failed: {gunzip_stderr.decode().strip()}",
-            )
-        if psql_proc.returncode != 0:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"psql failed: {psql_stderr.decode().strip()}",
+                detail=f"Restore failed: {stderr.decode().strip()}",
             )
     finally:
         # Always clean up the temp file
