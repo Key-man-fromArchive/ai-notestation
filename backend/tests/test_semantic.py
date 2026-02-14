@@ -39,6 +39,9 @@ def _make_mock_row(
     row.title = title
     row.chunk_text = chunk_text
     row.cosine_distance = cosine_distance
+    row.source_created_at = None
+    row.source_updated_at = None
+    row.total_count = 0
     return row
 
 
@@ -76,23 +79,26 @@ class TestSemanticSearchSuccess:
 
     @pytest.mark.asyncio
     async def test_basic_semantic_search_returns_results(self):
-        """A search with matching embeddings returns SearchResult with search_type='semantic'."""
+        """A search with matching embeddings returns SearchPage with SearchResult list."""
         rows = [
             _make_mock_row(1, "Python Guide", "Learn Python basics and advanced concepts", 0.15),
             _make_mock_row(2, "Python Tips", "Advanced Python programming tips and tricks", 0.25),
         ]
+        rows[0].total_count = 2
+        rows[1].total_count = 2
         session = _make_mock_session(rows)
         embedding_service = _make_mock_embedding_service()
         engine = SemanticSearchEngine(session, embedding_service)
 
-        results = await engine.search("Python programming")
+        page = await engine.search("Python programming")
 
-        assert len(results) == 2
-        assert all(isinstance(r, SearchResult) for r in results)
-        assert results[0].note_id == "1"
-        assert results[0].title == "Python Guide"
-        assert results[0].search_type == "semantic"
-        assert results[1].search_type == "semantic"
+        assert len(page.results) == 2
+        assert all(isinstance(r, SearchResult) for r in page.results)
+        assert page.results[0].note_id == "1"
+        assert page.results[0].title == "Python Guide"
+        assert page.results[0].search_type == "semantic"
+        assert page.results[1].search_type == "semantic"
+        assert page.total == 2
 
     @pytest.mark.asyncio
     async def test_search_calls_embed_text_with_query(self):
@@ -123,31 +129,33 @@ class TestSemanticSearchSuccess:
 
 
 class TestEmptyQuery:
-    """Empty or whitespace-only queries return an empty list."""
+    """Empty or whitespace-only queries return an empty SearchPage."""
 
     @pytest.mark.asyncio
     async def test_empty_string_returns_empty_list(self):
-        """An empty string query returns no results without calling embed or DB."""
+        """An empty string query returns SearchPage with empty results without calling embed or DB."""
         session = _make_mock_session()
         embedding_service = _make_mock_embedding_service()
         engine = SemanticSearchEngine(session, embedding_service)
 
-        results = await engine.search("")
+        page = await engine.search("")
 
-        assert results == []
+        assert page.results == []
+        assert page.total == 0
         embedding_service.embed_text.assert_not_awaited()
         session.execute.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_whitespace_only_returns_empty_list(self):
-        """A whitespace-only query returns no results without calling embed or DB."""
+        """A whitespace-only query returns SearchPage with empty results without calling embed or DB."""
         session = _make_mock_session()
         embedding_service = _make_mock_embedding_service()
         engine = SemanticSearchEngine(session, embedding_service)
 
-        results = await engine.search("   \t\n  ")
+        page = await engine.search("   \t\n  ")
 
-        assert results == []
+        assert page.results == []
+        assert page.total == 0
         embedding_service.embed_text.assert_not_awaited()
         session.execute.assert_not_awaited()
 
@@ -158,19 +166,19 @@ class TestEmptyQuery:
 
 
 class TestNoResults:
-    """Searches that match no embeddings return an empty list."""
+    """Searches that match no embeddings return an empty SearchPage."""
 
     @pytest.mark.asyncio
     async def test_no_matching_embeddings(self):
-        """A query with no similar embeddings returns an empty list."""
+        """A query with no similar embeddings returns SearchPage with empty results."""
         session = _make_mock_session([])
         embedding_service = _make_mock_embedding_service()
         engine = SemanticSearchEngine(session, embedding_service)
 
-        results = await engine.search("completely unrelated query xyz")
+        page = await engine.search("completely unrelated query xyz")
 
-        assert results == []
-        assert isinstance(results, list)
+        assert page.results == []
+        assert page.total == 0
 
 
 # ---------------------------------------------------------------------------
@@ -202,26 +210,31 @@ class TestLimitOffset:
             _make_mock_row(i, f"Note {i}", f"Chunk text for note {i}", 0.1 * i)
             for i in range(5)
         ]
+        for row in rows:
+            row.total_count = 5
         session = _make_mock_session(rows)
         embedding_service = _make_mock_embedding_service()
         engine = SemanticSearchEngine(session, embedding_service)
 
-        results = await engine.search("test", limit=5)
+        page = await engine.search("test", limit=5)
 
-        assert len(results) == 5
+        assert len(page.results) == 5
+        assert page.total == 5
 
     @pytest.mark.asyncio
     async def test_custom_offset(self):
         """Custom offset skips initial results."""
         rows = [_make_mock_row(10, "Offset Note", "Offset chunk text content", 0.2)]
+        rows[0].total_count = 1
         session = _make_mock_session(rows)
         embedding_service = _make_mock_embedding_service()
         engine = SemanticSearchEngine(session, embedding_service)
 
-        results = await engine.search("test", limit=10, offset=5)
+        page = await engine.search("test", limit=10, offset=5)
 
-        assert len(results) == 1
-        assert results[0].note_id == "10"
+        assert len(page.results) == 1
+        assert page.results[0].note_id == "10"
+        assert page.total == 1
 
 
 # ---------------------------------------------------------------------------
@@ -239,38 +252,42 @@ class TestSimilarityScore:
             _make_mock_row(1, "Close Match", "Very similar content", 0.1),
             _make_mock_row(2, "Far Match", "Less similar content", 0.6),
         ]
+        rows[0].total_count = 2
+        rows[1].total_count = 2
         session = _make_mock_session(rows)
         embedding_service = _make_mock_embedding_service()
         engine = SemanticSearchEngine(session, embedding_service)
 
-        results = await engine.search("similar content")
+        page = await engine.search("similar content")
 
-        assert results[0].score == pytest.approx(0.9, abs=1e-6)
-        assert results[1].score == pytest.approx(0.4, abs=1e-6)
+        assert page.results[0].score == pytest.approx(0.9, abs=1e-6)
+        assert page.results[1].score == pytest.approx(0.4, abs=1e-6)
 
     @pytest.mark.asyncio
     async def test_perfect_match_score_is_one(self):
         """A cosine_distance of 0 yields a score of 1.0 (perfect match)."""
         rows = [_make_mock_row(1, "Perfect", "Exact content", 0.0)]
+        rows[0].total_count = 1
         session = _make_mock_session(rows)
         embedding_service = _make_mock_embedding_service()
         engine = SemanticSearchEngine(session, embedding_service)
 
-        results = await engine.search("exact")
+        page = await engine.search("exact")
 
-        assert results[0].score == pytest.approx(1.0, abs=1e-6)
+        assert page.results[0].score == pytest.approx(1.0, abs=1e-6)
 
     @pytest.mark.asyncio
     async def test_orthogonal_score_is_zero(self):
         """A cosine_distance of 1 yields a score of 0.0 (orthogonal)."""
         rows = [_make_mock_row(1, "Unrelated", "Orthogonal content", 1.0)]
+        rows[0].total_count = 1
         session = _make_mock_session(rows)
         embedding_service = _make_mock_embedding_service()
         engine = SemanticSearchEngine(session, embedding_service)
 
-        results = await engine.search("query")
+        page = await engine.search("query")
 
-        assert results[0].score == pytest.approx(0.0, abs=1e-6)
+        assert page.results[0].score == pytest.approx(0.0, abs=1e-6)
 
 
 # ---------------------------------------------------------------------------
@@ -285,27 +302,29 @@ class TestSnippetExtraction:
     async def test_snippet_from_short_chunk_text(self):
         """A short chunk_text is used as snippet without truncation."""
         rows = [_make_mock_row(1, "Note", "Short chunk text", 0.2)]
+        rows[0].total_count = 1
         session = _make_mock_session(rows)
         embedding_service = _make_mock_embedding_service()
         engine = SemanticSearchEngine(session, embedding_service)
 
-        results = await engine.search("test")
+        page = await engine.search("test")
 
-        assert results[0].snippet == "Short chunk text"
+        assert page.results[0].snippet == "Short chunk text"
 
     @pytest.mark.asyncio
     async def test_snippet_truncated_to_200_chars(self):
         """A chunk_text longer than 200 chars is truncated with ellipsis."""
         long_text = "A" * 300
         rows = [_make_mock_row(1, "Long Note", long_text, 0.1)]
+        rows[0].total_count = 1
         session = _make_mock_session(rows)
         embedding_service = _make_mock_embedding_service()
         engine = SemanticSearchEngine(session, embedding_service)
 
-        results = await engine.search("test")
+        page = await engine.search("test")
 
-        assert len(results[0].snippet) <= 203  # 200 + "..."
-        assert results[0].snippet == "A" * 200 + "..."
+        assert len(page.results[0].snippet) <= 203  # 200 + "..."
+        assert page.results[0].snippet == "A" * 200 + "..."
 
 
 # ---------------------------------------------------------------------------
@@ -314,33 +333,35 @@ class TestSnippetExtraction:
 
 
 class TestEmbeddingErrorHandling:
-    """EmbeddingError from the embedding service returns an empty list."""
+    """EmbeddingError from the embedding service returns an empty SearchPage."""
 
     @pytest.mark.asyncio
     async def test_embedding_error_returns_empty_list(self):
-        """When EmbeddingService raises EmbeddingError, search returns []."""
+        """When EmbeddingService raises EmbeddingError, search returns SearchPage with empty results."""
         session = _make_mock_session()
         embedding_service = _make_mock_embedding_service(
             embed_side_effect=EmbeddingError("API rate limit exceeded")
         )
         engine = SemanticSearchEngine(session, embedding_service)
 
-        results = await engine.search("test query")
+        page = await engine.search("test query")
 
-        assert results == []
+        assert page.results == []
+        assert page.total == 0
         # DB should not be queried when embedding fails
         session.execute.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_embedding_returns_empty_vector_returns_empty_list(self):
-        """When embed_text returns an empty vector, search returns []."""
+        """When embed_text returns an empty vector, search returns SearchPage with empty results."""
         session = _make_mock_session()
         embedding_service = _make_mock_embedding_service(embed_return=[])
         engine = SemanticSearchEngine(session, embedding_service)
 
-        results = await engine.search("test query")
+        page = await engine.search("test query")
 
-        assert results == []
+        assert page.results == []
+        assert page.total == 0
         session.execute.assert_not_awaited()
 
 
@@ -358,15 +379,16 @@ class TestNotesJoin:
         rows = [
             _make_mock_row(1, "Research Notes", "Experiment results chunk", 0.15),
         ]
+        rows[0].total_count = 1
         session = _make_mock_session(rows)
         embedding_service = _make_mock_embedding_service()
         engine = SemanticSearchEngine(session, embedding_service)
 
-        results = await engine.search("experiment results")
+        page = await engine.search("experiment results")
 
-        assert len(results) == 1
-        assert results[0].title == "Research Notes"
-        assert results[0].note_id == "1"
+        assert len(page.results) == 1
+        assert page.results[0].title == "Research Notes"
+        assert page.results[0].note_id == "1"
 
     @pytest.mark.asyncio
     async def test_sql_contains_join(self):

@@ -579,6 +579,7 @@ class IndexStatusResponse(BaseModel):
     total_notes: int
     indexed_notes: int
     pending_notes: int
+    stale_notes: int = 0
     failed: int
     error_message: str | None = None
 
@@ -588,7 +589,7 @@ class IndexTriggerResponse(BaseModel):
     message: str
 
 
-async def _run_index_background(state: IndexState) -> None:
+async def _run_index_background(state: IndexState, *, force: bool = False) -> None:
     settings = get_settings()
     api_key = state.api_key or settings.OPENAI_API_KEY
     logger.info("Indexer using API key: %s...%s", api_key[:10] if api_key else "None", api_key[-4:] if api_key else "")
@@ -606,18 +607,25 @@ async def _run_index_background(state: IndexState) -> None:
 
     from app.services.activity_log import log_activity
 
+    mode = "force" if force else "smart"
     await log_activity("embedding", "started", triggered_by=state.triggered_by)
 
     try:
         async with async_session_factory() as session:
-            result = await session.execute(
-                text("""
-                    SELECT n.id FROM notes n
-                    WHERE NOT EXISTS (
-                        SELECT 1 FROM note_embeddings ne WHERE ne.note_id = n.id
-                    )
-                """)
-            )
+            if force:
+                result = await session.execute(text("SELECT id FROM notes"))
+            else:
+                result = await session.execute(
+                    text("""
+                        SELECT n.id FROM notes n
+                        WHERE NOT EXISTS (
+                            SELECT 1 FROM note_embeddings ne WHERE ne.note_id = n.id
+                        )
+                        OR n.updated_at > (
+                            SELECT MAX(ne.created_at) FROM note_embeddings ne WHERE ne.note_id = n.id
+                        )
+                    """)
+                )
             note_ids = [row[0] for row in result.fetchall()]
             state.total_notes = len(note_ids)
 
@@ -627,7 +635,7 @@ async def _run_index_background(state: IndexState) -> None:
             await log_activity(
                 "embedding", "completed",
                 message="인덱싱할 노트 없음",
-                details={"indexed": 0, "failed": 0},
+                details={"indexed": 0, "failed": 0, "mode": mode},
                 triggered_by=state.triggered_by,
             )
             return
@@ -644,10 +652,14 @@ async def _run_index_background(state: IndexState) -> None:
             try:
                 async with async_session_factory() as session:
                     indexer = NoteIndexer(session=session, embedding_service=embedding_service)
-                    result = await indexer.index_notes(batch)
+                    for nid in batch:
+                        try:
+                            await indexer.reindex_note(nid)
+                            state.indexed += 1
+                        except Exception as exc:
+                            state.failed += 1
+                            logger.warning("Failed to reindex note %d: %s", nid, exc)
                     await session.commit()
-                    state.indexed += result.indexed
-                    state.failed += result.failed
                     logger.info(
                         "Index progress: %d/%d indexed, %d failed",
                         state.indexed,
@@ -663,7 +675,6 @@ async def _run_index_background(state: IndexState) -> None:
         # Refresh graph materialized view after indexing
         try:
             from app.services.graph_service import refresh_avg_embeddings
-            from app.database import async_session_factory
 
             async with async_session_factory() as mv_session:
                 await refresh_avg_embeddings(mv_session)
@@ -679,6 +690,7 @@ async def _run_index_background(state: IndexState) -> None:
                 "total_notes": state.total_notes,
                 "indexed": state.indexed,
                 "failed": state.failed,
+                "mode": mode,
             },
             triggered_by=state.triggered_by,
         )
@@ -702,13 +714,14 @@ async def _run_index_background(state: IndexState) -> None:
 async def trigger_index(
     background_tasks: BackgroundTasks,
     request: Request,
-    current_user: dict = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    force: bool = Query(False, description="Force re-embedding of all notes"),  # noqa: B008
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> IndexTriggerResponse:
-    """Trigger batch embedding indexing for notes without embeddings.
+    """Trigger batch embedding indexing for notes.
 
-    Uses OAuth token if user is connected to OpenAI, otherwise falls back
-    to server-side OPENAI_API_KEY.
+    By default, only indexes unindexed and stale notes.
+    When force=True, re-indexes all notes regardless of state.
     """
     lang = get_language(request)
 
@@ -731,7 +744,17 @@ async def trigger_index(
 
     _index_state.triggered_by = current_user.get("username", "unknown")
 
-    background_tasks.add_task(_run_index_background, _index_state)
+    background_tasks.add_task(_run_index_background, _index_state, force=force)
+
+    if force:
+        msg_key = "search.index_trigger_force_started"
+        return IndexTriggerResponse(
+            status="indexing",
+            message=msg(msg_key, lang) if msg(msg_key, lang) != msg_key else (
+                "모든 노트를 강제 리임베딩합니다..." if lang == "ko"
+                else "Force re-embedding all notes..."
+            ),
+        )
 
     source = "API 키" if lang == "ko" else "API key"
     return IndexTriggerResponse(
@@ -742,8 +765,8 @@ async def trigger_index(
 
 @router.get("/index/status", response_model=IndexStatusResponse)
 async def get_index_status(
-    current_user: dict = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> IndexStatusResponse:
     """Get the current embedding indexing status."""
     total_result = await db.execute(text("SELECT COUNT(*) FROM notes"))
@@ -754,11 +777,25 @@ async def get_index_status(
 
     pending_notes = total_notes - indexed_notes
 
+    stale_result = await db.execute(
+        text("""
+            SELECT COUNT(*) FROM notes n
+            WHERE EXISTS (
+                SELECT 1 FROM note_embeddings ne WHERE ne.note_id = n.id
+            )
+            AND n.updated_at > (
+                SELECT MAX(ne.created_at) FROM note_embeddings ne WHERE ne.note_id = n.id
+            )
+        """)
+    )
+    stale_notes = stale_result.scalar() or 0
+
     return IndexStatusResponse(
         status=_index_state.status,
         total_notes=total_notes,
         indexed_notes=indexed_notes,
         pending_notes=pending_notes,
+        stale_notes=stale_notes,
         failed=_index_state.failed,
         error_message=_index_state.error_message,
     )

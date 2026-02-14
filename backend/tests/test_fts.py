@@ -26,6 +26,9 @@ def _make_mock_row(note_id: int | str, title: str, snippet: str, score: float):
     row.title = title
     row.snippet = snippet
     row.score = score
+    row.source_created_at = None
+    row.source_updated_at = None
+    row.total_count = 0
     return row
 
 
@@ -87,13 +90,14 @@ class TestSearchResultModel:
             search_type="fts",
         )
         data = result.model_dump()
-        assert data == {
-            "note_id": "note_42",
-            "title": "Serialization Test",
-            "snippet": "snippet text",
-            "score": 0.75,
-            "search_type": "fts",
-        }
+        assert data["note_id"] == "note_42"
+        assert data["title"] == "Serialization Test"
+        assert data["snippet"] == "snippet text"
+        assert data["score"] == 0.75
+        assert data["search_type"] == "fts"
+        assert data["created_at"] is None
+        assert data["updated_at"] is None
+        assert data["match_explanation"] is None
 
 
 # ---------------------------------------------------------------------------
@@ -106,23 +110,27 @@ class TestSearchSuccess:
 
     @pytest.mark.asyncio
     async def test_basic_search_returns_results(self):
-        """A search with matching notes returns a list of SearchResult."""
+        """A search with matching notes returns a SearchPage with SearchResult list."""
         rows = [
             _make_mock_row(1, "Python Guide", "Learn <b>Python</b> basics", 0.9),
             _make_mock_row(2, "Python Tips", "Advanced <b>Python</b> tips", 0.7),
         ]
+        rows[0].total_count = 2
+        rows[1].total_count = 2
         session = _make_mock_session(rows)
         engine = FullTextSearchEngine(session)
 
-        results = await engine.search("Python")
+        page = await engine.search("Python")
 
-        assert len(results) == 2
-        assert all(isinstance(r, SearchResult) for r in results)
-        assert results[0].note_id == "1"
-        assert results[0].title == "Python Guide"
-        assert results[0].snippet == "Learn <b>Python</b> basics"
-        assert results[0].score == 0.9
-        assert results[0].search_type == "fts"
+        assert page.results is not None
+        assert len(page.results) == 2
+        assert all(isinstance(r, SearchResult) for r in page.results)
+        assert page.results[0].note_id == "1"
+        assert page.results[0].title == "Python Guide"
+        assert page.results[0].snippet == "Learn <b>Python</b> basics"
+        assert page.results[0].score == 0.9
+        assert page.results[0].search_type == "fts"
+        assert page.total == 2
 
     @pytest.mark.asyncio
     async def test_search_calls_session_execute(self):
@@ -141,28 +149,30 @@ class TestSearchSuccess:
 
 
 class TestEmptyQuery:
-    """Empty or whitespace-only queries return an empty list."""
+    """Empty or whitespace-only queries return an empty SearchPage."""
 
     @pytest.mark.asyncio
     async def test_empty_string_returns_empty_list(self):
-        """An empty string query returns no results without hitting DB."""
+        """An empty string query returns SearchPage with empty results without hitting DB."""
         session = _make_mock_session()
         engine = FullTextSearchEngine(session)
 
-        results = await engine.search("")
+        page = await engine.search("")
 
-        assert results == []
+        assert page.results == []
+        assert page.total == 0
         session.execute.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_whitespace_only_returns_empty_list(self):
-        """A whitespace-only query returns no results without hitting DB."""
+        """A whitespace-only query returns SearchPage with empty results without hitting DB."""
         session = _make_mock_session()
         engine = FullTextSearchEngine(session)
 
-        results = await engine.search("   ")
+        page = await engine.search("   ")
 
-        assert results == []
+        assert page.results == []
+        assert page.total == 0
         session.execute.assert_not_awaited()
 
 
@@ -172,18 +182,18 @@ class TestEmptyQuery:
 
 
 class TestNoResults:
-    """Searches that match no notes return an empty list."""
+    """Searches that match no notes return an empty SearchPage."""
 
     @pytest.mark.asyncio
     async def test_no_matching_notes(self):
-        """A query with no matches returns an empty list."""
+        """A query with no matches returns SearchPage with empty results."""
         session = _make_mock_session([])
         engine = FullTextSearchEngine(session)
 
-        results = await engine.search("nonexistent-term-xyz")
+        page = await engine.search("nonexistent-term-xyz")
 
-        assert results == []
-        assert isinstance(results, list)
+        assert page.results == []
+        assert page.total == 0
 
 
 # ---------------------------------------------------------------------------
@@ -214,24 +224,29 @@ class TestLimitOffset:
     async def test_custom_limit(self):
         """Custom limit restricts the number of results."""
         rows = [_make_mock_row(i, f"Note {i}", f"Snippet {i}", 0.5) for i in range(5)]
+        for row in rows:
+            row.total_count = 5
         session = _make_mock_session(rows)
         engine = FullTextSearchEngine(session)
 
-        results = await engine.search("test", limit=5)
+        page = await engine.search("test", limit=5)
 
-        assert len(results) == 5
+        assert len(page.results) == 5
+        assert page.total == 5
 
     @pytest.mark.asyncio
     async def test_custom_offset(self):
         """Custom offset skips initial results."""
         rows = [_make_mock_row(10, "Offset Note", "Offset snippet", 0.3)]
+        rows[0].total_count = 1
         session = _make_mock_session(rows)
         engine = FullTextSearchEngine(session)
 
-        results = await engine.search("test", limit=10, offset=5)
+        page = await engine.search("test", limit=10, offset=5)
 
-        assert len(results) == 1
-        assert results[0].note_id == "10"
+        assert len(page.results) == 1
+        assert page.results[0].note_id == "10"
+        assert page.total == 1
 
 
 # ---------------------------------------------------------------------------
@@ -251,16 +266,19 @@ class TestScoreSorting:
             _make_mock_row(1, "Good Match", "good <b>match</b>", 0.80),
             _make_mock_row(2, "Okay Match", "okay <b>match</b>", 0.50),
         ]
+        for row in rows:
+            row.total_count = 3
         session = _make_mock_session(rows)
         engine = FullTextSearchEngine(session)
 
-        results = await engine.search("match")
+        page = await engine.search("match")
 
-        assert len(results) == 3
-        assert results[0].score >= results[1].score >= results[2].score
-        assert results[0].note_id == "3"
-        assert results[1].note_id == "1"
-        assert results[2].note_id == "2"
+        assert len(page.results) == 3
+        assert page.results[0].score >= page.results[1].score >= page.results[2].score
+        assert page.results[0].note_id == "3"
+        assert page.results[1].note_id == "1"
+        assert page.results[2].note_id == "2"
+        assert page.total == 3
 
     @pytest.mark.asyncio
     async def test_sql_orders_by_rank_desc(self):
@@ -295,14 +313,16 @@ class TestSnippetGeneration:
                 0.8,
             ),
         ]
+        rows[0].total_count = 1
         session = _make_mock_session(rows)
         engine = FullTextSearchEngine(session)
 
-        results = await engine.search("highlighted")
+        page = await engine.search("highlighted")
 
-        assert len(results) == 1
-        assert "<b>" in results[0].snippet
-        assert results[0].snippet == "<b>highlighted</b> search term in context"
+        assert len(page.results) == 1
+        assert "<b>" in page.results[0].snippet
+        assert page.results[0].snippet == "<b>highlighted</b> search term in context"
+        assert page.total == 1
 
     @pytest.mark.asyncio
     async def test_sql_uses_ts_headline(self):
@@ -332,14 +352,16 @@ class TestKoreanSearch:
         rows = [
             _make_mock_row(5, "연구 노트", "<b>연구</b> 결과 정리", 0.6),
         ]
+        rows[0].total_count = 1
         session = _make_mock_session(rows)
         engine = FullTextSearchEngine(session)
 
-        results = await engine.search("연구")
+        page = await engine.search("연구")
 
-        assert len(results) == 1
-        assert results[0].title == "연구 노트"
-        assert results[0].search_type == "fts"
+        assert len(page.results) == 1
+        assert page.results[0].title == "연구 노트"
+        assert page.results[0].search_type == "fts"
+        assert page.total == 1
 
 
 # ---------------------------------------------------------------------------

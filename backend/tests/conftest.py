@@ -5,6 +5,7 @@ from collections.abc import AsyncGenerator
 
 import pytest
 import pytest_asyncio
+import sqlalchemy
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -43,6 +44,7 @@ async def test_db() -> AsyncGenerator[AsyncSession, None]:
     )
 
     async with engine.begin() as conn:
+        await conn.execute(sqlalchemy.text("CREATE EXTENSION IF NOT EXISTS vector"))
         await conn.run_sync(Base.metadata.create_all)
 
     async with session_factory() as session:
@@ -50,7 +52,9 @@ async def test_db() -> AsyncGenerator[AsyncSession, None]:
         await session.rollback()
 
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+        await conn.execute(sqlalchemy.text("DROP SCHEMA public CASCADE"))
+        await conn.execute(sqlalchemy.text("CREATE SCHEMA public"))
+        await conn.execute(sqlalchemy.text("CREATE EXTENSION IF NOT EXISTS vector"))
 
     await engine.dispose()
 
@@ -76,6 +80,7 @@ async def async_session() -> AsyncGenerator[AsyncSession, None]:
     )
 
     async with engine.begin() as conn:
+        await conn.execute(sqlalchemy.text("CREATE EXTENSION IF NOT EXISTS vector"))
         await conn.run_sync(Base.metadata.create_all)
 
     async with session_factory() as session:
@@ -83,7 +88,9 @@ async def async_session() -> AsyncGenerator[AsyncSession, None]:
         await session.rollback()
 
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+        await conn.execute(sqlalchemy.text("DROP SCHEMA public CASCADE"))
+        await conn.execute(sqlalchemy.text("CREATE SCHEMA public"))
+        await conn.execute(sqlalchemy.text("CREATE EXTENSION IF NOT EXISTS vector"))
 
     await engine.dispose()
 

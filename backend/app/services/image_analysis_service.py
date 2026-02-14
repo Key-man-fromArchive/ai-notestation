@@ -11,7 +11,7 @@ import base64
 import logging
 from pathlib import Path
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import async_session_factory
@@ -85,8 +85,14 @@ class ImageAnalysisService:
         """
         async with async_session_factory() as db:
             # Find images needing OCR or Vision
+            # NULL status means never processed — must be included
             stmt = select(NoteImage.id).where(
-                (~NoteImage.extraction_status.in_(["completed", "empty"])) | (NoteImage.vision_status != "completed")
+                or_(
+                    NoteImage.extraction_status.is_(None),
+                    ~NoteImage.extraction_status.in_(["completed", "empty"]),
+                    NoteImage.vision_status.is_(None),
+                    NoteImage.vision_status != "completed",
+                )
             )
             result = await db.execute(stmt)
             image_ids = [row[0] for row in result.fetchall()]
@@ -100,10 +106,14 @@ class ImageAnalysisService:
         vision_done = 0
         failed = 0
 
-        # Process each image with bounded concurrency
-        tasks = []
-        for image_id in image_ids:
-            tasks.append(self._process_single(image_id))
+        # Limit concurrency to avoid DB connection pool exhaustion
+        semaphore = asyncio.Semaphore(5)
+
+        async def _bounded(image_id: int) -> dict:
+            async with semaphore:
+                return await self._process_single(image_id)
+
+        tasks = [_bounded(image_id) for image_id in image_ids]
 
         for coro in asyncio.as_completed(tasks):
             result = await coro
@@ -258,7 +268,7 @@ class ImageAnalysisService:
 
                 for note_id in note_ids:
                     try:
-                        await indexer.index_note(note_id)
+                        await indexer.reindex_note(note_id)
                     except Exception as exc:
                         logger.warning("Failed to re-index note %d: %s", note_id, exc)
 

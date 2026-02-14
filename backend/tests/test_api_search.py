@@ -9,12 +9,13 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from httpx import AsyncClient
 
-from app.search.engine import SearchResult
+from app.search.engine import SearchPage, SearchResult
 from tests.conftest import make_auth_headers
 
 
-def _make_search_results(count: int = 3, search_type: str = "fts") -> list[SearchResult]:
-    return [
+def _make_search_results(count: int = 3, search_type: str = "fts") -> SearchPage:
+    """Create a SearchPage with the given count of results."""
+    results = [
         SearchResult(
             note_id=f"note_{i + 1}",
             title=f"Note {i + 1}",
@@ -24,19 +25,20 @@ def _make_search_results(count: int = 3, search_type: str = "fts") -> list[Searc
         )
         for i in range(count)
     ]
+    return SearchPage(results=results, total=count)
 
 
 class TestHybridSearch:
     @pytest.mark.asyncio
     async def test_hybrid_search_success(self, test_client: AsyncClient):
-        mock_results = _make_search_results(3, search_type="hybrid")
+        mock_page = _make_search_results(3, search_type="hybrid")
         mock_engine = AsyncMock()
-        mock_engine.search = AsyncMock(return_value=mock_results)
+        mock_engine.search = AsyncMock(return_value=mock_page)
 
         with patch("app.api.search._build_hybrid_engine", return_value=mock_engine):
             response = await test_client.get(
                 "/api/search",
-                params={"q": "machine learning"},
+                params={"q": "machine learning", "type": "hybrid"},
                 headers=make_auth_headers(),
             )
 
@@ -51,11 +53,12 @@ class TestHybridSearch:
         assert data["results"][0]["search_type"] == "hybrid"
 
     @pytest.mark.asyncio
-    async def test_default_search_type_is_hybrid(self, test_client: AsyncClient):
+    async def test_default_search_type_is_unified_search(self, test_client: AsyncClient):
+        """Default search type is 'search' (unified FTS + Trigram), not hybrid."""
         mock_engine = AsyncMock()
-        mock_engine.search = AsyncMock(return_value=[])
+        mock_engine.search = AsyncMock(return_value=SearchPage(results=[], total=0))
 
-        with patch("app.api.search._build_hybrid_engine", return_value=mock_engine):
+        with patch("app.api.search._build_unified_engine", return_value=mock_engine):
             response = await test_client.get(
                 "/api/search",
                 params={"q": "test query"},
@@ -64,15 +67,15 @@ class TestHybridSearch:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["search_type"] == "hybrid"
+        assert data["search_type"] == "search"
 
 
 class TestFullTextSearch:
     @pytest.mark.asyncio
     async def test_fts_search_success(self, test_client: AsyncClient):
-        mock_results = _make_search_results(2, search_type="fts")
+        mock_page = _make_search_results(2, search_type="fts")
         mock_engine = AsyncMock()
-        mock_engine.search = AsyncMock(return_value=mock_results)
+        mock_engine.search = AsyncMock(return_value=mock_page)
 
         with patch("app.api.search._build_fts_engine", return_value=mock_engine):
             response = await test_client.get(
@@ -90,9 +93,9 @@ class TestFullTextSearch:
 class TestSemanticSearch:
     @pytest.mark.asyncio
     async def test_semantic_search_success(self, test_client: AsyncClient):
-        mock_results = _make_search_results(2, search_type="semantic")
+        mock_page = _make_search_results(2, search_type="semantic")
         mock_engine = AsyncMock()
-        mock_engine.search = AsyncMock(return_value=mock_results)
+        mock_engine.search = AsyncMock(return_value=mock_page)
 
         with patch("app.api.search._build_semantic_engine", return_value=mock_engine):
             response = await test_client.get(
@@ -136,9 +139,9 @@ class TestSearchEmptyResults:
     @pytest.mark.asyncio
     async def test_no_results_returns_empty_array(self, test_client: AsyncClient):
         mock_engine = AsyncMock()
-        mock_engine.search = AsyncMock(return_value=[])
+        mock_engine.search = AsyncMock(return_value=SearchPage(results=[], total=0))
 
-        with patch("app.api.search._build_hybrid_engine", return_value=mock_engine):
+        with patch("app.api.search._build_unified_engine", return_value=mock_engine):
             response = await test_client.get(
                 "/api/search",
                 params={"q": "nonexistent_term_xyz"},
@@ -153,9 +156,9 @@ class TestSearchEmptyResults:
     @pytest.mark.asyncio
     async def test_custom_limit_is_passed_to_engine(self, test_client: AsyncClient):
         mock_engine = AsyncMock()
-        mock_engine.search = AsyncMock(return_value=[])
+        mock_engine.search = AsyncMock(return_value=SearchPage(results=[], total=0))
 
-        with patch("app.api.search._build_hybrid_engine", return_value=mock_engine):
+        with patch("app.api.search._build_unified_engine", return_value=mock_engine):
             response = await test_client.get(
                 "/api/search",
                 params={"q": "test", "limit": 50},
