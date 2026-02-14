@@ -4,22 +4,24 @@
 
 # LabNote AI
 
-**NAS에 쌓인 수천 개의 연구노트, 다시 찾을 수 있게.**
+**NAS에 묻혀 있던 수천 개의 연구노트, 로컬 AI로 되살립니다.**
 
 <p align="left">
   <img src="https://img.shields.io/badge/version-1.3.1-blue?style=flat-square" alt="v1.3.1" />
   <img src="https://img.shields.io/badge/license-AGPL--3.0-green?style=flat-square" alt="AGPL-3.0" />
   <img src="https://img.shields.io/badge/docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker" />
   <img src="https://img.shields.io/badge/self--hosted-black?style=flat-square" alt="Self-hosted" />
+  <img src="https://img.shields.io/badge/Python-3.12+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.12+" />
+  <img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black" alt="React 19" />
+  <img src="https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat-square&logo=postgresql&logoColor=white" alt="PostgreSQL 16" />
+  <img src="https://img.shields.io/badge/TypeScript-5.7-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript 5.7" />
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/graph.png" alt="Knowledge Graph — 2,300개 노트의 관계를 시각화" width="720" />
+  <img src="docs/screenshots/graph.png" alt="Knowledge Graph — 수천 개 연구노트의 관계를 시각화" width="720" />
 </p>
 
-Synology NoteStation에 노트가 수천 개 쌓이면 검색이 안 됩니다. 키워드 하나 틀리면 못 찾고, 비슷한 주제로 묶어 보는 건 불가능합니다. 분명 어딘가 적어뒀는데 어디에 있는지 모릅니다.
-
-LabNote AI는 NAS의 기존 노트를 그대로 두고, 위에 AI 검색과 지식 발견 기능을 얹습니다. 클라우드 없이, 내 서버에서.
+Synology NoteStation에 노트가 2,000개 넘게 쌓이면 검색이 안 됩니다. 오타 하나면 못 찾고, 주제별 탐색은 불가능합니다. LabNote AI는 텍스트, 이미지, PDF까지 전부 내 서버의 하이브리드 검색 엔진에 인덱싱합니다. 시맨틱 검색, AI 질의응답, OCR, 지식 그래프 — SaaS 없이, 내 서버에서.
 
 ```bash
 git clone https://github.com/Key-man-fromArchive/ai-notestation.git && cd ai-notestation
@@ -37,34 +39,52 @@ bash install.sh        # 대화형 설치. NAS 주소와 AI 키 입력 (Enter로
 
 <img src="docs/screenshots/search.png" alt="하이브리드 검색" width="100%" />
 
-**검색이 진짜로 됩니다**
-FTS + 퍼지 + 시맨틱 검색을 하나의 PostgreSQL에서 돌립니다. 키워드가 틀려도 찾고, 의미가 비슷하면 찾습니다. 왜 이 결과가 나왔는지도 보여줍니다.
+**하이브리드 검색 엔진**
+PostgreSQL `tsvector`(BM25) + `pg_trgm`(퍼지) + `pgvector`(시맨틱)를 Reciprocal Rank Fusion으로 통합합니다. 각 결과에 왜 매칭되었는지 — 키워드, 퍼지, 시맨틱 — 엔진별 뱃지로 표시합니다.
 
 </td>
 <td width="50%">
 
 <img src="docs/screenshots/librarian.png" alt="AI 사서" width="100%" />
 
-**자연어로 질문합니다**
-"온도에 따른 효소 활성 변화" — 키워드가 아니라 질문으로 검색합니다. AI 사서가 수천 개 노트에서 관련도 순으로 찾아줍니다.
+**AI 사서**
+전체 노트 컬렉션에 자연어로 질문합니다. 관련도 점수와 출처를 함께 반환합니다. 대화 히스토리를 유지해 반복적으로 연구를 심화할 수 있습니다.
 
 </td>
 </tr>
 <tr>
 <td width="50%">
 
-<img src="docs/screenshots/note-detail.png" alt="노트 상세 — 이미지 첨부, 리치 에디터" width="100%" />
+<img src="docs/screenshots/note-detail.png" alt="노트 에디터 — 표, 이미지, 리치 텍스트" width="100%" />
 
-**이미지도, 표도, 수식도**
-TipTap 에디터로 연구 노트를 작성합니다. 이미지 첨부, 표, 코드 블록을 지원하고, 첨부 이미지는 OCR/Vision으로 자동 분석됩니다.
+**노트 에디터**
+TipTap 리치 에디터에 KaTeX 수식, 표, 코드 블록, 이미지 첨부를 지원합니다. 항상 편집 가능하며 3초 자동 저장. AI 자동 태깅으로 노트별 구조화된 메타데이터를 생성합니다.
 
 </td>
 <td width="50%">
 
-<img src="docs/screenshots/note-ai-panel.png" alt="AI 자동 태깅 + 구조화된 노트" width="100%" />
+<img src="docs/screenshots/note-ai-panel.png" alt="AI 분석 — 5가지 작업과 품질 게이트" width="100%" />
 
-**AI가 노트를 분석합니다**
-인사이트 추출, 자동 태깅, 관련 노트 추천, 잊혀진 노트 재발견. 맞춤법 교정과 연구노트 초안 작성도 도와줍니다.
+**AI 분석**
+5가지 AI 작업(인사이트, 맞춤법, 글쓰기, 검색 QA, 템플릿)을 4개 프로바이더에서 모델 선택하여 실행합니다. 체크리스트 기반 품질 게이트가 결과를 검증합니다.
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+<img src="docs/screenshots/dashboard.png" alt="대시보드 — 통계, 이미지 분석, 재발견" width="100%" />
+
+**대시보드**
+노트, 노트북, 동기화 상태, 이미지 분석 진행률을 한눈에 파악합니다. 수천 장의 이미지 OCR/Vision 파이프라인 현황. 잊혀진 노트 재발견 카드.
+
+</td>
+<td width="50%">
+
+<img src="docs/screenshots/admin.png" alt="관리 — DB 통계, 사용자, 스토리지" width="100%" />
+
+**관리**
+6탭 설정 패널(AI 모델, 검색 엔진 튜닝, 데이터 분석, 연결 등). DB 통계, 스토리지 사용량, 사용자 관리가 포함된 관리자 오버뷰. 백업/복원 파이프라인.
 
 </td>
 </tr>
@@ -74,17 +94,41 @@ TipTap 에디터로 연구 노트를 작성합니다. 이미지 첨부, 표, 코
 
 ## 핵심 기능
 
-**하이브리드 검색** — tsvector(BM25) + pg_trgm(퍼지) + pgvector(시맨틱)를 Reciprocal Rank Fusion으로 병합합니다. 별도 벡터 DB 없이 PostgreSQL 하나로 끝납니다. 결과가 충분하면 임베딩 호출을 자동으로 건너뜁니다(Adaptive Search).
+### 검색 & 탐색
+- **하이브리드 검색** — `tsvector`(BM25) + `pg_trgm`(퍼지) + `pgvector`(시맨틱)를 Reciprocal Rank Fusion으로 병합. PostgreSQL 하나로, 별도 벡터 DB 불필요.
+- **적응형 검색** — JUDGE 모듈이 FTS 커버리지를 평가하고, 키워드 결과가 충분하면 시맨틱 검색을 건너뜁니다. 비용과 지연 절감.
+- **결과 설명** — 각 결과에 엔진 뱃지(Keyword #1, Fuzzy #5, Semantic)로 왜 매칭되었는지 표시.
+- **다중 턴 리파인** — AI 기반 쿼리 확장/축소와 리파인 히스토리.
+- **지식 그래프** — 포스 레이아웃 시각화, AI 클러스터링, 인사이트 DB 영속화.
 
-**AI 프로바이더 4종** — OpenAI, Anthropic, Google, ZhipuAI. 환경 변수에 API 키를 넣으면 자동 감지합니다. 원하는 모델로 자유 전환. SSE 스트리밍. ChatGPT/Gemini 구독이 있으면 OAuth로 연동해서 별도 키 없이 쓸 수도 있습니다.
+### AI 통합
+- **4개 프로바이더** — OpenAI, Anthropic, Google, ZhipuAI. 환경 변수에서 자동 감지. 모델 자유 전환.
+- **5가지 AI 작업** — 인사이트 추출, 맞춤법 교정, 글쓰기 보조, 검색 QA, 템플릿 생성.
+- **품질 게이트** — 체크리스트 기반 자가 검증. 미달 시 자동 재생성.
+- **스트림 모니터** — SSE 스트리밍 중 반복, 언어 불일치, 형식 이탈을 실시간 감지. 자동 재시도.
+- **OAuth** — Google OAuth 2.0(Gemini 쿼터), OpenAI PKCE(ChatGPT 구독 재사용).
+- **AI 사서** — 자연어 질의응답, 히스토리 추적, 관련도 점수.
 
-**AI 품질 보증** — 생성 결과를 체크리스트로 자가 검증하고, 미달이면 재생성합니다. 검색 QA는 정확성과 유용성을 분리 평가합니다. 스트리밍 중에도 반복/이탈을 실시간 감지합니다.
+### 멀티모달
+- **PDF 추출** — PyMuPDF로 PDF 첨부 파일 텍스트 추출. 검색 인덱스 자동 반영.
+- **3엔진 하이브리드 OCR** — GLM-OCR → PaddleOCR-VL(로컬 CPU) → AI Vision(클라우드). 자동 폴백 체인.
+- **듀얼 파이프라인 배치** — OCR(동시성=1)과 Vision 설명 생성(동시성=8)이 독립 병렬 파이프라인으로 실행. 한쪽 실패해도 다른 쪽 계속.
+- **이미지 내용 검색** — 추출된 텍스트와 이미지 설명이 자동 인덱싱. 이미지 내용으로 검색 가능.
 
-**콘텐츠 인텔리전스** — 자동 태깅, 관련 노트 발견, 잊혀진 노트 재발견. 노트 간 관계를 AI가 자동으로 파악합니다.
+### 에디터 & 노트
+- **리치 에디터** — TipTap + KaTeX 수식, 표, 코드 블록, 이미지 드래그앤드롭. 너비 4단계 조절.
+- **자동 저장** — 3초 디바운스, 30초 주기, 이동 시 저장, Ctrl+S 수동 저장.
+- **AI 자동 태깅** — 개별 노트 또는 노트북 전체 배치 태깅.
+- **관련 노트** — pgvector 코사인 유사도로 노트 간 연결 발견.
+- **재발견** — 대시보드에서 현재 작업과 관련 있는 오래된 노트를 다시 보여줍니다.
+- **NAS 동기화** — NoteStation 양방향 동기화. NSX 임포트. NAS 없이도 사용 가능.
 
-**멀티모달 이미지 분석** — PDF 텍스트 추출(PyMuPDF). 3엔진 하이브리드 OCR(GLM-OCR → PaddleOCR-VL → AI Vision)이 자동 폴백으로 동작합니다. 배치 처리 시 OCR과 Vision 설명 생성이 독립 파이프라인으로 병렬 실행됩니다. 추출된 텍스트와 이미지 설명이 검색 인덱스에 자동 반영되어 이미지 내용으로도 검색됩니다.
-
-**Synology 연동** — NoteStation과 양방향 동기화. 이미지 첨부파일 표시. NSX 파일 직접 임포트. NAS 없이도 로컬 노트 생성이 가능합니다.
+### 관리 & 협업
+- **팀 RBAC** — Owner → Admin → Member → Viewer. 이메일 초대, 가입 승인.
+- **노트 공유** — 토큰 기반 공개 링크, 만료 기간 설정(1일 / 7일 / 30일 / 무제한).
+- **DB 백업/복원** — 관리자 UI에서 pg_dump 파이프라인. 설정 백업 내보내기/가져오기.
+- **운영 콘솔** — NAS 동기화, 검색 인덱싱, 검색 엔진 모니터링. 10개 카테고리 활동 로그.
+- **i18n** — 한국어/영어 UI. 브라우저 언어 자동 감지.
 
 ---
 
@@ -101,7 +145,50 @@ TipTap 에디터로 연구 노트를 작성합니다. 이미지 첨부, 표, 코
 | Auth | JWT + OAuth 2.0 (Google, OpenAI PKCE) |
 | Deploy | Docker Compose (3 containers) |
 
+**수치로 보기:** API 엔드포인트 131개 · DB 마이그레이션 21개 · 페이지 18개 · 훅 30개 · i18n 키 900개
+
 ---
+
+<details>
+<summary><strong>아키텍처</strong></summary>
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        Frontend (React 19)                  │
+│  ┌──────────┬──────────┬───────────┬──────────┬──────────┐  │
+│  │대시보드  │  노트    │  검색     │   AI     │  그래프  │  │
+│  │          │ 노트북   │ AI 사서   │  분석    │  탐색    │  │
+│  └──────────┴──────────┴───────────┴──────────┴──────────┘  │
+│         TanStack Query  ·  SSE Streaming  ·  shadcn/ui      │
+└─────────────────────────┬───────────────────────────────────┘
+                          │ REST API + SSE
+┌─────────────────────────┴───────────────────────────────────┐
+│                      Backend (FastAPI)                       │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │  API Layer (131 엔드포인트)                           │   │
+│  │  auth · notes · search · ai · sync · files · admin    │   │
+│  ├──────────────────────────────────────────────────────┤   │
+│  │  AI Router ─── OpenAI │ Anthropic │ Google │ ZhipuAI │   │
+│  ├──────────────────────────────────────────────────────┤   │
+│  │  Search Engine ─── FTS + Trigram + Semantic (RRF)    │   │
+│  ├──────────────────────────────────────────────────────┤   │
+│  │  Quality Gate ─── Checklist │ QA Eval │ Stream Mon   │   │
+│  ├──────────────────────────────────────────────────────┤   │
+│  │  Image Analysis ─── 3엔진 OCR │ Vision │ Batch       │   │
+│  ├──────────────────────────────────────────────────────┤   │
+│  │  Synology Gateway ─── NoteStation + FileStation API  │   │
+│  └──────────────────────────────────────────────────────┘   │
+└─────────────────────────┬───────────────────────────────────┘
+                          │
+          ┌───────────────┼───────────────┐
+          ▼               ▼               ▼
+┌──────────────┐ ┌──────────────┐ ┌──────────────┐
+│ PostgreSQL   │ │ Synology NAS │ │  AI Provider │
+│ 16 + pgvec  │ │ NoteStation  │ │  APIs (4종)  │
+└──────────────┘ └──────────────┘ └──────────────┘
+```
+
+</details>
 
 ## 빠른 시작
 
@@ -153,50 +240,8 @@ cd frontend && npm install && npm run dev
 
 </details>
 
----
-
 <details>
-<summary><strong>아키텍처</strong></summary>
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        Frontend (React 19)                  │
-│  ┌──────────┬──────────┬───────────┬──────────┬──────────┐  │
-│  │Dashboard │  Notes   │  Search   │    AI    │  Graph   │  │
-│  │          │ Notebooks│ Librarian │  분석    │Discovery │  │
-│  └──────────┴──────────┴───────────┴──────────┴──────────┘  │
-│         TanStack Query  ·  SSE Streaming  ·  shadcn/ui      │
-└─────────────────────────┬───────────────────────────────────┘
-                          │ REST API + SSE
-┌─────────────────────────┴───────────────────────────────────┐
-│                      Backend (FastAPI)                       │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │  API Layer: auth · notes · search · ai · sync · ...  │   │
-│  ├──────────────────────────────────────────────────────┤   │
-│  │  AI Router ─── OpenAI │ Anthropic │ Google │ ZhipuAI │   │
-│  ├──────────────────────────────────────────────────────┤   │
-│  │  Search Engine ─── FTS + Trigram + Semantic (RRF)    │   │
-│  ├──────────────────────────────────────────────────────┤   │
-│  │  Quality Gate ─── Checklist │ QA Eval │ Stream Mon   │   │
-│  ├──────────────────────────────────────────────────────┤   │
-│  │  Image Analysis ─── 3-Engine OCR │ Vision │ Batch    │   │
-│  ├──────────────────────────────────────────────────────┤   │
-│  │  Synology Gateway ─── NoteStation + FileStation API  │   │
-│  └──────────────────────────────────────────────────────┘   │
-└─────────────────────────┬───────────────────────────────────┘
-                          │
-          ┌───────────────┼───────────────┐
-          ▼               ▼               ▼
-┌──────────────┐ ┌──────────────┐ ┌──────────────┐
-│ PostgreSQL   │ │ Synology NAS │ │  AI Provider │
-│ 16 + pgvec  │ │ NoteStation  │ │  APIs (4종)  │
-└──────────────┘ └──────────────┘ └──────────────┘
-```
-
-</details>
-
-<details>
-<summary><strong>환경 변수</strong></summary>
+<summary>환경 변수</summary>
 
 | 변수 | 설명 | 필수 |
 |------|------|:----:|
@@ -208,36 +253,35 @@ cd frontend && npm install && npm run dev
 | `GOOGLE_API_KEY` | Google Gemini API 키 | - |
 | `ZHIPUAI_API_KEY` | ZhipuAI API 키 | - |
 | `OAUTH_ENCRYPTION_KEY` | OAuth 토큰 암호화 키 (Fernet) | - |
-| `PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK` | PaddleOCR 외부 모델 소스 체크 비활성화 (Docker 기본값: True) | - |
 
 NAS 없이도 NSX 임포트나 로컬 노트 생성으로 사용할 수 있습니다. AI 키 없이도 검색과 노트 관리는 동작합니다.
 
 </details>
 
 <details>
-<summary><strong>프로젝트 구조</strong></summary>
+<summary>프로젝트 구조</summary>
 
 ```
 labnote-ai/
 ├── backend/
 │   └── app/
 │       ├── main.py              # FastAPI 엔트리포인트
-│       ├── api/                 # REST API 라우터
+│       ├── api/                 # REST API 엔드포인트 131개
 │       ├── ai_router/           # 멀티 프로바이더 AI (프로바이더, 프롬프트, 품질 게이트)
 │       ├── search/              # 하이브리드 검색 (FTS, 시맨틱, RRF, JUDGE)
-│       ├── services/            # 비즈니스 로직 (OCR, Vision, 태깅, 관련노트, PDF)
+│       ├── services/            # OCR, Vision, 태깅, 관련노트, PDF, 백업
 │       └── synology_gateway/    # NAS API 래퍼
 ├── frontend/src/
-│   ├── pages/                   # 페이지 (코드 스플리팅)
+│   ├── pages/                   # 18개 페이지 (코드 스플리팅)
 │   ├── components/              # shadcn/ui + 커스텀
-│   └── hooks/                   # TanStack Query, SSE
+│   └── hooks/                   # 30개 훅 (TanStack Query, SSE)
 └── docker-compose.yml           # 3-container 배포
 ```
 
 </details>
 
 <details>
-<summary><strong>테스트 & 린트</strong></summary>
+<summary>테스트 & 린트</summary>
 
 ```bash
 cd backend && pytest --tb=short                              # 백엔드 테스트
@@ -255,7 +299,7 @@ cd backend && ruff check . && ruff format --check .           # 린트
 
 - [x] Phase 1 — 검색 고도화 (Why matched, Adaptive Search, Multi-turn Refinement)
 - [x] Phase 2 — AI 품질 게이트 (Checklist, QA Evaluation, Stream Monitor)
-- [x] Phase 3 — 콘텐츠 인텔리전스 (Auto-Tagging, Related Notes, Rediscovery)
+- [x] Phase 3 — 콘텐츠 인텔리전스 (Auto-Tagging, Related Notes, Rediscovery, Graph Insights)
 - [x] Phase 4 — 멀티모달 (PDF 추출, 3엔진 하이브리드 OCR, 듀얼 파이프라인 Vision)
 - [ ] Phase 5 — 평가 인프라 (A/B 프레임워크, 메트릭 대시보드, 피드백 루프)
 
