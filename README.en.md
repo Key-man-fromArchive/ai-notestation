@@ -17,7 +17,7 @@
   <img src="docs/screenshots/graph.png" alt="Knowledge Graph — visualizing relationships across 2,300 notes" width="720" />
 </p>
 
-Once you pass 2,000 notes in Synology NoteStation, search breaks down. Misspell one keyword and it's gone. Browsing by topic? Forget it. You wrote it down somewhere — you just can't find it.
+Once you have thousands of notes in Synology NoteStation, search breaks down. Misspell one keyword and it's gone. Browsing by topic? Forget it. You wrote it down somewhere — you just can't find it.
 
 LabNote AI sits on top of your existing NAS notes and adds AI-powered search and knowledge discovery. No cloud. Your server. Your data.
 
