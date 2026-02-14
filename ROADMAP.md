@@ -2,7 +2,7 @@
 
 > 리서치 기반 로드맵 — ReSeek(논문), Web-Shepherd(논문), Reseek(제품) 분석 종합
 >
-> 현재 버전: **v1.3.0** | 작성일: 2026-02-13
+> 현재 버전: **v1.3.1** | 최종 갱신: 2026-02-14
 >
 > **상세 계획**: [docs/roadmap/](docs/roadmap/) | **마스터 TODO**: [docs/roadmap/TODO.md](docs/roadmap/TODO.md)
 
@@ -18,7 +18,7 @@
 | **멀티모달** | OCR (AI Vision / PaddleOCR-VL / GLM-OCR), Vision 설명 (glm-4.6v), 배치 일괄 분석, 캐시 기반 AI Insight 최적화 |
 | **에디터** | Tiptap 리치텍스트, 항상 편집 가능, 자동 저장 (3초/30초/이탈 시), 너비 4단계 조절 |
 | **동기화** | Synology NoteStation 양방향 동기화, NSX 포맷 지원 |
-| **기타** | 지식 그래프, 노트 발견, 공유/협업, i18n (한/영), 가상화 리스트 |
+| **기타** | 지식 그래프 + 인사이트 영속화, 노트 발견, 공유/협업, i18n (한/영), 가상화 리스트 |
 | **외부 지식** | NotebookLM CLI (`nlm`) — 프로젝트 문서 장기 보관 + 인용 기반 질의 (노트북: `labnote`) |
 
 ---
@@ -89,6 +89,12 @@
 - ~~오래됐지만 현재 작업과 관련 있는 노트 주기적 서피스~~
 - Dashboard "오늘의 재발견" 섹션, semantic similarity 기반 추천 완료
 
+### 3-4. 그래프 인사이트 영속화 + AI 사서 히스토리 ✅ (v1.3.1)
+- 그래프 클러스터 AI 분석 결과를 DB에 자동 저장 (스트리밍 완료 시)
+- AI 사서 페이지(/librarian)에 History 탭 추가 — 인사이트 목록/상세/삭제
+- Settings 페이지 6탭 재구성 (General, AI Models, Search Engine, Data Analysis, Connection, Admin)
+- 마크다운 수식 렌더링 (KaTeX) 지원
+
 ---
 
 ## Phase 4 — 멀티모달 확장 (v2.0.0)
@@ -103,11 +109,16 @@
 - ~~실험실 노트의 사진, 다이어그램, 손글씨를 검색 가능한 텍스트로~~
 - v1.2.0: 수동 OCR (우클릭 → 텍스트 인식), 3개 엔진 (AI Vision / PaddleOCR-VL / GLM-OCR)
 - v1.3.0: **배치 OCR + Vision 파이프라인 추가**
-  - `ImageAnalysisService` — 배치 OCR (concurrency 3) + Vision 설명 (glm-4.6v, concurrency 10)
+  - `ImageAnalysisService` — 배치 OCR + Vision 설명 (glm-4.6v)
   - Vision 설명이 검색 임베딩에 포함 → 이미지 내용으로도 검색 가능
   - 캐시된 텍스트로 AI Insight 최적화 (이미지 재전송 불필요)
   - Settings 배치 처리 UI + Dashboard 현황 카드
   - 우클릭 개별 Vision 분석 + FIFO 큐 기반 다중 요청 관리
+- v1.3.1: **배치 파이프라인 성능 최적화**
+  - OCR/Vision 독립 파이프라인 분리 (순차→병렬, Vision 처리량 ~6배 향상)
+  - 동시성 조정: OCR 1 (GLM-OCR 제한), Vision 8 (429 rate limit 방지)
+  - Settings UI 개선: DB 기준 전체 통계 상시 표시, 시작/완료 시간, 실패 상세 팝업
+  - Dashboard 미처리 표시 OCR/Vision 분리
 
 ### 4-3. 외부 콘텐츠 캡처
 - URL 북마크 → 콘텐츠 자동 추출 (Reseek의 Smart Bookmarks)
@@ -149,7 +160,7 @@
 | 1-3 | Multi-turn Refinement | 🔲 | ★★★☆☆ | ★★★★☆ | ReSeek 핵심이나 UX 복잡도 높음 |
 | 3-3 | Rediscovery | ✅ | ★★★☆☆ | ★★☆☆☆ | v1.2.0 구현 완료 |
 | 4-1 | PDF 추출 | ✅ | ★★★★☆ | ★★★☆☆ | v1.2.0 구현 완료 |
-| 4-2 | OCR + Vision 파이프라인 | ✅ | ★★★☆☆ | ★★★★☆ | v1.3.0 구현 완료 — 배치 + 개별 + 큐 |
+| 4-2 | OCR + Vision 파이프라인 | ✅ | ★★★☆☆ | ★★★★☆ | v1.3.1 최적화 완료 — 독립 파이프라인 + 성능 6배 향상 |
 | 4-3 | 외부 콘텐츠 캡처 | 🔲 | ★★★☆☆ | ★★★☆☆ | URL 북마크/학술 메타데이터 |
 | 5-1 | 평가 프레임워크 | 🔲 | ★★★★★ | ★★★★★ | 장기적 품질 기반, 높은 초기 투자 |
 
