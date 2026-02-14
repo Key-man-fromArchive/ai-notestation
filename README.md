@@ -17,7 +17,7 @@
   <img src="docs/screenshots/graph.png" alt="Knowledge Graph — 2,300개 노트의 관계를 시각화" width="720" />
 </p>
 
-Synology NoteStation에 노트가 2,000개 넘어가면 검색이 안 됩니다. 키워드 하나 틀리면 못 찾고, 비슷한 주제로 묶어 보는 건 불가능합니다. 분명 어딘가 적어뒀는데 어디에 있는지 모릅니다.
+Synology NoteStation에 노트가 수천 개 넘어가면 검색이 안 됩니다. 키워드 하나 틀리면 못 찾고, 비슷한 주제로 묶어 보는 건 불가능합니다. 분명 어딘가 적어뒀는데 어디에 있는지 모릅니다.
 
 LabNote AI는 NAS의 기존 노트를 그대로 두고, 위에 AI 검색과 지식 발견 기능을 얹습니다. 클라우드 없이, 내 서버에서.
 
