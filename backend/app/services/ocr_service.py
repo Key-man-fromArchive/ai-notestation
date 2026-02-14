@@ -37,7 +37,8 @@ class OCRResult(BaseModel):
 
     text: str
     confidence: float  # 0.0~1.0
-    method: str  # engine/model id used
+    method: str
+    layout_visualization: list[str] | None = None  # engine/model id used
 
 
 class PaddleOCRVLEngine:
@@ -117,6 +118,27 @@ class GlmOcrEngine:
     extracts markdown text from the ``md_results`` field in the response.
     """
 
+    PDF_CHUNK_SIZE = 50
+
+    @staticmethod
+    def _extract_md_results(response: object) -> str:
+        if hasattr(response, "md_results"):
+            return (response.md_results or "").strip()
+        if isinstance(response, dict):
+            return (response.get("md_results", "") or "").strip()
+        return ""
+
+    @staticmethod
+    def _extract_visualization(response: object) -> list[str]:
+        viz = None
+        if hasattr(response, "layout_visualization"):
+            viz = response.layout_visualization
+        elif isinstance(response, dict):
+            viz = response.get("layout_visualization")
+        if viz and isinstance(viz, list):
+            return [v for v in viz if isinstance(v, str)]
+        return []
+
     async def extract(self, image_bytes: bytes, mime_type: str) -> OCRResult:
         from app.ai_router.providers.zhipuai import ZhipuAIProvider
         from app.ai_router.schemas import ProviderError
@@ -126,25 +148,94 @@ class GlmOcrEngine:
 
         try:
             provider = ZhipuAIProvider()
-        except ProviderError:
+        except ProviderError as exc:
             raise RuntimeError(
                 "GLM-OCR requires ZHIPUAI_API_KEY to be set."
-            )
+            ) from exc
 
         logger.info("Running OCR with GLM-OCR (layout_parsing API)")
-        response = await provider.layout_parsing(file=data_uri)
+        response = await provider.layout_parsing(
+            file=data_uri,
+            need_layout_visualization=True,
+        )
 
-        # Extract text from response — layout_parsing returns an object
-        # with md_results containing the parsed markdown text.
-        text = ""
-        if hasattr(response, "md_results"):
-            text = response.md_results or ""
-        elif isinstance(response, dict):
-            text = response.get("md_results", "")
-
-        text = text.strip()
+        text = self._extract_md_results(response)
+        viz = self._extract_visualization(response)
         confidence = 0.85 if text else 0.0
-        return OCRResult(text=text, confidence=confidence, method="glm-ocr")
+        return OCRResult(
+            text=text,
+            confidence=confidence,
+            method="glm-ocr",
+            layout_visualization=viz or None,
+        )
+
+    async def extract_pdf(self, pdf_bytes: bytes) -> OCRResult:
+        """Extract text from PDF using GLM-OCR native PDF support.
+
+        For PDFs with more than 50 pages, processes in chunks of 50 pages
+        using ``start_page_id`` / ``end_page_id`` parameters and merges
+        the results.
+        """
+        import fitz  # pymupdf
+
+        from app.ai_router.providers.zhipuai import ZhipuAIProvider
+        from app.ai_router.schemas import ProviderError
+
+        try:
+            provider = ZhipuAIProvider()
+        except ProviderError as exc:
+            raise RuntimeError(
+                "GLM-OCR requires ZHIPUAI_API_KEY to be set."
+            ) from exc
+
+        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        page_count = doc.page_count
+        doc.close()
+
+        b64 = base64.b64encode(pdf_bytes).decode("ascii")
+        data_uri = f"data:application/pdf;base64,{b64}"
+
+        all_texts: list[str] = []
+        all_viz: list[str] = []
+
+        if page_count <= self.PDF_CHUNK_SIZE:
+            logger.info(
+                "GLM-OCR PDF: %d pages, single request", page_count,
+            )
+            response = await provider.layout_parsing(
+                file=data_uri,
+                need_layout_visualization=True,
+            )
+            text = self._extract_md_results(response)
+            if text:
+                all_texts.append(text)
+            all_viz.extend(self._extract_visualization(response))
+        else:
+            for start in range(1, page_count + 1, self.PDF_CHUNK_SIZE):
+                end = min(start + self.PDF_CHUNK_SIZE - 1, page_count)
+                logger.info(
+                    "GLM-OCR PDF chunk: pages %d–%d of %d",
+                    start, end, page_count,
+                )
+                response = await provider.layout_parsing(
+                    file=data_uri,
+                    start_page_id=start,
+                    end_page_id=end,
+                    need_layout_visualization=True,
+                )
+                text = self._extract_md_results(response)
+                if text:
+                    all_texts.append(text)
+                all_viz.extend(self._extract_visualization(response))
+
+        combined = "\n\n".join(all_texts)
+        confidence = 0.85 if combined else 0.0
+        return OCRResult(
+            text=combined,
+            confidence=confidence,
+            method="glm-ocr",
+            layout_visualization=all_viz or None,
+        )
 
 
 class OCRService:
