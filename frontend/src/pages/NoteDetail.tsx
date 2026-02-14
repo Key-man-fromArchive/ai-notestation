@@ -22,6 +22,7 @@ import { useRelatedNotes } from '@/hooks/useRelatedNotes'
 import { AttachmentContextMenu } from '@/components/AttachmentContextMenu'
 import type { ContextMenuItem } from '@/components/AttachmentContextMenu'
 import { ExtractedTextModal } from '@/components/ExtractedTextModal'
+import { SummaryInsertModal } from '@/components/SummaryInsertModal'
 
 export default function NoteDetail() {
   const { t } = useTranslation()
@@ -58,6 +59,7 @@ export default function NoteDetail() {
     nasImage?: { noteId: string; attKey: string; filename: string }
   } | null>(null)
   const [textModal, setTextModal] = useState<{ title: string; text: string; pageCount?: number } | null>(null)
+  const [summaryModal, setSummaryModal] = useState<{ fileId: string; fileName: string } | null>(null)
 
   const { data: editorWidthSetting } = useQuery<{ value: string }>({
     queryKey: ['settings', 'editor_width'],
@@ -268,6 +270,12 @@ export default function NoteDetail() {
     if (isFile) {
       if (status === 'completed') {
         items.push({ icon: <Eye className="h-4 w-4" />, label: isPdf ? t('files.viewExtractedText') : t('ocr.viewExtractedText'), onClick: () => handleShowPdfText(id as string, name, pageCount) })
+        if (isPdf) {
+          items.push({ icon: <FileText className="h-4 w-4" />, label: t('summary.insertSummary'), onClick: () => {
+            setContextMenu(null)
+            setSummaryModal({ fileId: id as string, fileName: name })
+          }})
+        }
       } else if (status === 'pending' || extractingFileId === id) {
         items.push({ icon: <ScanText className="h-4 w-4" />, label: isPdf ? t('files.extracting') : t('ocr.extracting'), disabled: true, loading: true, onClick: () => {} })
       } else if (status === 'failed') {
@@ -954,6 +962,18 @@ export default function NoteDetail() {
           text={textModal.text}
           pageCount={textModal.pageCount}
           onClose={() => setTextModal(null)}
+        />
+      )}
+
+      {/* Summary insert modal */}
+      {summaryModal && (
+        <SummaryInsertModal
+          isOpen={!!summaryModal}
+          onClose={() => setSummaryModal(null)}
+          fileId={summaryModal.fileId}
+          fileName={summaryModal.fileName}
+          noteId={id!}
+          noteContent={note?.content || ''}
         />
       )}
 

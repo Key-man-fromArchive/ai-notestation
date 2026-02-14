@@ -941,6 +941,16 @@
     "insightSaved": "인사이트 저장됨",
     "notes_count": "{{count}}개 노트"
   },
+  "summary": {
+    "insertSummary": "요약 삽입",
+    "title": "AI 요약",
+    "heading": "AI 요약",
+    "generating": "요약 생성 중...",
+    "insert": "노트에 삽입",
+    "insertingNote": "삽입 중...",
+    "empty": "추출된 텍스트가 없습니다",
+    "error": "요약 생성에 실패했습니다"
+  },
   "files": {
     "extractText": "텍스트 추출",
     "extracting": "추출 중...",

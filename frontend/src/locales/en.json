@@ -941,6 +941,16 @@
     "insightSaved": "Insight saved",
     "notes_count": "{{count}} notes"
   },
+  "summary": {
+    "insertSummary": "Insert Summary",
+    "title": "AI Summary",
+    "heading": "AI Summary",
+    "generating": "Generating summary...",
+    "insert": "Insert to Note",
+    "insertingNote": "Inserting...",
+    "empty": "No extracted text available",
+    "error": "Failed to generate summary"
+  },
   "files": {
     "extractText": "Extract text",
     "extracting": "Extracting...",
