@@ -179,7 +179,7 @@ async def get_failed_images(limit: int = 50):
     """Get list of images that failed OCR or Vision analysis."""
     from sqlalchemy import select, literal, union_all
 
-    from app.db import async_session_factory
+    from app.database import async_session_factory
     from app.models import NoteImage
 
     async with async_session_factory() as db:
