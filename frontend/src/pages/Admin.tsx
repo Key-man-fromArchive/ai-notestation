@@ -32,21 +32,20 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { apiClient } from '@/lib/api'
-import { useAuth } from '@/contexts/AuthContext'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-interface OverviewData {
+export interface OverviewData {
   active_users: number
   total_notes: number
   total_embeddings: number
   total_organizations: number
 }
 
-interface UsageData {
+export interface UsageData {
   notes: { count: number; text_size: string; html_size: string }
   notebooks: { count: number }
   embeddings: { count: number; indexed_notes: number }
@@ -150,7 +149,7 @@ const OPERATION_ICON: Record<string, typeof FileX> = {
 // Tab Config
 // ---------------------------------------------------------------------------
 
-const TABS = [
+export const ADMIN_TABS = [
   { id: 'overview', labelKey: 'admin.overview', icon: LayoutDashboard },
   { id: 'database', labelKey: 'admin.database', icon: Database },
   { id: 'users', labelKey: 'admin.users', icon: Users },
@@ -159,7 +158,7 @@ const TABS = [
   { id: 'storage', labelKey: 'admin.storageManagement', icon: Trash2 },
 ] as const
 
-type TabId = (typeof TABS)[number]['id']
+export type AdminTabId = (typeof ADMIN_TABS)[number]['id']
 
 const ROLE_CONFIG: Record<string, { icon: typeof Crown; color: string; label: string }> = {
   owner: { icon: Crown, color: 'bg-amber-100 text-amber-700', label: 'Owner' },
@@ -173,38 +172,34 @@ const ROLE_CONFIG: Record<string, { icon: typeof Crown; color: string; label: st
 // ---------------------------------------------------------------------------
 
 export default function Admin() {
-  const { t } = useTranslation()
-  const { user } = useAuth()
-  const [activeTab, setActiveTab] = useState<TabId>('overview')
+  return <Navigate to="/settings?tab=admin" replace />
+}
 
-  const isAdmin = user?.role === 'owner' || user?.role === 'admin'
-  if (!isAdmin) {
-    return <Navigate to="/" replace />
-  }
+/**
+ * Admin tab content with sub-navigation, used by Settings page
+ */
+export function AdminTabContent() {
+  const { t } = useTranslation()
+  const [activeTab, setActiveTab] = useState<AdminTabId>('overview')
 
   return (
-    <div className="p-6 flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-bold mb-1">{t('admin.title')}</h1>
-        <p className="text-sm text-muted-foreground">{t('admin.systemInfo')}</p>
-      </div>
-
-      {/* Tab Navigation */}
-      <div className="flex gap-1 border-b border-border overflow-x-auto">
-        {TABS.map((tab) => {
+    <div className="flex flex-col gap-6">
+      {/* Sub-Tab Navigation (pill style) */}
+      <div className="flex gap-2 flex-wrap">
+        {ADMIN_TABS.map((tab) => {
           const Icon = tab.icon
           return (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={cn(
-                'flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap',
+                'flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full transition-colors whitespace-nowrap',
                 activeTab === tab.id
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
+                  ? 'bg-primary/10 text-primary'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
               )}
             >
-              <Icon className="h-4 w-4" />
+              <Icon className="h-3.5 w-3.5" />
               {t(tab.labelKey)}
             </button>
           )

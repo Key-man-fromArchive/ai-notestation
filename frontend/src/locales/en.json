@@ -511,7 +511,15 @@
       "full": "Full"
     },
     "graphSettings": "Graph Defaults",
-    "graphSettingsDesc": "Set default similarity, connections, and node limit for the Knowledge Graph page. You can temporarily adjust these on the graph page."
+    "graphSettingsDesc": "Set default similarity, connections, and node limit for the Knowledge Graph page. You can temporarily adjust these on the graph page.",
+    "tabs": {
+      "general": "General",
+      "aiModel": "AI Models",
+      "searchEngine": "Search Engine",
+      "dataAnalysis": "Data Analysis",
+      "connection": "Connection",
+      "admin": "Admin"
+    }
   },
   "members": {
     "title": "Members",

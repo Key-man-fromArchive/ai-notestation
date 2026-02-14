@@ -15,7 +15,6 @@ import {
   FlaskConical,
   Network,
   LayoutGrid,
-  ShieldCheck,
   Activity,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -35,7 +34,6 @@ const baseNavItems = [
   { to: '/operations', icon: Activity, labelKey: 'sidebar.operations' },
 ]
 
-const adminNavItem = { to: '/admin', icon: ShieldCheck, labelKey: 'sidebar.admin' }
 const demoNavItem = { to: '/demo', icon: LayoutGrid, labelKey: 'sidebar.demo' }
 
 /**
@@ -47,8 +45,7 @@ const demoNavItem = { to: '/demo', icon: LayoutGrid, labelKey: 'sidebar.demo' }
 export function Sidebar() {
   const { t } = useTranslation()
   const { user, logout } = useAuth()
-  const isAdmin = user?.role === 'owner' || user?.role === 'admin'
-  const navItems = [...baseNavItems, ...(isAdmin ? [adminNavItem] : []), demoNavItem]
+  const navItems = [...baseNavItems, demoNavItem]
 
   return (
     <aside className="flex flex-col w-64 border-r border-border/60 bg-card h-screen sticky top-0">

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { apiClient } from '@/lib/api'
@@ -19,6 +20,7 @@ import {
   nasSettingsList,
   apiKeySettingsList,
 } from '@/components/settings'
+import { AdminTabContent } from '@/pages/Admin'
 import {
   Save,
   AlertCircle,
@@ -33,12 +35,32 @@ import {
   Globe,
   Sparkles,
   Languages,
+  Settings as SettingsIcon,
   ShieldCheck,
   ScanSearch,
   Columns3,
   Eye,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+
+// ---------------------------------------------------------------------------
+// Tab Config
+// ---------------------------------------------------------------------------
+
+const SETTINGS_TABS = [
+  { id: 'general', labelKey: 'settings.tabs.general', icon: SettingsIcon },
+  { id: 'aiModel', labelKey: 'settings.tabs.aiModel', icon: Sparkles },
+  { id: 'searchEngine', labelKey: 'settings.tabs.searchEngine', icon: Search },
+  { id: 'dataAnalysis', labelKey: 'settings.tabs.dataAnalysis', icon: Image },
+  { id: 'connection', labelKey: 'settings.tabs.connection', icon: Wifi },
+  { id: 'admin', labelKey: 'settings.tabs.admin', icon: ShieldCheck },
+] as const
+
+type SettingsTabId = (typeof SETTINGS_TABS)[number]['id']
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
 interface SettingsData {
   settings: Record<string, string>
@@ -49,9 +71,20 @@ export default function Settings() {
   const { user } = useAuth()
   const isAdmin = user?.role === 'owner' || user?.role === 'admin'
   const queryClient = useQueryClient()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [editingKey, setEditingKey] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
   const [expandedApiKeys, setExpandedApiKeys] = useState<Set<string>>(new Set())
+
+  // Read tab from URL query param, default to 'general'
+  const tabParam = searchParams.get('tab') as SettingsTabId | null
+  const visibleTabs = isAdmin ? SETTINGS_TABS : SETTINGS_TABS.filter(t => t.id !== 'admin')
+  const validTabIds = visibleTabs.map(t => t.id)
+  const activeTab = tabParam && validTabIds.includes(tabParam) ? tabParam : 'general'
+
+  const setActiveTab = (tab: SettingsTabId) => {
+    setSearchParams(tab === 'general' ? {} : { tab }, { replace: true })
+  }
 
   const { status: syncStatus, lastSync, error: syncError } = useSync()
 
@@ -126,75 +159,114 @@ export default function Settings() {
   }
 
   return (
-    <div className="p-6 flex flex-col gap-6 max-w-3xl">
+    <div className="p-6 flex flex-col gap-6">
       <div>
         <h1 className="text-2xl font-bold mb-1">{t('settings.title')}</h1>
         <p className="text-sm text-muted-foreground">{t('settings.subtitle')}</p>
       </div>
 
-      {isAdmin && (
-        <>
-          <NasConnectionSection
-            data={data}
-            syncStatus={syncStatus}
-            lastSync={lastSync}
-            syncError={syncError}
-            editingKey={editingKey}
-            editValue={editValue}
-            isPending={updateMutation.isPending}
-            nasTestMutation={nasTestMutation}
-            onEdit={handleEdit}
-            onSave={handleSave}
-            onCancel={handleCancel}
-            onEditValueChange={setEditValue}
-          />
+      {/* Tab Navigation */}
+      <div className="flex gap-1 border-b border-border overflow-x-auto">
+        {visibleTabs.map((tab) => {
+          const Icon = tab.icon
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={cn(
+                'flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap',
+                activeTab === tab.id
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
+              )}
+            >
+              <Icon className="h-4 w-4" />
+              {t(tab.labelKey)}
+            </button>
+          )
+        })}
+      </div>
 
-          <NsxImportSection />
-          <ImageSyncSection />
-          <BatchImageAnalysisSection />
-          <BackupSection />
-        </>
-      )}
-      <LanguageSection />
+      {/* Tab Content */}
+      <div className="max-w-3xl">
+        {activeTab === 'general' && (
+          <div className="flex flex-col gap-6">
+            <LanguageSection />
+            <EditorWidthSection />
+            <TimezoneSection
+              data={data}
+              isPending={updateMutation.isPending}
+              onSave={(tz) => updateMutation.mutate({ key: 'timezone', value: tz })}
+            />
+            <GraphSettingsSection />
+          </div>
+        )}
 
-      <EditorWidthSection />
+        {activeTab === 'aiModel' && (
+          <div className="flex flex-col gap-6">
+            <AiModelSection />
+            <QualityGateSection />
+          </div>
+        )}
 
-      <TimezoneSection
-        data={data}
-        isPending={updateMutation.isPending}
-        onSave={(tz) => updateMutation.mutate({ key: 'timezone', value: tz })}
-      />
+        {activeTab === 'searchEngine' && (
+          <div className="flex flex-col gap-6">
+            <SearchIndexSection />
+            {isAdmin && <SearchParamsSection />}
+          </div>
+        )}
 
-      <OcrEngineSection />
+        {activeTab === 'dataAnalysis' && (
+          <div className="flex flex-col gap-6">
+            {isAdmin && <ImageSyncSection />}
+            {isAdmin && <BatchImageAnalysisSection />}
+            <OcrEngineSection />
+            <VisionModelSection />
+          </div>
+        )}
 
-      <VisionModelSection />
+        {activeTab === 'connection' && (
+          <div className="flex flex-col gap-6">
+            {isAdmin && (
+              <NasConnectionSection
+                data={data}
+                syncStatus={syncStatus}
+                lastSync={lastSync}
+                syncError={syncError}
+                editingKey={editingKey}
+                editValue={editValue}
+                isPending={updateMutation.isPending}
+                nasTestMutation={nasTestMutation}
+                onEdit={handleEdit}
+                onSave={handleSave}
+                onCancel={handleCancel}
+                onEditValueChange={setEditValue}
+              />
+            )}
+            {isAdmin && <NsxImportSection />}
+            {isAdmin && <BackupSection />}
+            <ApiKeysSection
+              data={data}
+              editingKey={editingKey}
+              editValue={editValue}
+              expandedApiKeys={expandedApiKeys}
+              isPending={updateMutation.isPending}
+              onEdit={handleEdit}
+              onSave={handleSave}
+              onCancel={handleCancel}
+              onEditValueChange={setEditValue}
+              onToggleExpand={toggleApiKeyExpand}
+            />
+          </div>
+        )}
 
-      <QualityGateSection />
+        {activeTab === 'admin' && isAdmin && <AdminTabContent />}
+      </div>
 
-      <AiModelSection />
-
-      <SearchIndexSection />
-
-      {isAdmin && <SearchParamsSection />}
-
-      <GraphSettingsSection />
-
-      <ApiKeysSection
-        data={data}
-        editingKey={editingKey}
-        editValue={editValue}
-        expandedApiKeys={expandedApiKeys}
-        isPending={updateMutation.isPending}
-        onEdit={handleEdit}
-        onSave={handleSave}
-        onCancel={handleCancel}
-        onEditValueChange={setEditValue}
-        onToggleExpand={toggleApiKeyExpand}
-      />
-
+      {/* Toast notifications (outside tabs) */}
       {updateMutation.isSuccess && (
         <div
-          className="flex items-center gap-2 p-3 bg-green-500/10 border border-green-500/20 rounded-lg"
+          className="flex items-center gap-2 p-3 bg-green-500/10 border border-green-500/20 rounded-lg max-w-3xl"
           role="status"
         >
           <CheckCircle className="h-5 w-5 text-green-600" aria-hidden="true" />
@@ -204,7 +276,7 @@ export default function Settings() {
 
       {updateMutation.isError && (
         <div
-          className="flex items-center gap-2 p-3 bg-destructive/10 border border-destructive/20 rounded-lg"
+          className="flex items-center gap-2 p-3 bg-destructive/10 border border-destructive/20 rounded-lg max-w-3xl"
           role="alert"
         >
           <AlertCircle className="h-5 w-5 text-destructive" aria-hidden="true" />
@@ -1076,29 +1148,76 @@ function AiModelSection() {
                 </button>
               </div>
             </div>
-            <div className="space-y-1">
-              {allModels.map((model) => (
-                <label
-                  key={model.id}
-                  className={cn(
-                    'flex items-center gap-2 px-3 py-2 rounded-md cursor-pointer',
-                    'hover:bg-muted/50 transition-colors',
-                  )}
-                >
-                  <input
-                    type="checkbox"
-                    checked={localEnabled.includes(model.id)}
-                    onChange={() => toggleModel(model.id)}
-                    className="rounded border-input"
-                  />
-                  <span className="text-sm">
-                    {model.name} ({model.provider})
-                  </span>
-                  {model.id === localDefault && (
-                    <span className="text-xs text-muted-foreground ml-auto">{t('common.default')}</span>
-                  )}
-                </label>
-              ))}
+            <div className="space-y-3">
+              {(() => {
+                const grouped = new Map<string, AiModel[]>()
+                for (const m of allModels) {
+                  const list = grouped.get(m.provider) || []
+                  list.push(m)
+                  grouped.set(m.provider, list)
+                }
+                return Array.from(grouped.entries()).map(([provider, models]) => {
+                  const enabledCount = models.filter((m) => localEnabled.includes(m.id)).length
+                  const allChecked = enabledCount === models.length
+                  const toggleProvider = () => {
+                    if (allChecked) {
+                      // Uncheck all in this provider (but keep at least one globally)
+                      const providerIds = new Set(models.map((m) => m.id))
+                      const remaining = localEnabled.filter((id) => !providerIds.has(id))
+                      if (remaining.length === 0) return // can't disable all
+                      setLocalEnabled(remaining)
+                      if (providerIds.has(localDefault) && remaining.length > 0) {
+                        setLocalDefault(remaining[0])
+                      }
+                    } else {
+                      // Check all in this provider
+                      const providerIds = models.map((m) => m.id)
+                      setLocalEnabled((prev) => [...new Set([...prev, ...providerIds])])
+                    }
+                  }
+                  return (
+                    <div key={provider} className="border border-input rounded-md overflow-hidden">
+                      <div className="flex items-center justify-between px-3 py-2 bg-muted/30">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={allChecked}
+                            onChange={toggleProvider}
+                            className="rounded border-input"
+                            ref={(el) => { if (el) el.indeterminate = enabledCount > 0 && !allChecked }}
+                          />
+                          <span className="text-sm font-medium capitalize">{provider}</span>
+                        </label>
+                        <span className="text-xs text-muted-foreground">
+                          {enabledCount}/{models.length}
+                        </span>
+                      </div>
+                      <div className="divide-y divide-input/50">
+                        {models.map((model) => (
+                          <label
+                            key={model.id}
+                            className={cn(
+                              'flex items-center gap-2 px-3 py-2 cursor-pointer',
+                              'hover:bg-muted/30 transition-colors',
+                            )}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={localEnabled.includes(model.id)}
+                              onChange={() => toggleModel(model.id)}
+                              className="rounded border-input"
+                            />
+                            <span className="text-sm">{model.name}</span>
+                            {model.id === localDefault && (
+                              <span className="text-xs text-muted-foreground ml-auto">{t('common.default')}</span>
+                            )}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })
+              })()}
             </div>
           </div>
 
