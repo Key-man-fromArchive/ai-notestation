@@ -680,7 +680,7 @@
     "trashOpVisionData": "Vision/OCR 데이터",
     "trashOpNotesReset": "전체 초기화",
     "fullBackup": "전체 백업",
-    "fullBackupDesc": "DB 백업과 네이티브 백업(노트 + 이미지 + 첨부파일)을 동시에 생성합니다.",
+    "fullBackupDesc": "DB 백업(임베딩 · OCR · Vision · 설정)과 네이티브 백업(노트 + 이미지 + 첨부파일)을 동시에 생성합니다.",
     "fullBackupCreate": "전체 백업 생성",
     "fullBackupCreating": "전체 백업 생성 중...",
     "fullBackupSuccess": "전체 백업을 생성했습니다",

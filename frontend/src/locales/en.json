@@ -680,7 +680,7 @@
     "trashOpVisionData": "Vision/OCR Data",
     "trashOpNotesReset": "Full Reset",
     "fullBackup": "Full Backup",
-    "fullBackupDesc": "Create both a DB backup and a native backup (notes + images + attachments) at once.",
+    "fullBackupDesc": "Create both a DB backup (embeddings · OCR · Vision · settings) and a native backup (notes + images + attachments) at once.",
     "fullBackupCreate": "Create Full Backup",
     "fullBackupCreating": "Creating full backup...",
     "fullBackupSuccess": "Full backup created successfully",
