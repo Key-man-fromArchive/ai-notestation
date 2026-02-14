@@ -872,7 +872,18 @@
     "exampleQuery1": "PCR experiment protocol",
     "exampleQuery2": "Virus detection methods",
     "exampleQuery3": "Sequencing data analysis",
-    "exampleQuery4": "DNA extraction process"
+    "exampleQuery4": "DNA extraction process",
+    "search": "Search",
+    "history": "History",
+    "noInsights": "No insights yet",
+    "noInsightsDesc": "Analyze note clusters on the Graph page and they will appear here",
+    "backToHistory": "Back to history",
+    "analyzedNotes": "Analyzed notes",
+    "followUpChat": "Follow-up chat",
+    "deleteInsight": "Delete insight",
+    "deleteInsightConfirm": "Are you sure you want to delete this insight?",
+    "insightSaved": "Insight saved",
+    "notes_count": "{{count}} notes"
   },
   "files": {
     "extractText": "Extract text",

@@ -8,7 +8,8 @@ import { apiClient } from '@/lib/api'
 import { ObsidianGraph } from '@/components/ObsidianGraph'
 import { GraphAnalysisPanel } from '@/components/GraphAnalysisPanel'
 import { useGlobalGraph } from '@/hooks/useGlobalGraph'
-import { useClusterInsight } from '@/hooks/useClusterInsight'
+import { useClusterInsight, ClusterInsightCompleteData } from '@/hooks/useClusterInsight'
+import { useSaveGraphInsight } from '@/hooks/useGraphInsights'
 import { ModelSelector } from '@/components/ModelSelector'
 import { useAuth } from '@/contexts/AuthContext'
 
@@ -66,10 +67,30 @@ export default function Graph() {
     enabled: !isAuthLoading && isAuthenticated,
   })
 
-  const clusterInsight = useClusterInsight()
+  const saveInsight = useSaveGraphInsight()
+  const lastNoteIdsRef = useRef<number[]>([])
+
+  const handleInsightComplete = useCallback((data: ClusterInsightCompleteData) => {
+    if (!data.content || !insightHubLabelRef.current) return
+    saveInsight.mutate({
+      hub_label: insightHubLabelRef.current,
+      content: data.content,
+      notes: data.notes,
+      note_ids: lastNoteIdsRef.current,
+      model: selectedModelRef.current || undefined,
+    })
+  }, [saveInsight])
+
+  const clusterInsight = useClusterInsight(handleInsightComplete)
   const [insightHubLabel, setInsightHubLabel] = useState<string | null>(null)
   const [selectedModel, setSelectedModel] = useState('')
   const [pendingAnalysis, setPendingAnalysis] = useState<{ noteIds: number[]; hubLabel: string } | null>(null)
+
+  // Refs for stable access in callbacks
+  const insightHubLabelRef = useRef<string | null>(null)
+  const selectedModelRef = useRef('')
+  useEffect(() => { insightHubLabelRef.current = insightHubLabel }, [insightHubLabel])
+  useEffect(() => { selectedModelRef.current = selectedModel }, [selectedModel])
 
   // Resizable analysis panel
   const [panelWidth, setPanelWidth] = useState(DEFAULT_PANEL_WIDTH)
@@ -147,6 +168,7 @@ export default function Graph() {
   // Actually start analysis when user clicks the "분석 시작" button
   const handleStartAnalysis = useCallback(() => {
     if (pendingAnalysis) {
+      lastNoteIdsRef.current = pendingAnalysis.noteIds
       clusterInsight.analyze(pendingAnalysis.noteIds, undefined, selectedModel || undefined)
       setPendingAnalysis(null)
     }

@@ -5,6 +5,7 @@ import DOMPurify from 'dompurify'
 import { useSearch } from '@/hooks/useSearch'
 import { useSearchIndex } from '@/hooks/useSearchIndex'
 import { EmptyState } from '@/components/EmptyState'
+import { InsightHistory } from '@/components/InsightHistory'
 import {
   BookOpenCheck,
   Search,
@@ -13,6 +14,7 @@ import {
   Loader2,
   Sparkles,
   Database,
+  Brain,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -26,6 +28,7 @@ const EXAMPLE_QUERY_KEYS = [
 export default function Librarian() {
   const { t } = useTranslation()
   const [searchParams, setSearchParams] = useSearchParams()
+  const activeTab = (searchParams.get('tab') || 'search') as 'search' | 'history'
   const [query, setQuery] = useState(searchParams.get('q') || '')
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
@@ -69,9 +72,17 @@ export default function Librarian() {
   // URL sync
   useEffect(() => {
     const params: Record<string, string> = {}
-    if (query) params.q = query
+    if (activeTab !== 'search') params.tab = activeTab
+    if (query && activeTab === 'search') params.q = query
+    setSearchParams(params, { replace: true })
+  }, [query, activeTab, setSearchParams])
+
+  const setTab = (tab: 'search' | 'history') => {
+    const params: Record<string, string> = {}
+    if (tab !== 'search') params.tab = tab
+    if (query && tab === 'search') params.q = query
     setSearchParams(params)
-  }, [query, setSearchParams])
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -129,6 +140,40 @@ export default function Librarian() {
           )}
         </div>
       </div>
+
+      {/* Tab bar */}
+      <div className="flex justify-center gap-1 p-1 rounded-lg bg-muted/50 w-fit mx-auto">
+        <button
+          onClick={() => setTab('search')}
+          className={cn(
+            'inline-flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition-colors',
+            activeTab === 'search'
+              ? 'bg-background text-foreground shadow-sm'
+              : 'text-muted-foreground hover:text-foreground',
+          )}
+        >
+          <Search className="h-3.5 w-3.5" />
+          {t('librarian.search')}
+        </button>
+        <button
+          onClick={() => setTab('history')}
+          className={cn(
+            'inline-flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition-colors',
+            activeTab === 'history'
+              ? 'bg-background text-foreground shadow-sm'
+              : 'text-muted-foreground hover:text-foreground',
+          )}
+        >
+          <Brain className="h-3.5 w-3.5" />
+          {t('librarian.history')}
+        </button>
+      </div>
+
+      {/* History tab */}
+      {activeTab === 'history' && <InsightHistory />}
+
+      {/* Search tab */}
+      {activeTab === 'search' && <>
 
       {/* Search input */}
       <form onSubmit={handleSubmit} className="relative">
@@ -305,6 +350,8 @@ export default function Librarian() {
           </div>
         )}
       </div>
+
+      </>}
     </div>
   )
 }

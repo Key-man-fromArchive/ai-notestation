@@ -872,7 +872,18 @@
     "exampleQuery1": "PCR 실험 프로토콜",
     "exampleQuery2": "바이러스 검출 방법",
     "exampleQuery3": "시퀀싱 데이터 분석",
-    "exampleQuery4": "DNA 추출 과정"
+    "exampleQuery4": "DNA 추출 과정",
+    "search": "검색",
+    "history": "히스토리",
+    "noInsights": "아직 인사이트가 없습니다",
+    "noInsightsDesc": "그래프 페이지에서 노트 클러스터를 분석하면 여기에 표시됩니다",
+    "backToHistory": "히스토리로 돌아가기",
+    "analyzedNotes": "분석된 노트",
+    "followUpChat": "후속 대화",
+    "deleteInsight": "인사이트 삭제",
+    "deleteInsightConfirm": "이 인사이트를 삭제하시겠습니까?",
+    "insightSaved": "인사이트 저장됨",
+    "notes_count": "{{count}}개 노트"
   },
   "files": {
     "extractText": "텍스트 추출",

@@ -159,6 +159,16 @@ class ApiClient {
   }
 
   /**
+   * PATCH 요청
+   */
+  patch<T>(path: string, body: unknown): Promise<T> {
+    return this.request<T>(path, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    })
+  }
+
+  /**
    * DELETE 요청
    */
   delete<T>(path: string): Promise<T> {

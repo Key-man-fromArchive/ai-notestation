@@ -416,3 +416,26 @@ class TrashOperation(Base):
     purged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (Index("idx_trash_operations_status", "status"),)
+
+
+class GraphInsight(Base):
+    """Persisted AI insight from graph cluster analysis."""
+
+    __tablename__ = "graph_insights"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    org_id: Mapped[int] = mapped_column(Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False)
+    hub_label: Mapped[str] = mapped_column(String(500), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    notes: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    note_ids: Mapped[list] = mapped_column(JSONB, nullable=False)
+    chat_messages: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    model: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index("idx_graph_insights_user_id", "user_id"),
+        Index("idx_graph_insights_org_id", "org_id"),
+        Index("idx_graph_insights_created_at", "created_at"),
+    )

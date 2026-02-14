@@ -4,14 +4,16 @@ import json
 import logging
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
+from sqlalchemy import delete as sa_delete
+from sqlalchemy import func as sa_func
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models import Note
+from app.models import GraphInsight, Note
 from app.services.auth_service import get_current_user
 from app.services.graph_service import compute_graph_analysis
 from app.utils.i18n import get_language
@@ -75,19 +77,13 @@ async def get_global_graph(
     total_result = await db.execute(text("SELECT COUNT(*) FROM notes"))
     total_notes = total_result.scalar() or 0
 
-    indexed_result = await db.execute(
-        text("SELECT COUNT(*) FROM note_avg_embeddings")
-    )
+    indexed_result = await db.execute(text("SELECT COUNT(*) FROM note_avg_embeddings"))
     indexed_notes = indexed_result.scalar() or 0
 
     # Fetch nodes: limit=0 means all indexed notes
     notes_query = (
         select(Note.id, Note.synology_note_id, Note.title, Note.notebook_name)
-        .where(
-            Note.id.in_(
-                select(text("note_id")).select_from(text("note_avg_embeddings"))
-            )
-        )
+        .where(Note.id.in_(select(text("note_id")).select_from(text("note_avg_embeddings"))))
         .order_by(Note.updated_at.desc())
     )
     if limit > 0:
@@ -109,13 +105,7 @@ async def get_global_graph(
 
     node_ids = [n.id for n in nodes]
     if len(node_ids) < 2:
-        empty_analysis = (
-            compute_graph_analysis(
-                [n.model_dump() for n in nodes], []
-            )
-            if include_analysis
-            else None
-        )
+        empty_analysis = compute_graph_analysis([n.model_dump() for n in nodes], []) if include_analysis else None
         return GlobalGraphResponse(
             nodes=nodes,
             links=[],
@@ -198,10 +188,7 @@ async def get_global_graph(
         similarities = sim_result.all()
         logger.info("Found %d similarity links", len(similarities))
 
-        links = [
-            GraphLink(source=src, target=tgt, weight=round(float(sim), 4))
-            for src, tgt, sim in similarities
-        ]
+        links = [GraphLink(source=src, target=tgt, weight=round(float(sim), 4)) for src, tgt, sim in similarities]
     except Exception as e:
         logger.error("Similarity query failed: %s", e, exc_info=True)
         links = []
@@ -285,9 +272,7 @@ async def graph_search(
             api_key=api_key,
             model=settings.EMBEDDING_MODEL,
         )
-        semantic = SemanticSearchEngine(
-            session=db, embedding_service=embedding_service
-        )
+        semantic = SemanticSearchEngine(session=db, embedding_service=embedding_service)
         engine = HybridSearchEngine(fts_engine=fts, semantic_engine=semantic) if search_type == "hybrid" else semantic
     else:
         # Fallback: FTS + Trigram unified search (works without embeddings)
@@ -300,9 +285,7 @@ async def graph_search(
         return GraphSearchResponse(hits=[], query=q)
 
     synology_ids = [r.note_id for r in search_page.results]
-    stmt = select(Note.id, Note.synology_note_id, Note.title).where(
-        Note.synology_note_id.in_(synology_ids)
-    )
+    stmt = select(Note.id, Note.synology_note_id, Note.title).where(Note.synology_note_id.in_(synology_ids))
     rows = await db.execute(stmt)
     id_map = {row.synology_note_id: (row.id, row.title) for row in rows.fetchall()}
 
@@ -359,13 +342,12 @@ async def cluster_insight(
     lang = get_language(http_request)
 
     # Fetch note content
-    stmt = select(
-        Note.id, Note.title, Note.content_text, Note.notebook_name
-    ).where(Note.id.in_(request.note_ids))
+    stmt = select(Note.id, Note.title, Note.content_text, Note.notebook_name).where(Note.id.in_(request.note_ids))
     result = await db.execute(stmt)
     rows = result.fetchall()
 
     if len(rows) < 2:
+
         async def not_enough():
             message = json.dumps(
                 {"chunk": msg("graph.cluster_insufficient_notes", lang)},
@@ -387,7 +369,7 @@ async def cluster_insight(
 
     for row in rows:
         title = row.title or f"Note {row.id}"
-        content = (row.content_text or "")[:min(_NOTE_CONTENT_MAX_CHARS, remaining)]
+        content = (row.content_text or "")[: min(_NOTE_CONTENT_MAX_CHARS, remaining)]
         remaining -= len(content)
         notes_data.append((title, content))
         notes_meta.append({"id": row.id, "title": title, "notebook": row.notebook_name})
@@ -437,4 +419,188 @@ async def cluster_insight(
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
         },
+    )
+
+
+# ---------------------------------------------------------------------------
+# Graph Insight CRUD
+# ---------------------------------------------------------------------------
+
+
+class GraphInsightCreate(BaseModel):
+    hub_label: str = Field(..., max_length=500)
+    content: str
+    notes: list[dict[str, Any]]
+    note_ids: list[int]
+    chat_messages: list[dict[str, Any]] | None = None
+    model: str | None = Field(None, max_length=100)
+
+
+class GraphInsightSummary(BaseModel):
+    id: int
+    hub_label: str
+    note_count: int
+    model: str | None
+    has_chat: bool
+    created_at: str
+
+
+class GraphInsightDetail(BaseModel):
+    id: int
+    hub_label: str
+    content: str
+    notes: list[dict[str, Any]]
+    note_ids: list[int]
+    chat_messages: list[dict[str, Any]] | None
+    model: str | None
+    created_at: str
+
+
+class GraphInsightListResponse(BaseModel):
+    items: list[GraphInsightSummary]
+    total: int
+
+
+class GraphInsightUpdateChat(BaseModel):
+    chat_messages: list[dict[str, Any]]
+
+
+@router.post("/insights", status_code=201)
+async def save_insight(
+    body: GraphInsightCreate,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[dict, Depends(get_current_user)],
+) -> GraphInsightDetail:
+    """Save a graph cluster insight."""
+    row = GraphInsight(
+        user_id=current_user["user_id"],
+        org_id=current_user["org_id"],
+        hub_label=body.hub_label,
+        content=body.content,
+        notes=body.notes,
+        note_ids=body.note_ids,
+        chat_messages=body.chat_messages,
+        model=body.model,
+    )
+    db.add(row)
+    await db.commit()
+    await db.refresh(row)
+    return GraphInsightDetail(
+        id=row.id,
+        hub_label=row.hub_label,
+        content=row.content,
+        notes=row.notes,
+        note_ids=row.note_ids,
+        chat_messages=row.chat_messages,
+        model=row.model,
+        created_at=row.created_at.isoformat(),
+    )
+
+
+@router.get("/insights")
+async def list_insights(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[dict, Depends(get_current_user)],
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+) -> GraphInsightListResponse:
+    """List saved insights, newest first."""
+    org_id = current_user["org_id"]
+
+    count_stmt = select(sa_func.count()).select_from(GraphInsight).where(GraphInsight.org_id == org_id)
+    total = (await db.execute(count_stmt)).scalar() or 0
+
+    stmt = (
+        select(GraphInsight)
+        .where(GraphInsight.org_id == org_id)
+        .order_by(GraphInsight.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    rows = (await db.execute(stmt)).scalars().all()
+
+    items = [
+        GraphInsightSummary(
+            id=r.id,
+            hub_label=r.hub_label,
+            note_count=len(r.note_ids) if r.note_ids else 0,
+            model=r.model,
+            has_chat=bool(r.chat_messages),
+            created_at=r.created_at.isoformat(),
+        )
+        for r in rows
+    ]
+    return GraphInsightListResponse(items=items, total=total)
+
+
+@router.get("/insights/{insight_id}")
+async def get_insight(
+    insight_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[dict, Depends(get_current_user)],
+) -> GraphInsightDetail:
+    """Get full detail of a saved insight."""
+    stmt = select(GraphInsight).where(
+        GraphInsight.id == insight_id,
+        GraphInsight.org_id == current_user["org_id"],
+    )
+    row = (await db.execute(stmt)).scalar_one_or_none()
+    if not row:
+        raise HTTPException(status_code=404, detail="Insight not found")
+    return GraphInsightDetail(
+        id=row.id,
+        hub_label=row.hub_label,
+        content=row.content,
+        notes=row.notes,
+        note_ids=row.note_ids,
+        chat_messages=row.chat_messages,
+        model=row.model,
+        created_at=row.created_at.isoformat(),
+    )
+
+
+@router.delete("/insights/{insight_id}", status_code=204)
+async def delete_insight(
+    insight_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[dict, Depends(get_current_user)],
+) -> None:
+    """Delete a saved insight."""
+    stmt = sa_delete(GraphInsight).where(
+        GraphInsight.id == insight_id,
+        GraphInsight.org_id == current_user["org_id"],
+    )
+    result = await db.execute(stmt)
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Insight not found")
+    await db.commit()
+
+
+@router.patch("/insights/{insight_id}/chat")
+async def update_insight_chat(
+    insight_id: int,
+    body: GraphInsightUpdateChat,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[dict, Depends(get_current_user)],
+) -> GraphInsightDetail:
+    """Update chat_messages on a saved insight."""
+    stmt = select(GraphInsight).where(
+        GraphInsight.id == insight_id,
+        GraphInsight.org_id == current_user["org_id"],
+    )
+    row = (await db.execute(stmt)).scalar_one_or_none()
+    if not row:
+        raise HTTPException(status_code=404, detail="Insight not found")
+    row.chat_messages = body.chat_messages
+    await db.commit()
+    await db.refresh(row)
+    return GraphInsightDetail(
+        id=row.id,
+        hub_label=row.hub_label,
+        content=row.content,
+        notes=row.notes,
+        note_ids=row.note_ids,
+        chat_messages=row.chat_messages,
+        model=row.model,
+        created_at=row.created_at.isoformat(),
     )

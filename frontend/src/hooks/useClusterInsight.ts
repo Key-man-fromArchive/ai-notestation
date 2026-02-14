@@ -14,7 +14,12 @@ interface ClusterInsightState {
   notes: ClusterNote[]
 }
 
-export function useClusterInsight() {
+export interface ClusterInsightCompleteData {
+  content: string
+  notes: ClusterNote[]
+}
+
+export function useClusterInsight(onComplete?: (data: ClusterInsightCompleteData) => void) {
   const [state, setState] = useState<ClusterInsightState>({
     content: '',
     isStreaming: false,
@@ -22,10 +27,16 @@ export function useClusterInsight() {
     notes: [],
   })
   const abortRef = useRef<AbortController | null>(null)
+  const contentRef = useRef('')
+  const notesRef = useRef<ClusterNote[]>([])
+  const hadErrorRef = useRef(false)
 
   const analyze = useCallback(
     async (noteIds: number[], focus?: string, model?: string) => {
       // Reset
+      contentRef.current = ''
+      notesRef.current = []
+      hadErrorRef.current = false
       setState({ content: '', isStreaming: true, error: null, notes: [] })
 
       abortRef.current = new AbortController()
@@ -83,6 +94,7 @@ export function useClusterInsight() {
                 try {
                   const meta = JSON.parse(data)
                   if (meta.notes) {
+                    notesRef.current = meta.notes
                     setState(prev => ({ ...prev, notes: meta.notes }))
                   }
                 } catch {
@@ -93,6 +105,7 @@ export function useClusterInsight() {
               }
 
               if (currentEvent === 'error') {
+                hadErrorRef.current = true
                 setState(prev => ({
                   ...prev,
                   error: data,
@@ -106,12 +119,16 @@ export function useClusterInsight() {
 
               if (data === '[DONE]') {
                 setState(prev => ({ ...prev, isStreaming: false }))
+                if (!hadErrorRef.current && contentRef.current && onComplete) {
+                  onComplete({ content: contentRef.current, notes: notesRef.current })
+                }
                 return
               }
 
               try {
                 const msg = JSON.parse(data)
                 if (msg.error) {
+                  hadErrorRef.current = true
                   setState(prev => ({
                     ...prev,
                     error: msg.error,
@@ -120,6 +137,7 @@ export function useClusterInsight() {
                   return
                 }
                 if (msg.chunk) {
+                  contentRef.current += msg.chunk
                   setState(prev => ({
                     ...prev,
                     content: prev.content + msg.chunk,
@@ -133,6 +151,9 @@ export function useClusterInsight() {
         }
 
         setState(prev => ({ ...prev, isStreaming: false }))
+        if (!hadErrorRef.current && contentRef.current && onComplete) {
+          onComplete({ content: contentRef.current, notes: notesRef.current })
+        }
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') {
           setState(prev => ({ ...prev, isStreaming: false }))
@@ -145,7 +166,7 @@ export function useClusterInsight() {
         }
       }
     },
-    []
+    [onComplete]
   )
 
   const stop = useCallback(() => {
