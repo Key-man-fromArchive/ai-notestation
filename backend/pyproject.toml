@@ -38,6 +38,8 @@ dependencies = [
     "scikit-learn>=1.6.0",
     "kiwipiepy>=0.18.0",
     "pymupdf>=1.25.0",
+    "readability-lxml>=0.8.1",
+    "html2text>=2024.2.26",
     "paddlepaddle>=3.2.1",
     "paddleocr[doc-parser]>=3.4.0",
 ]

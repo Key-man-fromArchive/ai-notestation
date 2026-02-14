@@ -4,7 +4,7 @@
 
 import { useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { FileText, AlertCircle, FolderOpen, Folder, BookOpen, Search, X, Plus, Wand2, Loader2, Tag } from 'lucide-react'
+import { FileText, AlertCircle, FolderOpen, Folder, BookOpen, Search, X, Plus, Wand2, Loader2, Tag, Globe } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useNotes, useCreateNote } from '@/hooks/useNotes'
 import { useNotebooks } from '@/hooks/useNotebooks'
@@ -12,6 +12,7 @@ import { useAutoTag, useLocalTags } from '@/hooks/useAutoTag'
 import { NoteList } from '@/components/NoteList'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
 import { EmptyState } from '@/components/EmptyState'
+import { CaptureModal } from '@/components/CaptureModal'
 import { cn } from '@/lib/utils'
 
 function CreateNoteModal({
@@ -143,6 +144,7 @@ export default function Notes() {
   const selectedTag = searchParams.get('tag') || undefined
   const [filterText, setFilterText] = useState('')
   const [isCreateOpen, setIsCreateOpen] = useState(false)
+  const [isCaptureOpen, setIsCaptureOpen] = useState(false)
 
   // 태그 관련 훅
   const { data: localTags } = useLocalTags()
@@ -373,6 +375,17 @@ export default function Notes() {
               </span>
             </div>
             <button
+              onClick={() => setIsCaptureOpen(true)}
+              className={cn(
+                'flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md',
+                'border border-input',
+                'hover:bg-muted transition-colors',
+              )}
+            >
+              <Globe className="h-4 w-4" />
+              {t('capture.button')}
+            </button>
+            <button
               onClick={() => setIsCreateOpen(true)}
               className={cn(
                 'flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md',
@@ -494,6 +507,11 @@ export default function Notes() {
       <CreateNoteModal
         isOpen={isCreateOpen}
         onClose={() => setIsCreateOpen(false)}
+        defaultNotebook={selectedNotebook}
+      />
+      <CaptureModal
+        isOpen={isCaptureOpen}
+        onClose={() => setIsCaptureOpen(false)}
         defaultNotebook={selectedNotebook}
       />
     </div>
