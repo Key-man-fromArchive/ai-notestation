@@ -42,7 +42,14 @@
   border-color: theme(colors.border);
 }
 
+html {
+  overflow: hidden;
+  height: 100%;
+}
+
 body {
+  height: 100%;
+  overflow: hidden;
   background-color: theme(colors.background);
   color: theme(colors.foreground);
   font-feature-settings: "rlig" 1, "calt" 1;

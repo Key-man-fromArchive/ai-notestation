@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import shutil
 import zipfile
 from datetime import UTC, datetime
@@ -15,7 +16,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.admin import require_admin
+from app.api.admin import _human_size, require_admin
 from app.api.settings import _load_from_db, _save_to_db, sync_api_keys_to_env
 from app.config import get_settings
 from app.database import async_session_factory, get_db
@@ -29,6 +30,15 @@ router = APIRouter(tags=["backup"])
 settings = get_settings()
 
 BACKUP_VERSION = "ainx-1"
+
+_SETTINGS_BACKUP_FILENAME_PATTERN = re.compile(r"^settings_backup_\d{8}_\d{6}\.json$")
+
+
+def _settings_backup_dir() -> Path:
+    """Return (and ensure) the settings backup directory."""
+    backup_path = Path(settings.NSX_EXPORTS_PATH) / "settings_backups"
+    backup_path.mkdir(parents=True, exist_ok=True)
+    return backup_path
 
 
 class BackupExportResponse(dict):
@@ -363,6 +373,10 @@ async def export_settings(
     content = json.dumps(payload, ensure_ascii=False, indent=2)
     filename = f"settings_backup_{timestamp}.json"
 
+    # Save a server-side copy
+    server_copy = _settings_backup_dir() / filename
+    server_copy.write_text(content, encoding="utf-8")
+
     return Response(
         content=content,
         media_type="application/json",
@@ -421,4 +435,101 @@ async def import_settings(
     return {
         "status": "imported",
         "setting_count": count,
+    }
+
+
+@router.get("/backup/settings/list")
+async def list_settings_backups(
+    current_user: dict = Depends(require_admin),  # noqa: B008
+) -> dict:
+    """List settings backup files on the server, newest first.
+
+    Requires admin access. Returns filename, size, creation time,
+    and the number of settings stored in each backup.
+    """
+    backup_path = _settings_backup_dir()
+
+    backups = []
+    for f in sorted(backup_path.glob("settings_backup_*.json"), reverse=True):
+        stat = f.stat()
+
+        setting_count = 0
+        try:
+            data = json.loads(f.read_text(encoding="utf-8"))
+            setting_count = data.get("setting_count", 0)
+        except (json.JSONDecodeError, OSError):
+            pass
+
+        backups.append(
+            {
+                "filename": f.name,
+                "size": stat.st_size,
+                "size_pretty": _human_size(stat.st_size),
+                "created_at": datetime.fromtimestamp(stat.st_mtime, tz=UTC).isoformat(),
+                "setting_count": setting_count,
+            }
+        )
+
+    return {"backups": backups, "total": len(backups)}
+
+
+@router.get("/backup/settings/download/{filename}")
+async def download_settings_backup(
+    filename: str,
+    current_user: dict = Depends(require_admin),  # noqa: B008
+) -> FileResponse:
+    """Download a specific settings backup file.
+
+    Requires admin access. Validates the filename pattern before serving.
+    """
+    if not _SETTINGS_BACKUP_FILENAME_PATTERN.match(filename):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid settings backup filename",
+        )
+
+    file_path = _settings_backup_dir() / filename
+    if not file_path.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Settings backup file not found",
+        )
+
+    return FileResponse(
+        path=str(file_path),
+        filename=filename,
+        media_type="application/json",
+    )
+
+
+@router.delete("/backup/settings/{filename}")
+async def delete_settings_backup(
+    filename: str,
+    current_user: dict = Depends(require_admin),  # noqa: B008
+) -> dict:
+    """Delete a specific settings backup file.
+
+    Requires admin access. Validates the filename pattern before deleting.
+    """
+    if not _SETTINGS_BACKUP_FILENAME_PATTERN.match(filename):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid settings backup filename",
+        )
+
+    file_path = _settings_backup_dir() / filename
+    if not file_path.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Settings backup file not found",
+        )
+
+    file_size = file_path.stat().st_size
+    file_path.unlink()
+
+    return {
+        "status": "ok",
+        "filename": filename,
+        "freed_bytes": file_size,
+        "freed_size": _human_size(file_size),
     }

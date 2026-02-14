@@ -33,6 +33,8 @@ import {
   Upload,
   Settings,
   FileArchive,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { apiClient } from '@/lib/api'
@@ -145,6 +147,14 @@ interface DbBackupItem {
   size: number
   size_pretty: string
   created_at: string
+}
+
+interface SettingsBackupItem {
+  filename: string
+  size: number
+  size_pretty: string
+  created_at: string
+  setting_count: number
 }
 
 const OPERATION_ICON: Record<string, typeof FileX> = {
@@ -350,6 +360,13 @@ function DatabaseTab() {
   const [settingsMsg, setSettingsMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [isExportingSettings, setIsExportingSettings] = useState(false)
   const [isImportingSettings, setIsImportingSettings] = useState(false)
+  const [showAllSettings, setShowAllSettings] = useState(false)
+
+  // --- Settings backup list ---
+  const { data: settingsBackups, refetch: refetchSettingsBackups } = useQuery({
+    queryKey: ['admin', 'settings-backups'],
+    queryFn: () => apiClient.get<{ backups: SettingsBackupItem[]; total: number }>('/backup/settings/list'),
+  })
 
   // --- DB backup state ---
   const { data: backups, refetch: refetchBackups } = useQuery({
@@ -362,6 +379,7 @@ function DatabaseTab() {
   const [isRestoring, setIsRestoring] = useState(false)
   const [restoreConfirmText, setRestoreConfirmText] = useState('')
   const [showRestoreConfirm, setShowRestoreConfirm] = useState(false)
+  const [showAllDb, setShowAllDb] = useState(false)
 
   // --- Settings export ---
   const handleSettingsExport = async () => {
@@ -385,6 +403,7 @@ function DatabaseTab() {
       a.remove()
       window.URL.revokeObjectURL(url)
       setSettingsMsg({ ok: true, text: t('admin.settingsExportSuccess') })
+      refetchSettingsBackups()
     } catch (e) {
       setSettingsMsg({ ok: false, text: e instanceof Error ? e.message : t('admin.settingsExportFailed') })
     } finally {
@@ -414,6 +433,35 @@ function DatabaseTab() {
       setSettingsMsg({ ok: false, text: e instanceof Error ? e.message : t('admin.settingsImportFailed') })
     } finally {
       setIsImportingSettings(false)
+    }
+  }
+
+  // --- Settings backup download ---
+  const handleDownloadSettingsBackup = async (filename: string) => {
+    const token = apiClient.getToken()
+    const response = await fetch(`/api/backup/settings/download/${filename}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+    if (!response.ok) return
+    const blob = await response.blob()
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    window.URL.revokeObjectURL(url)
+  }
+
+  // --- Settings backup delete ---
+  const handleDeleteSettingsBackup = async (filename: string) => {
+    try {
+      await apiClient.delete(`/backup/settings/${filename}`)
+      refetchSettingsBackups()
+      setSettingsMsg({ ok: true, text: t('admin.settingsBackupDeleted') })
+    } catch {
+      setSettingsMsg({ ok: false, text: t('admin.settingsBackupDeleteFailed') })
     }
   }
 
@@ -563,7 +611,69 @@ function DatabaseTab() {
             </button>
           </div>
 
-          <div className="flex flex-col gap-3">
+          {/* Settings backup list */}
+          {settingsBackups && settingsBackups.backups.length > 0 && (
+            <div className="border border-border rounded-md overflow-hidden">
+              <div className="px-3 py-2 bg-muted/30 border-b border-border">
+                <p className="text-sm font-medium">{t('admin.settingsBackupList')}</p>
+              </div>
+              <div className="divide-y divide-border">
+                {(showAllSettings ? settingsBackups.backups : settingsBackups.backups.slice(0, 5)).map((b) => (
+                  <div key={b.filename} className="flex items-center justify-between px-3 py-2 hover:bg-muted/20">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <FileArchive className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-sm font-mono truncate">{b.filename}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {b.size_pretty} &middot; {t('admin.settingsCount', { count: b.setting_count })} &middot; {new Date(b.created_at).toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        onClick={() => handleDownloadSettingsBackup(b.filename)}
+                        className="p-1.5 rounded hover:bg-muted transition-colors"
+                        title="Download"
+                      >
+                        <Download className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteSettingsBackup(b.filename)}
+                        className="p-1.5 rounded hover:bg-destructive/10 text-destructive transition-colors"
+                        title="Delete"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {settingsBackups.total > 5 && (
+                <div
+                  onClick={() => setShowAllSettings(!showAllSettings)}
+                  className="text-xs text-muted-foreground hover:text-foreground text-center py-1.5 cursor-pointer border-t border-border"
+                >
+                  {showAllSettings ? (
+                    <span className="flex items-center justify-center gap-1">
+                      <ChevronUp className="h-3 w-3" />
+                      {t('admin.hideList')}
+                    </span>
+                  ) : (
+                    <span className="flex items-center justify-center gap-1">
+                      <ChevronDown className="h-3 w-3" />
+                      {t('admin.showAll', { count: settingsBackups.total })}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="pt-2 border-t border-border space-y-3">
+            <p className="text-sm font-medium flex items-center gap-2">
+              <RotateCcw className="h-4 w-4" />
+              {t('admin.settingsImport')}
+            </p>
             <label
               className={cn(
                 'flex items-center justify-center gap-2 px-4 py-4 border-2 border-dashed border-input rounded-md cursor-pointer',
@@ -666,7 +776,7 @@ function DatabaseTab() {
                 <p className="text-sm font-medium">{t('admin.dbBackupList')}</p>
               </div>
               <div className="divide-y divide-border">
-                {backups.backups.map((b) => (
+                {(showAllDb ? backups.backups : backups.backups.slice(0, 5)).map((b) => (
                   <div key={b.filename} className="flex items-center justify-between px-3 py-2 hover:bg-muted/20">
                     <div className="flex items-center gap-3 min-w-0">
                       <FileArchive className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -696,6 +806,24 @@ function DatabaseTab() {
                   </div>
                 ))}
               </div>
+              {backups.total > 5 && (
+                <div
+                  onClick={() => setShowAllDb(!showAllDb)}
+                  className="text-xs text-muted-foreground hover:text-foreground text-center py-1.5 cursor-pointer border-t border-border"
+                >
+                  {showAllDb ? (
+                    <span className="flex items-center justify-center gap-1">
+                      <ChevronUp className="h-3 w-3" />
+                      {t('admin.hideList')}
+                    </span>
+                  ) : (
+                    <span className="flex items-center justify-center gap-1">
+                      <ChevronDown className="h-3 w-3" />
+                      {t('admin.showAll', { count: backups.total })}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           )}
           {backups && backups.backups.length === 0 && (
