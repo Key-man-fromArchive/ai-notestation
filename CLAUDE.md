@@ -2,6 +2,9 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## NotebookLM
+Project notebook alias: `labnote`
+
 ## Project Overview
 
 LabNote AI enhances Synology NoteStation with AI capabilities: hybrid search (FTS + semantic), AI-powered insights, research note generation, spell checking, and template creation.
