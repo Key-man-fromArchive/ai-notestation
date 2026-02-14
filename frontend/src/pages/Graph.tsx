@@ -150,7 +150,7 @@ export default function Graph() {
   }, [pendingAnalysis, clusterInsight, selectedModel])
 
   return (
-    <div className="h-screen flex flex-col">
+    <div className="h-[calc(100vh-57px)] flex flex-col">
       <div className="flex items-center justify-between px-4 py-2 flex-shrink-0">
         <div className="flex items-center gap-3">
           <Network className="h-6 w-6 text-primary" />
