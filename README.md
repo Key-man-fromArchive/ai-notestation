@@ -121,7 +121,16 @@ bash install.sh
 <summary>수동 설치</summary>
 
 ```bash
-cp .env.example .env       # JWT_SECRET, NAS 주소, AI 키 설정
+cp .env.example .env
+
+# 보안 키 생성
+JWT_SECRET=$(openssl rand -base64 32)
+OAUTH_KEY=$(python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" 2>/dev/null || openssl rand -base64 32)
+sed -i "s|^JWT_SECRET=.*|JWT_SECRET=${JWT_SECRET}|" .env
+sed -i "s|^OAUTH_ENCRYPTION_KEY=.*|OAUTH_ENCRYPTION_KEY=${OAUTH_KEY}|" .env
+
+# NAS 주소, AI 키는 .env에서 직접 편집
+
 docker compose up -d --build
 docker compose exec backend alembic upgrade head
 # Frontend → http://localhost:3000
@@ -199,6 +208,7 @@ cd frontend && npm install && npm run dev
 | `GOOGLE_API_KEY` | Google Gemini API 키 | - |
 | `ZHIPUAI_API_KEY` | ZhipuAI API 키 | - |
 | `OAUTH_ENCRYPTION_KEY` | OAuth 토큰 암호화 키 (Fernet) | - |
+| `PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK` | PaddleOCR 외부 모델 소스 체크 비활성화 (Docker 기본값: True) | - |
 
 NAS 없이도 NSX 임포트나 로컬 노트 생성으로 사용할 수 있습니다. AI 키 없이도 검색과 노트 관리는 동작합니다.
 
