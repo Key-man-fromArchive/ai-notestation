@@ -38,7 +38,7 @@ def _get_vision_model() -> str:
 class ImageAnalysisService:
     """Batch processor for OCR and Vision analysis of note images."""
 
-    OCR_CONCURRENCY = 3  # glm-ocr is paid → conservative
+    OCR_CONCURRENCY = 1  # glm-ocr supports 1 concurrent
     VISION_CONCURRENCY = 10  # glm-4.6v supports 10 concurrent
 
     def __init__(self) -> None:
@@ -75,7 +75,12 @@ class ImageAnalysisService:
         }
 
     async def run_batch(self, on_progress: callable | None = None) -> dict:
-        """Run batch OCR + Vision analysis on all unprocessed images.
+        """Run batch OCR + Vision analysis as two independent pipelines.
+
+        Pipeline 1: OCR  (concurrency=1)  — all images needing OCR
+        Pipeline 2: Vision (concurrency=10) — all images needing Vision
+
+        Both pipelines run concurrently so Vision doesn't wait for OCR.
 
         Args:
             on_progress: Optional callback(processed, total, ocr_done, vision_done, failed)
@@ -84,57 +89,104 @@ class ImageAnalysisService:
             Summary dict with counts.
         """
         async with async_session_factory() as db:
-            # Find images needing OCR or Vision
-            # NULL status means never processed — must be included
-            stmt = select(NoteImage.id).where(
-                or_(
-                    NoteImage.extraction_status.is_(None),
-                    ~NoteImage.extraction_status.in_(["completed", "empty"]),
-                    NoteImage.vision_status.is_(None),
-                    NoteImage.vision_status != "completed",
-                )
-            )
-            result = await db.execute(stmt)
-            image_ids = [row[0] for row in result.fetchall()]
+            ocr_ids = [
+                row[0]
+                for row in (
+                    await db.execute(
+                        select(NoteImage.id).where(
+                            or_(
+                                NoteImage.extraction_status.is_(None),
+                                ~NoteImage.extraction_status.in_(["completed", "empty"]),
+                            )
+                        )
+                    )
+                ).fetchall()
+            ]
+            vision_ids = [
+                row[0]
+                for row in (
+                    await db.execute(
+                        select(NoteImage.id).where(
+                            or_(
+                                NoteImage.vision_status.is_(None),
+                                NoteImage.vision_status != "completed",
+                            )
+                        )
+                    )
+                ).fetchall()
+            ]
 
-        if not image_ids:
+        all_ids = list(set(ocr_ids) | set(vision_ids))
+        if not all_ids:
             return {"processed": 0, "ocr_done": 0, "vision_done": 0, "failed": 0}
 
-        total = len(image_ids)
-        processed = 0
-        ocr_done = 0
-        vision_done = 0
-        failed = 0
+        total = len(all_ids)
+        counters = {"ocr_done": 0, "vision_done": 0, "failed": 0}
+        done_set: set[int] = set()
+        lock = asyncio.Lock()
 
-        # Limit concurrency to avoid DB connection pool exhaustion
-        semaphore = asyncio.Semaphore(5)
+        async def _report(image_id: int, kind: str, success: bool):
+            async with lock:
+                if success:
+                    counters[f"{kind}_done"] += 1
+                else:
+                    counters["failed"] += 1
+                done_set.add(image_id)
+                if on_progress:
+                    on_progress(
+                        len(done_set), total,
+                        counters["ocr_done"], counters["vision_done"], counters["failed"],
+                    )
 
-        async def _bounded(image_id: int) -> dict:
-            async with semaphore:
-                return await self._process_single(image_id)
+        async def _ocr_one(image_id: int):
+            async with self._ocr_sem:
+                async with async_session_factory() as db:
+                    img = await db.get(NoteImage, image_id)
+                    if not img:
+                        return
+                    file_path = Path(img.file_path)
+                    if not file_path.exists():
+                        await _report(image_id, "ocr", False)
+                        return
+                    image_bytes = file_path.read_bytes()
+                    mime_type = img.mime_type or "image/png"
+                    ok = await self._run_ocr(db, img, image_bytes, mime_type)
+                    await db.commit()
+                await _report(image_id, "ocr", ok)
 
-        tasks = [_bounded(image_id) for image_id in image_ids]
+        async def _vision_one(image_id: int):
+            async with self._vision_sem:
+                async with async_session_factory() as db:
+                    img = await db.get(NoteImage, image_id)
+                    if not img:
+                        return
+                    file_path = Path(img.file_path)
+                    if not file_path.exists():
+                        await _report(image_id, "vision", False)
+                        return
+                    image_bytes = file_path.read_bytes()
+                    mime_type = img.mime_type or "image/png"
+                    ok = await self._run_vision(db, img, image_bytes, mime_type)
+                    await db.commit()
+                await _report(image_id, "vision", ok)
 
-        for coro in asyncio.as_completed(tasks):
-            result = await coro
-            processed += 1
-            if result.get("ocr"):
-                ocr_done += 1
-            if result.get("vision"):
-                vision_done += 1
-            if result.get("error"):
-                failed += 1
-            if on_progress:
-                on_progress(processed, total, ocr_done, vision_done, failed)
+        # Launch both pipelines concurrently
+        ocr_tasks = [_ocr_one(i) for i in ocr_ids]
+        vision_tasks = [_vision_one(i) for i in vision_ids]
+
+        await asyncio.gather(
+            asyncio.gather(*ocr_tasks, return_exceptions=True),
+            asyncio.gather(*vision_tasks, return_exceptions=True),
+        )
 
         # Re-index affected notes
-        await self._reindex_affected_notes(image_ids)
+        await self._reindex_affected_notes(all_ids)
 
         return {
-            "processed": processed,
-            "ocr_done": ocr_done,
-            "vision_done": vision_done,
-            "failed": failed,
+            "processed": len(done_set),
+            "ocr_done": counters["ocr_done"],
+            "vision_done": counters["vision_done"],
+            "failed": counters["failed"],
         }
 
     async def _process_single(self, image_id: int) -> dict:
@@ -177,8 +229,8 @@ class ImageAnalysisService:
         return result
 
     async def _run_ocr(self, db: AsyncSession, img: NoteImage, image_bytes: bytes, mime_type: str) -> bool:
-        """Run OCR on a single image with semaphore limiting."""
-        async with self._ocr_sem:
+        """Run OCR on a single image."""
+        if True:
             try:
                 from app.services.ocr_service import OCRService
 
@@ -197,8 +249,8 @@ class ImageAnalysisService:
                 return False
 
     async def _run_vision(self, db: AsyncSession, img: NoteImage, image_bytes: bytes, mime_type: str) -> bool:
-        """Run Vision analysis on a single image with semaphore limiting."""
-        async with self._vision_sem:
+        """Run Vision analysis on a single image."""
+        if True:
             try:
                 from app.ai_router.router import AIRouter
                 from app.ai_router.schemas import AIRequest, ImageContent, Message

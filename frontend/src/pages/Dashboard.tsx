@@ -203,8 +203,12 @@ export default function Dashboard() {
               <div className="text-xs text-muted-foreground">Vision</div>
             </div>
             <div className="text-center">
-              <div className="text-lg font-bold text-amber-600">{imageStats.pending + imageStats.vision_pending}</div>
-              <div className="text-xs text-muted-foreground">{t('dashboard.pendingAnalysis')}</div>
+              <div className="text-lg font-bold text-amber-600">{imageStats.pending}</div>
+              <div className="text-xs text-muted-foreground">OCR {t('dashboard.pendingAnalysis')}</div>
+            </div>
+            <div className="text-center">
+              <div className="text-lg font-bold text-amber-600">{imageStats.vision_pending}</div>
+              <div className="text-xs text-muted-foreground">Vision {t('dashboard.pendingAnalysis')}</div>
             </div>
           </div>
           {imageStats.total > 0 && (
