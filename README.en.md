@@ -121,7 +121,16 @@ The install script handles environment setup, container launch, and DB migration
 <summary>Manual install</summary>
 
 ```bash
-cp .env.example .env       # Set JWT_SECRET, NAS address, AI keys
+cp .env.example .env
+
+# Generate security keys
+JWT_SECRET=$(openssl rand -base64 32)
+OAUTH_KEY=$(python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" 2>/dev/null || openssl rand -base64 32)
+sed -i "s|^JWT_SECRET=.*|JWT_SECRET=${JWT_SECRET}|" .env
+sed -i "s|^OAUTH_ENCRYPTION_KEY=.*|OAUTH_ENCRYPTION_KEY=${OAUTH_KEY}|" .env
+
+# Edit .env for NAS address and AI keys
+
 docker compose up -d --build
 docker compose exec backend alembic upgrade head
 # Frontend → http://localhost:3000
@@ -199,6 +208,7 @@ cd frontend && npm install && npm run dev
 | `GOOGLE_API_KEY` | Google Gemini API key | - |
 | `ZHIPUAI_API_KEY` | ZhipuAI API key | - |
 | `OAUTH_ENCRYPTION_KEY` | OAuth token encryption key (Fernet) | - |
+| `PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK` | Disable PaddleOCR external model source check (Docker default: True) | - |
 
 Works without NAS (use NSX import or create notes locally). Works without AI keys (search and note management still function).
 
