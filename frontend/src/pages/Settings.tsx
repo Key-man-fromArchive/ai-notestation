@@ -1186,7 +1186,7 @@ function AiModelSection() {
                             className="rounded border-input"
                             ref={(el) => { if (el) el.indeterminate = enabledCount > 0 && !allChecked }}
                           />
-                          <span className="text-sm font-medium capitalize">{provider}</span>
+                          <span className="text-lg font-bold capitalize">- {provider}</span>
                         </label>
                         <span className="text-xs text-muted-foreground">
                           {enabledCount}/{models.length}
