@@ -73,12 +73,13 @@ export function ObsidianGraph({
   const { t } = useTranslation()
   const navigate = useNavigate()
   const containerRef = useRef<HTMLDivElement>(null)
+  const resizeObserverRef = useRef<ResizeObserver | null>(null)
   type GraphMethods = ForceGraphMethods<
     NodeObject<GraphNodeObject>,
     LinkObject<GraphNodeObject, GraphLinkObject>
   >
   const graphRef = useRef<GraphMethods | undefined>(undefined)
-  const [dimensions, setDimensions] = useState({ width: 800, height: 600 })
+  const [dimensions, setDimensions] = useState<{ width: number; height: number } | null>(null)
   const [hoveredNode, setHoveredNode] = useState<GraphNodeObject | null>(null)
   const [showLegend, setShowLegend] = useState(false)
   const [simulationRunning, setSimulationRunning] = useState(false)
@@ -105,23 +106,64 @@ export function ObsidianGraph({
   // Track the live node objects that d3-force mutates with x,y positions
   const liveNodesRef = useRef<GraphNodeObject[]>([])
 
-  useEffect(() => {
-    const container = containerRef.current
-    if (!container) return
+  // Ref callback: sets up ResizeObserver when the container div mounts (handles loading→loaded transition)
+  const containerCallbackRef = useCallback((node: HTMLDivElement | null) => {
+    // Clean up previous observer
+    resizeObserverRef.current?.disconnect()
+    resizeObserverRef.current = null
+    containerRef.current = node
 
-    const updateDimensions = () => {
-      setDimensions({
-        width: container.clientWidth,
-        height: container.clientHeight,
-      })
+    if (node) {
+      const updateDimensions = () => {
+        const w = node.clientWidth
+        const h = node.clientHeight
+        if (w > 0 && h > 0) {
+          setDimensions(prev =>
+            prev && prev.width === w && prev.height === h ? prev : { width: w, height: h }
+          )
+        }
+      }
+      requestAnimationFrame(updateDimensions)
+      resizeObserverRef.current = new ResizeObserver(updateDimensions)
+      resizeObserverRef.current.observe(node)
     }
-
-    updateDimensions()
-    const resizeObserver = new ResizeObserver(updateDimensions)
-    resizeObserver.observe(container)
-
-    return () => resizeObserver.disconnect()
   }, [])
+
+  // Cleanup ResizeObserver on unmount
+  useEffect(() => {
+    return () => {
+      resizeObserverRef.current?.disconnect()
+      resizeObserverRef.current = null
+    }
+  }, [])
+
+  // Force-sync canvas size on resize (react-kapsule prop propagation unreliable in React 18)
+  useEffect(() => {
+    if (!dimensions || !containerRef.current) return
+    const container = containerRef.current
+    const pxScale = window.devicePixelRatio || 1
+    // Update all canvases (main + shadow)
+    container.querySelectorAll('canvas').forEach(canvas => {
+      canvas.style.width = `${dimensions.width}px`
+      canvas.style.height = `${dimensions.height}px`
+      canvas.width = dimensions.width * pxScale
+      canvas.height = dimensions.height * pxScale
+    })
+    // Update force-graph wrapper div
+    const fgContainer = container.querySelector('.force-graph-container') as HTMLElement | null
+    if (fgContainer) {
+      fgContainer.style.width = `${dimensions.width}px`
+      fgContainer.style.height = `${dimensions.height}px`
+    }
+    // Also update the react-kapsule wrapper div (direct child of containerRef)
+    const kapsuleWrapper = container.firstElementChild as HTMLElement | null
+    if (kapsuleWrapper && !kapsuleWrapper.className) {
+      kapsuleWrapper.style.width = `${dimensions.width}px`
+      kapsuleWrapper.style.height = `${dimensions.height}px`
+    }
+    // Request redraw
+    graphRef.current?.zoomToFit(0, 50)
+  }, [dimensions])
 
   // Check if we have cached positions for the current data
   const hasCache = positionCache.size > 0
@@ -528,8 +570,8 @@ export function ObsidianGraph({
         </div>
       )}
 
-      <div ref={containerRef} className="w-full h-full bg-zinc-900">
-        <ForceGraph2D
+      <div ref={containerCallbackRef} className="w-full h-full bg-zinc-900">
+        {dimensions && <ForceGraph2D
           ref={graphRef}
           width={dimensions.width}
           height={dimensions.height}
@@ -561,7 +603,7 @@ export function ObsidianGraph({
           enableNodeDrag={true}
           enableZoomInteraction={true}
           enablePanInteraction={true}
-        />
+        />}
       </div>
     </div>
   )
