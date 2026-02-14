@@ -27,7 +27,8 @@ from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel
-from sqlalchemy import func, select, text
+from sqlalchemy import and_, func, select, text
+from sqlalchemy import delete as sa_delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -320,6 +321,7 @@ async def list_notes(
     limit: int = Query(50, ge=1, le=200, description="Maximum notes to return"),
     notebook: str | None = Query(None, description="Filter by notebook name"),
     tag: str | None = Query(None, description="Filter by tag name"),
+    empty_only: bool = Query(False, description="Filter to only empty notes (no title and no content)"),
     current_user: dict = Depends(get_current_user),  # noqa: B008
     db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> NoteListResponse:
@@ -332,6 +334,7 @@ async def list_notes(
         limit: Page size (max 200).
         notebook: Optional notebook name to filter by.
         tag: Optional tag name to filter by (JSONB array contains).
+        empty_only: If True, only return notes with empty title and content.
         current_user: Injected authenticated user.
         db: Database session for local notes.
 
@@ -349,6 +352,14 @@ async def list_notes(
         tag_filter = Note.tags.contains([tag])
         count_stmt = count_stmt.where(tag_filter)
         stmt = stmt.where(tag_filter)
+
+    if empty_only:
+        empty_filter = and_(
+            func.coalesce(func.trim(Note.title), "") == "",
+            func.coalesce(func.trim(Note.content_text), "") == "",
+        )
+        count_stmt = count_stmt.where(empty_filter)
+        stmt = stmt.where(empty_filter)
 
     stmt = stmt.order_by(
         Note.source_updated_at.desc().nulls_last(),
@@ -627,6 +638,99 @@ async def auto_tag_note(
     tags = await tagger.tag_note(note.id, db)
     await db.commit()
     return TagResponse(tags=tags)
+
+
+class BatchDeleteRequest(BaseModel):
+    note_ids: list[str]
+
+
+class BatchDeleteResponse(BaseModel):
+    deleted: int
+    failed: list[str]
+
+
+@router.post("/notes/batch-delete", response_model=BatchDeleteResponse)
+async def delete_notes_batch(
+    request: BatchDeleteRequest,
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+    ns_service: NoteStationService = Depends(_get_ns_service),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> BatchDeleteResponse:
+    """Delete multiple notes by their IDs (NAS + local DB).
+
+    Requires JWT authentication via Bearer token.
+    """
+    deleted = 0
+    failed: list[str] = []
+
+    for note_id in request.note_ids:
+        try:
+            # Delete from NAS first
+            try:
+                await ns_service.delete_note(note_id)
+            except Exception:
+                logger.warning("NAS delete failed for note %s, continuing with local cleanup", note_id)
+
+            # Delete NoteImage records (no FK cascade)
+            await db.execute(
+                sa_delete(NoteImage).where(NoteImage.synology_note_id == note_id)
+            )
+
+            # Delete Note record (cascades to embeddings, attachments, access, share links)
+            result = await db.execute(select(Note).where(Note.synology_note_id == note_id))
+            db_note = result.scalar_one_or_none()
+            if db_note:
+                await db.delete(db_note)
+                deleted += 1
+            else:
+                failed.append(note_id)
+        except Exception:
+            logger.exception("Failed to delete note %s", note_id)
+            failed.append(note_id)
+
+    await db.commit()
+    return BatchDeleteResponse(deleted=deleted, failed=failed)
+
+
+@router.delete("/notes/{note_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_note(
+    note_id: str,
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+    ns_service: NoteStationService = Depends(_get_ns_service),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> None:
+    """Delete a single note (NAS + local DB).
+
+    Requires JWT authentication via Bearer token.
+
+    Args:
+        note_id: The Synology note object_id.
+
+    Raises:
+        HTTPException 404: If the note is not found in local DB.
+    """
+    result = await db.execute(select(Note).where(Note.synology_note_id == note_id))
+    db_note = result.scalar_one_or_none()
+    if not db_note:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Note not found: {note_id}",
+        )
+
+    # Delete from NAS
+    try:
+        await ns_service.delete_note(note_id)
+    except Exception:
+        logger.warning("NAS delete failed for note %s, continuing with local cleanup", note_id)
+
+    # Delete NoteImage records (no FK cascade)
+    await db.execute(
+        sa_delete(NoteImage).where(NoteImage.synology_note_id == note_id)
+    )
+
+    # Delete Note record (cascades to embeddings, attachments, access, share links)
+    await db.delete(db_note)
+    await db.commit()
 
 
 @router.get("/notes/{note_id}", response_model=NoteDetailResponse)

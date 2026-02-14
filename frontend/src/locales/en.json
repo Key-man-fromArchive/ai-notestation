@@ -5,6 +5,7 @@
     "saved": "Saved",
     "cancel": "Cancel",
     "delete": "Delete",
+    "deleting": "Deleting...",
     "edit": "Edit",
     "close": "Close",
     "confirm": "Confirm",
@@ -194,7 +195,13 @@
     "batchTagProgress": "{{tagged}}/{{total}} tagged",
     "filterByTag": "Filter by tag",
     "clearTagFilter": "Clear tag filter",
-    "untaggedNotes": "{{count}} untagged"
+    "untaggedNotes": "{{count}} untagged",
+    "emptyNotes": "Empty Notes",
+    "emptyNotesCount": "Empty Notes ({{count}})",
+    "emptyNotesDesc": "Notes with no title and no content.",
+    "deleteAllEmpty": "Delete All",
+    "deleteConfirmTitle": "Delete Empty Notes",
+    "deleteConfirmDesc": "Permanently delete {{count}} empty notes from NAS and local DB. This action cannot be undone."
   },
   "relatedNotes": {
     "title": "Related Notes",

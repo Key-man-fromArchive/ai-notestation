@@ -4,9 +4,9 @@
 
 import { useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { FileText, AlertCircle, FolderOpen, Folder, BookOpen, Search, X, Plus, Wand2, Loader2, Tag, Globe } from 'lucide-react'
+import { FileText, AlertCircle, FolderOpen, Folder, BookOpen, Search, X, Plus, Wand2, Loader2, Tag, Globe, FileX2, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { useNotes, useCreateNote } from '@/hooks/useNotes'
+import { useNotes, useCreateNote, useBatchDeleteNotes } from '@/hooks/useNotes'
 import { useNotebooks } from '@/hooks/useNotebooks'
 import { useAutoTag, useLocalTags } from '@/hooks/useAutoTag'
 import { NoteList } from '@/components/NoteList'
@@ -142,13 +142,16 @@ export default function Notes() {
   const [searchParams, setSearchParams] = useSearchParams()
   const selectedNotebook = searchParams.get('notebook') || undefined
   const selectedTag = searchParams.get('tag') || undefined
+  const emptyOnly = searchParams.get('empty') === 'true'
   const [filterText, setFilterText] = useState('')
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [isCaptureOpen, setIsCaptureOpen] = useState(false)
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
 
   // 태그 관련 훅
   const { data: localTags } = useLocalTags()
   const autoTag = useAutoTag()
+  const batchDelete = useBatchDeleteNotes()
 
   // 노트 목록 데이터
   const {
@@ -158,7 +161,7 @@ export default function Notes() {
     hasNextPage,
     isFetchingNextPage,
     fetchNextPage,
-  } = useNotes({ notebook: selectedNotebook, tag: selectedTag })
+  } = useNotes({ notebook: selectedNotebook, tag: selectedTag, emptyOnly })
 
   // 노트북 목록 데이터
   const { data: notebooksData, isLoading: isLoadingNotebooks } = useNotebooks()
@@ -206,6 +209,15 @@ export default function Notes() {
     if (selectedNotebook) params.notebook = selectedNotebook
     if (tag) params.tag = tag
     setSearchParams(params)
+  }
+
+  // 빈 노트 필터 토글
+  const handleEmptyToggle = () => {
+    if (emptyOnly) {
+      setSearchParams({})
+    } else {
+      setSearchParams({ empty: 'true' })
+    }
   }
 
   // 로딩 상태
@@ -271,7 +283,7 @@ export default function Notes() {
               'w-full text-left px-3 py-2.5 rounded-md text-sm mb-0.5',
               'hover:bg-muted/80 transition-colors',
               'flex items-center gap-2.5',
-              !selectedNotebook
+              !selectedNotebook && !emptyOnly
                 ? 'bg-primary/10 text-primary font-medium'
                 : 'text-foreground'
             )}
@@ -280,12 +292,36 @@ export default function Notes() {
             <span className="flex-1 truncate">{t('notes.allNotes')}</span>
             <span className={cn(
               'text-xs font-medium px-1.5 py-0.5 rounded-full min-w-[1.5rem] text-center',
-              !selectedNotebook
+              !selectedNotebook && !emptyOnly
                 ? 'bg-primary/20 text-primary'
                 : 'bg-muted text-muted-foreground'
             )}>
               {totalNotes}
             </span>
+          </button>
+
+          {/* 빈 노트 필터 */}
+          <button
+            onClick={handleEmptyToggle}
+            className={cn(
+              'w-full text-left px-3 py-2.5 rounded-md text-sm mb-0.5',
+              'hover:bg-muted/80 transition-colors',
+              'flex items-center gap-2.5',
+              emptyOnly
+                ? 'bg-destructive/10 text-destructive font-medium'
+                : 'text-muted-foreground'
+            )}
+          >
+            <FileX2 className={cn(
+              'h-4 w-4 flex-shrink-0',
+              emptyOnly ? 'text-destructive' : 'text-muted-foreground'
+            )} aria-hidden="true" />
+            <span className="flex-1 truncate">{t('notes.emptyNotes')}</span>
+            {emptyOnly && (
+              <span className="text-xs font-medium px-1.5 py-0.5 rounded-full min-w-[1.5rem] text-center bg-destructive/20 text-destructive">
+                {totalNotes}
+              </span>
+            )}
           </button>
 
           {/* 노트북 목록 */}
@@ -368,34 +404,57 @@ export default function Notes() {
           <div className="flex items-center gap-3 mb-4">
             <div className="flex items-baseline gap-3 flex-1 min-w-0">
               <h1 className="text-2xl font-bold text-foreground truncate">
-                {selectedNotebook || t('notes.allNotes')}
+                {emptyOnly ? t('notes.emptyNotes') : selectedNotebook || t('notes.allNotes')}
               </h1>
               <span className="text-sm text-muted-foreground shrink-0">
                 {filterText ? `${filteredNotes.length} / ${t('common.count_items', { count: totalNotes })}` : t('common.count_items', { count: totalNotes })}
               </span>
             </div>
-            <button
-              onClick={() => setIsCaptureOpen(true)}
-              className={cn(
-                'flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md',
-                'border border-input',
-                'hover:bg-muted transition-colors',
-              )}
-            >
-              <Globe className="h-4 w-4" />
-              {t('capture.button')}
-            </button>
-            <button
-              onClick={() => setIsCreateOpen(true)}
-              className={cn(
-                'flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md',
-                'bg-primary text-primary-foreground',
-                'hover:bg-primary/90 transition-colors',
-              )}
-            >
-              <Plus className="h-4 w-4" />
-              {t('notes.newNote')}
-            </button>
+            {emptyOnly && totalNotes > 0 && (
+              <button
+                onClick={() => setIsDeleteConfirmOpen(true)}
+                disabled={batchDelete.isPending}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md',
+                  'bg-destructive text-destructive-foreground',
+                  'hover:bg-destructive/90 transition-colors',
+                  'disabled:opacity-50 disabled:cursor-not-allowed',
+                )}
+              >
+                {batchDelete.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4" />
+                )}
+                {batchDelete.isPending ? t('common.deleting') : t('notes.deleteAllEmpty')}
+              </button>
+            )}
+            {!emptyOnly && (
+              <>
+                <button
+                  onClick={() => setIsCaptureOpen(true)}
+                  className={cn(
+                    'flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md',
+                    'border border-input',
+                    'hover:bg-muted transition-colors',
+                  )}
+                >
+                  <Globe className="h-4 w-4" />
+                  {t('capture.button')}
+                </button>
+                <button
+                  onClick={() => setIsCreateOpen(true)}
+                  className={cn(
+                    'flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md',
+                    'bg-primary text-primary-foreground',
+                    'hover:bg-primary/90 transition-colors',
+                  )}
+                >
+                  <Plus className="h-4 w-4" />
+                  {t('notes.newNote')}
+                </button>
+              </>
+            )}
           </div>
 
           {/* 빠른 필터 */}
@@ -475,10 +534,13 @@ export default function Notes() {
 
           {allNotes.length === 0 ? (
             <EmptyState
-              icon={FileText}
-              title={t('notes.noNotes')}
-              description={selectedNotebook ? t('notes.notebookEmpty', { notebook: selectedNotebook }) : t('notes.noNotesDesc')}
-              action={selectedNotebook ? {
+              icon={emptyOnly ? FileX2 : FileText}
+              title={emptyOnly ? t('notes.emptyNotes') : t('notes.noNotes')}
+              description={emptyOnly ? t('notes.emptyNotesDesc') : selectedNotebook ? t('notes.notebookEmpty', { notebook: selectedNotebook }) : t('notes.noNotesDesc')}
+              action={emptyOnly ? {
+                label: t('notes.viewAllNotes'),
+                onClick: () => handleEmptyToggle(),
+              } : selectedNotebook ? {
                 label: t('notes.viewAllNotes'),
                 onClick: () => handleNotebookChange(null),
               } : undefined}
@@ -514,6 +576,53 @@ export default function Notes() {
         onClose={() => setIsCaptureOpen(false)}
         defaultNotebook={selectedNotebook}
       />
+
+      {/* 빈 노트 일괄 삭제 확인 다이얼로그 */}
+      {isDeleteConfirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setIsDeleteConfirmOpen(false)} />
+          <div className="relative bg-card rounded-lg border border-border shadow-lg w-full max-w-sm mx-4">
+            <div className="p-6 space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-destructive/10">
+                  <Trash2 className="h-5 w-5 text-destructive" />
+                </div>
+                <h2 className="text-lg font-semibold">{t('notes.deleteConfirmTitle')}</h2>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {t('notes.deleteConfirmDesc', { count: totalNotes })}
+              </p>
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  onClick={() => setIsDeleteConfirmOpen(false)}
+                  className={cn(
+                    'px-4 py-2 text-sm rounded-md border border-input',
+                    'hover:bg-muted transition-colors',
+                  )}
+                >
+                  {t('common.cancel')}
+                </button>
+                <button
+                  onClick={async () => {
+                    const noteIds = allNotes.map(n => n.note_id)
+                    await batchDelete.mutateAsync(noteIds)
+                    setIsDeleteConfirmOpen(false)
+                  }}
+                  disabled={batchDelete.isPending}
+                  className={cn(
+                    'px-4 py-2 text-sm rounded-md',
+                    'bg-destructive text-destructive-foreground',
+                    'hover:bg-destructive/90 transition-colors',
+                    'disabled:opacity-50 disabled:cursor-not-allowed',
+                  )}
+                >
+                  {batchDelete.isPending ? t('common.deleting') : t('common.delete')}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

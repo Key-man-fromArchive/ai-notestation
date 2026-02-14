@@ -16,6 +16,7 @@ interface NoteCreateRequest {
 interface UseNotesOptions {
   notebook?: string
   tag?: string
+  emptyOnly?: boolean
   limit?: number
 }
 
@@ -26,9 +27,9 @@ interface UseNotesOptions {
  * - 노트북 필터링
  * - 태그 필터링
  */
-export function useNotes({ notebook, tag, limit = 20 }: UseNotesOptions = {}) {
+export function useNotes({ notebook, tag, emptyOnly, limit = 20 }: UseNotesOptions = {}) {
   return useInfiniteQuery({
-    queryKey: ['notes', { notebook, tag }],
+    queryKey: ['notes', { notebook, tag, emptyOnly }],
     queryFn: async ({ pageParam = 0 }) => {
       const params = new URLSearchParams({
         offset: pageParam.toString(),
@@ -41,6 +42,10 @@ export function useNotes({ notebook, tag, limit = 20 }: UseNotesOptions = {}) {
 
       if (tag) {
         params.append('tag', tag)
+      }
+
+      if (emptyOnly) {
+        params.append('empty_only', 'true')
       }
 
       return apiClient.get<NotesResponse>(`/notes?${params.toString()}`)
@@ -58,6 +63,34 @@ export function useCreateNote() {
 
   return useMutation<Note, ApiError, NoteCreateRequest>({
     mutationFn: request => apiClient.post<Note>('/notes', request),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notes'] })
+    },
+  })
+}
+
+interface BatchDeleteResponse {
+  deleted: number
+  failed: string[]
+}
+
+export function useDeleteNote() {
+  const queryClient = useQueryClient()
+
+  return useMutation<void, ApiError, string>({
+    mutationFn: noteId => apiClient.delete(`/notes/${noteId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notes'] })
+    },
+  })
+}
+
+export function useBatchDeleteNotes() {
+  const queryClient = useQueryClient()
+
+  return useMutation<BatchDeleteResponse, ApiError, string[]>({
+    mutationFn: noteIds =>
+      apiClient.post<BatchDeleteResponse>('/notes/batch-delete', { note_ids: noteIds }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['notes'] })
     },

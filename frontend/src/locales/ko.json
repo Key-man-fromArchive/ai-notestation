@@ -5,6 +5,7 @@
     "saved": "저장되었습니다",
     "cancel": "취소",
     "delete": "삭제",
+    "deleting": "삭제 중...",
     "edit": "수정",
     "close": "닫기",
     "confirm": "확인",
@@ -194,7 +195,13 @@
     "batchTagProgress": "{{tagged}}/{{total}} 태깅 완료",
     "filterByTag": "태그로 필터",
     "clearTagFilter": "태그 필터 해제",
-    "untaggedNotes": "미태깅 {{count}}개"
+    "untaggedNotes": "미태깅 {{count}}개",
+    "emptyNotes": "빈 노트",
+    "emptyNotesCount": "빈 노트 ({{count}}개)",
+    "emptyNotesDesc": "제목과 본문이 모두 비어있는 노트입니다.",
+    "deleteAllEmpty": "전체 삭제",
+    "deleteConfirmTitle": "빈 노트 삭제",
+    "deleteConfirmDesc": "{{count}}개의 빈 노트를 NAS와 로컬 DB에서 영구 삭제합니다. 이 작업은 되돌릴 수 없습니다."
   },
   "relatedNotes": {
     "title": "관련 노트",

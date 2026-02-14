@@ -323,6 +323,27 @@ class NoteStationService:
             **params,
         )
 
+    async def delete_note(self, object_id: str) -> dict:
+        """Delete a note from NoteStation.
+
+        Uses ``SYNO.NoteStation.Note`` / ``delete`` method.
+
+        Args:
+            object_id: The unique note identifier to delete.
+
+        Returns:
+            The response data dict from NoteStation.
+
+        Raises:
+            SynologyApiError: If the delete fails.
+        """
+        return await self._client.request(
+            f"{self.NOTESTATION_API}.Note",
+            "delete",
+            version=1,
+            object_id=object_id,
+        )
+
     # ------------------------------------------------------------------
     # Utilities
     # ------------------------------------------------------------------
