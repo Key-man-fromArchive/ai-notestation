@@ -39,7 +39,7 @@ class ImageAnalysisService:
     """Batch processor for OCR and Vision analysis of note images."""
 
     OCR_CONCURRENCY = 1  # glm-ocr supports 1 concurrent
-    VISION_CONCURRENCY = 10  # glm-4.6v supports 10 concurrent
+    VISION_CONCURRENCY = 8  # glm-4.6v supports 10, but 8 avoids 429 rate limits
 
     def __init__(self) -> None:
         self._ocr_sem = asyncio.Semaphore(self.OCR_CONCURRENCY)

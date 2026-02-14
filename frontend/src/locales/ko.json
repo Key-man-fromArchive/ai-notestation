@@ -37,7 +37,8 @@
     "count_items": "{{count}}개",
     "clearFilter": "필터 초기화",
     "logout": "로그아웃",
-    "empty": "비어있음"
+    "empty": "비어있음",
+    "done": "완료"
   },
   "sidebar": {
     "dashboard": "대시보드",
@@ -497,6 +498,9 @@
     "batchAnalyzing": "분석 중...",
     "batchAnalysisProgress": "이미지 분석 중... {{progress}}%",
     "batchAnalysisComplete": "OCR {{ocr}}개, Vision {{vision}}개 분석 완료",
+    "allAnalyzed": "모든 이미지 분석이 완료되었습니다",
+    "startedAt": "시작 시간",
+    "completedAt": "완료 시간",
     "qualityGate": "AI 품질 검증",
     "qualityGateDesc": "AI 응답을 체크리스트로 자동 평가합니다. 활성화하면 응답 생성 후 품질 점수가 표시됩니다.",
     "qualityGateEnabled": "품질 검증 활성화",

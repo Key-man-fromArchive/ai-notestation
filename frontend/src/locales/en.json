@@ -37,7 +37,8 @@
     "count_items": "{{count}}",
     "clearFilter": "Clear filter",
     "logout": "Logout",
-    "empty": "Empty"
+    "empty": "Empty",
+    "done": "Done"
   },
   "sidebar": {
     "dashboard": "Dashboard",
@@ -497,6 +498,9 @@
     "batchAnalyzing": "Analyzing...",
     "batchAnalysisProgress": "Analyzing images... {{progress}}%",
     "batchAnalysisComplete": "OCR: {{ocr}}, Vision: {{vision}} completed",
+    "allAnalyzed": "All images have been analyzed",
+    "startedAt": "Started at",
+    "completedAt": "Completed at",
     "qualityGate": "AI Quality Gate",
     "qualityGateDesc": "Automatically evaluate AI responses with a checklist. When enabled, a quality score is shown after each response.",
     "qualityGateEnabled": "Enable quality gate",

@@ -8,6 +8,7 @@ import { useSync } from '@/hooks/useSync'
 import { useSearchIndex } from '@/hooks/useSearchIndex'
 import { useImageSync } from '@/hooks/useImageSync'
 import { useBatchImageAnalysis } from '@/hooks/useBatchImageAnalysis'
+import { useImageAnalysisStats } from '@/hooks/useImageAnalysisStats'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
 import { EmptyState } from '@/components/EmptyState'
 import {
@@ -739,8 +740,11 @@ function BatchImageAnalysisSection() {
     error,
     progress,
     isProcessing,
+    startedAt,
+    completedAt,
     triggerBatch,
   } = useBatchImageAnalysis()
+  const { stats } = useImageAnalysisStats()
 
   const handleTrigger = async () => {
     try {
@@ -749,6 +753,13 @@ function BatchImageAnalysisSection() {
       // Error handled by hook
     }
   }
+
+  const formatTime = (iso: string | null) => {
+    if (!iso) return null
+    return new Date(iso).toLocaleString()
+  }
+
+  const allDone = stats && stats.pending === 0 && stats.vision_pending === 0
 
   return (
     <div className="p-4 border border-input rounded-md">
@@ -761,10 +772,55 @@ function BatchImageAnalysisSection() {
         {t('settings.batchAnalysisDesc')}
       </p>
 
+      {/* DB-based overall stats — always visible */}
+      {stats && (
+        <div className="grid grid-cols-3 gap-3 mb-4 p-3 bg-muted/30 rounded-lg">
+          <div className="text-center">
+            <div className="text-lg font-bold">{stats.total.toLocaleString()}</div>
+            <div className="text-xs text-muted-foreground">{t('settings.totalImages')}</div>
+          </div>
+          <div className="text-center">
+            <div className="text-lg font-bold text-green-600">{stats.ocr_done.toLocaleString()}</div>
+            <div className="text-xs text-muted-foreground">OCR {t('common.done')}</div>
+          </div>
+          <div className="text-center">
+            <div className="text-lg font-bold text-blue-600">{stats.vision_done.toLocaleString()}</div>
+            <div className="text-xs text-muted-foreground">Vision {t('common.done')}</div>
+          </div>
+          {(stats.pending > 0 || stats.vision_pending > 0) && (
+            <>
+              <div className="text-center">
+                <div className="text-lg font-bold text-amber-600">{stats.pending.toLocaleString()}</div>
+                <div className="text-xs text-muted-foreground">OCR {t('dashboard.pendingAnalysis')}</div>
+              </div>
+              <div className="text-center">
+                <div className="text-lg font-bold text-amber-600">{stats.vision_pending.toLocaleString()}</div>
+                <div className="text-xs text-muted-foreground">Vision {t('dashboard.pendingAnalysis')}</div>
+              </div>
+              {(stats.ocr_failed > 0 || stats.vision_failed > 0) && (
+                <div className="text-center">
+                  <div className="text-lg font-bold text-destructive">{(stats.ocr_failed + stats.vision_failed).toLocaleString()}</div>
+                  <div className="text-xs text-muted-foreground">{t('settings.failedCount')}</div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* All done indicator */}
+      {allDone && status !== 'processing' && (
+        <div className="mb-4 p-3 bg-green-500/10 border border-green-500/20 rounded-lg flex items-center gap-2">
+          <CheckCircle className="h-4 w-4 text-green-600" />
+          <p className="text-sm text-green-600">{t('settings.allAnalyzed')}</p>
+        </div>
+      )}
+
+      {/* Processing progress */}
       {status === 'processing' && (
-        <div className="space-y-3 mb-4">
+        <div className="space-y-3 mb-4 p-3 border border-primary/20 rounded-lg">
           <div className="flex justify-between text-sm">
-            <span>{t('settings.inProgress')}</span>
+            <span className="font-medium">{t('settings.inProgress')}</span>
             <span className="font-medium">
               {processed.toLocaleString()} / {total.toLocaleString()}
             </span>
@@ -800,14 +856,21 @@ function BatchImageAnalysisSection() {
               {t('settings.batchAnalysisProgress', { progress })}
             </p>
           </div>
+          {startedAt && (
+            <p className="text-xs text-muted-foreground text-right">{t('settings.startedAt')}: {formatTime(startedAt)}</p>
+          )}
         </div>
       )}
 
+      {/* Completed status */}
       {status === 'completed' && (
-        <div className="mb-4 p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
+        <div className="mb-4 p-3 bg-green-500/10 border border-green-500/20 rounded-lg space-y-1">
           <p className="text-sm text-green-600">
             {t('settings.batchAnalysisComplete', { ocr: ocrDone, vision: visionDone })}
           </p>
+          {completedAt && (
+            <p className="text-xs text-green-600/70">{t('settings.completedAt')}: {formatTime(completedAt)}</p>
+          )}
         </div>
       )}
 
