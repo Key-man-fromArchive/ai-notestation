@@ -33,12 +33,13 @@
 - [x] Frontend: NoteCard에 매칭 설명 UI
 - [x] Frontend: Search 페이지 엔진 뱃지 + 매칭 키워드 표시
 
-### 1-2. Adaptive Search Strategy `★★★ 난이도` ✅
+### 1-2. Adaptive Search Strategy `★★★ 난이도` ✅ 완료
 - [x] Backend: SearchJudge 모듈 생성 (`search/judge.py`)
 - [x] Backend: HybridSearchEngine에 Judge 통합
 - [x] Backend: adaptive 파라미터 추가 (`search/params.py`)
 - [x] Backend: 메트릭 로깅 (semantic 스킵 비율)
 - [x] Frontend: 적응형 검색 파라미터 UI
+- [x] Post-retrieval 전환 (2026-02-13) — ReSeek 논문 post-retrieval JUDGE 패턴 적용
 
 ### 1-3. Multi-turn Search Refinement `★★★★ 난이도` ✅
 - [x] Backend: SearchRefiner 모듈 (`search/refinement.py`)
