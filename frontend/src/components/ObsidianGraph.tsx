@@ -133,9 +133,6 @@ export function ObsidianGraph({
   useEffect(() => {
     if (data && data.nodes.length > 0 && graphRef.current && !hasCache) {
       setSimulationRunning(true)
-      setTimeout(() => {
-        graphRef.current?.zoomToFit(400, 50)
-      }, 500)
     }
   }, [data?.nodes.length, hasCache])
 
@@ -180,6 +177,13 @@ export function ObsidianGraph({
       if (node.x != null && node.y != null) {
         positionCache.set(node.id, { x: node.x, y: node.y })
       }
+    }
+    // Fit only connected nodes to viewport (orphans scatter too far)
+    const connectedNodes = liveNodesRef.current.filter(n => (n._degree ?? 0) > 0)
+    if (connectedNodes.length > 0) {
+      graphRef.current?.zoomToFit(400, 50, (node: GraphNodeObject) => (node._degree ?? 0) > 0)
+    } else {
+      graphRef.current?.zoomToFit(400, 50)
     }
   }, [])
 
@@ -260,7 +264,7 @@ export function ObsidianGraph({
           (node as any).fx = undefined;
           (node as any).fy = undefined;
         }
-        graphRef.current?.zoomToFit(400, 50)
+        graphRef.current?.zoomToFit(400, 50, (node: GraphNodeObject) => (node._degree ?? 0) > 0)
       }, 300)
       return () => clearTimeout(timer)
     }
