@@ -15,6 +15,7 @@ import {
   NsxImportSection,
   BackupSection,
   SearchParamsSection,
+  GraphSettingsSection,
   nasSettingsList,
   apiKeySettingsList,
 } from '@/components/settings'
@@ -175,6 +176,8 @@ export default function Settings() {
       <SearchIndexSection />
 
       {isAdmin && <SearchParamsSection />}
+
+      <GraphSettingsSection />
 
       <ApiKeysSection
         data={data}

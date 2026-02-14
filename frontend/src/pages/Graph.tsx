@@ -1,13 +1,28 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useQuery } from '@tanstack/react-query'
 import { Network, SlidersHorizontal, BarChart3 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
+import { apiClient } from '@/lib/api'
 import { ObsidianGraph } from '@/components/ObsidianGraph'
 import { GraphAnalysisPanel } from '@/components/GraphAnalysisPanel'
 import { useGlobalGraph } from '@/hooks/useGlobalGraph'
 import { useClusterInsight } from '@/hooks/useClusterInsight'
 import { ModelSelector } from '@/components/ModelSelector'
+
+interface GraphSettings {
+  similarity_threshold: number
+  neighbors_per_note: number
+  node_limit: number
+  show_all: boolean
+}
+
+interface GraphSettingsResponse {
+  key: string
+  value: GraphSettings
+  description: string
+}
 
 const MIN_PANEL_WIDTH = 280
 const MAX_PANEL_WIDTH = 700
@@ -19,8 +34,25 @@ export default function Graph() {
   const [showAnalysis, setShowAnalysis] = useState(true)
   const [showAll, setShowAll] = useState(true)
   const [limit, setLimit] = useState(500)
-  const [threshold, setThreshold] = useState(0.5)
+  const [threshold, setThreshold] = useState(0.8)
   const [neighborsPerNote, setNeighborsPerNote] = useState(5)
+  const [settingsApplied, setSettingsApplied] = useState(false)
+
+  const { data: graphSettingsData } = useQuery<GraphSettingsResponse>({
+    queryKey: ['settings', 'graph_settings'],
+    queryFn: () => apiClient.get('/settings/graph_settings'),
+  })
+
+  // Apply saved settings once on load
+  useEffect(() => {
+    if (!graphSettingsData?.value || settingsApplied) return
+    const s = graphSettingsData.value
+    setThreshold(s.similarity_threshold)
+    setNeighborsPerNote(s.neighbors_per_note)
+    setLimit(s.node_limit)
+    setShowAll(s.show_all)
+    setSettingsApplied(true)
+  }, [graphSettingsData, settingsApplied])
 
   const effectiveLimit = showAll ? 0 : limit
 

@@ -106,6 +106,7 @@ _SETTING_DESCRIPTIONS: dict[str, str] = {
     "ocr_engine": "OCR engine: ai_vision (cloud API) or paddleocr_vl (local CPU)",
     "vision_model": "Vision model for image description: glm-4.6v, glm-4.6v-flash, glm-4.5v, gpt-4o, etc.",
     "editor_width": "Editor width: compact, comfortable, wide, or full",
+    "graph_settings": "그래프 기본 설정 (유사도, 연결 수, 노드 수, 전체 보기)",
 }
 
 
@@ -134,6 +135,12 @@ def _get_default_settings() -> dict[str, Any]:
         "ocr_engine": "ai_vision",
         "vision_model": "glm-4.6v",
         "editor_width": "comfortable",
+        "graph_settings": {
+            "similarity_threshold": 0.8,
+            "neighbors_per_note": 5,
+            "node_limit": 500,
+            "show_all": True,
+        },
     }
 
 

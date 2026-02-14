@@ -509,7 +509,9 @@
       "comfortable": "Comfortable",
       "wide": "Wide",
       "full": "Full"
-    }
+    },
+    "graphSettings": "Graph Defaults",
+    "graphSettingsDesc": "Set default similarity, connections, and node limit for the Knowledge Graph page. You can temporarily adjust these on the graph page."
   },
   "members": {
     "title": "Members",
