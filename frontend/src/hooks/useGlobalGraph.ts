@@ -64,6 +64,7 @@ interface UseGlobalGraphOptions {
   neighborsPerNote?: number
   maxEdges?: number
   includeAnalysis?: boolean
+  enabled?: boolean
 }
 
 export function useGlobalGraph(options: UseGlobalGraphOptions = {}) {
@@ -73,6 +74,7 @@ export function useGlobalGraph(options: UseGlobalGraphOptions = {}) {
     neighborsPerNote = 5,
     maxEdges = 0,
     includeAnalysis = false,
+    enabled = true,
   } = options
 
   const { data, isLoading, error, refetch } = useQuery<GraphData>({
@@ -88,6 +90,9 @@ export function useGlobalGraph(options: UseGlobalGraphOptions = {}) {
       return apiClient.get<GraphData>(`/graph?${params}`)
     },
     staleTime: 5 * 60 * 1000,
+    enabled,
+    retry: 2,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 5000),
   })
 
   return {

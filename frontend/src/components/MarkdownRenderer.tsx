@@ -5,12 +5,23 @@
 import * as React from 'react'
 import type { Components } from 'react-markdown'
 import ReactMarkdown from 'react-markdown'
+import remarkMath from 'remark-math'
 import rehypeRaw from 'rehype-raw'
+import rehypeKatex from 'rehype-katex'
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
+import 'katex/dist/katex.min.css'
 import { cn } from '@/lib/utils'
 import { apiClient } from '@/lib/api'
 
-// Custom sanitize schema that allows our API image URLs, table styles, etc.
+// KaTeX MathML tag names that must pass through sanitization
+const KATEX_TAG_NAMES = [
+  'math', 'semantics', 'mrow', 'mi', 'mn', 'mo', 'ms', 'mtext',
+  'mfrac', 'msup', 'msub', 'msubsup', 'mover', 'munder', 'munderover',
+  'msqrt', 'mroot', 'mtable', 'mtr', 'mtd', 'mspace', 'mpadded',
+  'menclose', 'mglyph', 'annotation',
+]
+
+// Custom sanitize schema that allows our API image URLs, table styles, KaTeX, etc.
 const sanitizeSchema = {
   ...defaultSchema,
   // Allow data: URIs for images (NAS sometimes stores inline base64 images)
@@ -22,6 +33,7 @@ const sanitizeSchema = {
     ...(defaultSchema.tagNames || []),
     'colgroup',
     'col',
+    ...KATEX_TAG_NAMES,
   ],
   attributes: {
     ...defaultSchema.attributes,
@@ -43,8 +55,12 @@ const sanitizeSchema = {
     th: [...(defaultSchema.attributes?.th || []), 'style', 'rowSpan', 'colSpan'],
     col: ['style', 'width', 'span'],
     colgroup: ['style', 'span'],
-    span: [...(defaultSchema.attributes?.span || []), 'style'],
+    span: [...(defaultSchema.attributes?.span || []), 'style', 'className', 'aria-hidden'],
     mark: [...(defaultSchema.attributes?.mark || []), 'style'],
+    // KaTeX elements
+    div: [...(defaultSchema.attributes?.div || []), 'style', 'className', 'aria-hidden'],
+    math: ['xmlns', 'display'],
+    annotation: ['encoding'],
   },
 }
 
@@ -285,7 +301,8 @@ export function MarkdownRenderer({ content, className, onImageContextMenu }: Mar
       )}
     >
       <ReactMarkdown
-        rehypePlugins={[rehypeRaw, [rehypeSanitize, sanitizeSchema]]}
+        remarkPlugins={[remarkMath]}
+        rehypePlugins={[rehypeRaw, rehypeKatex, [rehypeSanitize, sanitizeSchema]]}
         components={components}
       >
         {processed}

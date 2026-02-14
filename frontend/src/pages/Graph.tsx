@@ -10,6 +10,7 @@ import { GraphAnalysisPanel } from '@/components/GraphAnalysisPanel'
 import { useGlobalGraph } from '@/hooks/useGlobalGraph'
 import { useClusterInsight } from '@/hooks/useClusterInsight'
 import { ModelSelector } from '@/components/ModelSelector'
+import { useAuth } from '@/contexts/AuthContext'
 
 interface GraphSettings {
   similarity_threshold: number
@@ -30,6 +31,7 @@ const DEFAULT_PANEL_WIDTH = 420
 
 export default function Graph() {
   const { t } = useTranslation()
+  const { isLoading: isAuthLoading, isAuthenticated } = useAuth()
   const [showSettings, setShowSettings] = useState(true)
   const [showAnalysis, setShowAnalysis] = useState(true)
   const [showAll, setShowAll] = useState(true)
@@ -61,6 +63,7 @@ export default function Graph() {
     similarityThreshold: threshold,
     neighborsPerNote,
     includeAnalysis: showAnalysis,
+    enabled: !isAuthLoading && isAuthenticated,
   })
 
   const clusterInsight = useClusterInsight()
@@ -283,6 +286,7 @@ export default function Graph() {
             error={error}
             className="h-full"
             onAnalyzeCluster={handleAnalyzeCluster}
+            onRetry={() => refetch()}
           />
         </div>
 

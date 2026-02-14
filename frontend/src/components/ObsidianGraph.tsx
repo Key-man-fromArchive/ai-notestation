@@ -61,6 +61,8 @@ interface ObsidianGraphProps {
   className?: string
   /** Called when user wants to analyze the cluster around a node */
   onAnalyzeCluster?: (noteIds: number[], hubLabel: string) => void
+  /** Called when user clicks retry after an error */
+  onRetry?: () => void
 }
 
 export function ObsidianGraph({
@@ -69,6 +71,7 @@ export function ObsidianGraph({
   error,
   className,
   onAnalyzeCluster,
+  onRetry,
 }: ObsidianGraphProps) {
   const { t } = useTranslation()
   const navigate = useNavigate()
@@ -447,6 +450,7 @@ export function ObsidianGraph({
         icon={Search}
         title={t('graph.loadError')}
         description={error.message}
+        action={onRetry ? { label: t('common.retry'), onClick: onRetry } : undefined}
       />
     )
   }
