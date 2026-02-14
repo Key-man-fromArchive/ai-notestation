@@ -15,6 +15,7 @@ this module is responsible only for the semantic (vector) embeddings.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 
 from sqlalchemy import delete, func, select
@@ -24,6 +25,17 @@ from app.models import Note, NoteAttachment, NoteEmbedding, NoteImage
 from app.search.embeddings import EmbeddingService
 
 logger = logging.getLogger(__name__)
+
+# GLM-OCR bbox pattern: ![](page=0,bbox=[x, y, w, h])
+_BBOX_RE = re.compile(r"!\[\]\(page=\d+,bbox=\[[^\]]*\]\)\s*")
+
+
+def _clean_ocr_text(text: str) -> str:
+    """Remove GLM-OCR bbox references and clean up the result."""
+    cleaned = _BBOX_RE.sub("", text)
+    # Collapse excessive blank lines
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()
 
 
 @dataclass
@@ -250,7 +262,9 @@ class NoteIndexer:
         parts = []
         for ocr_text, vision_desc, name in rows:
             if ocr_text and ocr_text.strip():
-                parts.append(f"[OCR: {name}]\n{ocr_text.strip()}")
+                cleaned = _clean_ocr_text(ocr_text)
+                if cleaned:
+                    parts.append(f"[OCR: {name}]\n{cleaned}")
             if vision_desc and vision_desc.strip():
                 parts.append(f"[Vision: {name}]\n{vision_desc.strip()}")
 
