@@ -161,8 +161,6 @@ export function ObsidianGraph({
       kapsuleWrapper.style.width = `${dimensions.width}px`
       kapsuleWrapper.style.height = `${dimensions.height}px`
     }
-    // Request redraw
-    graphRef.current?.zoomToFit(0, 50)
   }, [dimensions])
 
   // Check if we have cached positions for the current data
@@ -599,7 +597,7 @@ export function ObsidianGraph({
           cooldownTicks={hasCache ? 0 : (isHugeGraph ? 100 : isLargeGraph ? 80 : 80)}
           d3AlphaDecay={isHugeGraph ? 0.08 : isLargeGraph ? 0.05 : 0.03}
           d3VelocityDecay={isHugeGraph ? 0.5 : isLargeGraph ? 0.4 : 0.3}
-          warmupTicks={isHugeGraph ? 50 : isLargeGraph ? 30 : 0}
+          warmupTicks={hasCache ? 0 : (isHugeGraph ? 100 : isLargeGraph ? 60 : 0)}
           enableNodeDrag={true}
           enableZoomInteraction={true}
           enablePanInteraction={true}
