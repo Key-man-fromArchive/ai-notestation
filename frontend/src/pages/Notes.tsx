@@ -252,7 +252,7 @@ export default function Notes() {
   }
 
   return (
-    <div className="flex h-full">
+    <div className="p-6 flex h-full">
       {/* 좌측: 노트북 필터 사이드패널 */}
       <aside className="w-64 border-r border-border flex flex-col overflow-hidden">
         <div className="p-4 pb-2 border-b border-border">

@@ -91,7 +91,7 @@ export default function Librarian() {
   const hasEmbeddings = indexedNotes > 0
 
   return (
-    <div className="flex flex-col gap-8 max-w-3xl mx-auto">
+    <div className="p-6 flex flex-col gap-8 max-w-3xl mx-auto">
       {/* Hero */}
       <div className="text-center pt-4">
         <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 mb-4">

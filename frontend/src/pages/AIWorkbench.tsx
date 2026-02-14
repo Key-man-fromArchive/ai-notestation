@@ -71,7 +71,7 @@ export default function AIWorkbench() {
   })
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="p-6 flex flex-col gap-6">
       <div>
         <h1 className="text-2xl font-bold mb-1">{t('ai.workbench')}</h1>
         <p className="text-sm text-muted-foreground">

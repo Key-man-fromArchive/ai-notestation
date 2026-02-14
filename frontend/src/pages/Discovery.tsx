@@ -156,7 +156,7 @@ export default function Discovery() {
   }
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="p-6 h-full flex flex-col">
       <div className="flex items-center gap-4 mb-4 flex-shrink-0">
         <button
           onClick={() => navigate(`/notebooks/${notebookId}`)}

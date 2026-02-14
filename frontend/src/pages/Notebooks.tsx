@@ -153,7 +153,7 @@ export default function Notebooks() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-full">
+      <div className="p-6 flex items-center justify-center h-full">
         <LoadingSpinner size="lg" />
       </div>
     )
@@ -177,7 +177,7 @@ export default function Notebooks() {
 
   if (notebooks.length === 0) {
     return (
-      <div>
+      <div className="p-6">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold">{t('notebooks.title')}</h1>
           <button
@@ -211,7 +211,7 @@ export default function Notebooks() {
   }
 
   return (
-    <div>
+    <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">{t('notebooks.title')}</h1>
         <button

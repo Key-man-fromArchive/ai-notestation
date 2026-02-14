@@ -15,8 +15,8 @@ const DEFAULT_PANEL_WIDTH = 420
 
 export default function Graph() {
   const { t } = useTranslation()
-  const [showSettings, setShowSettings] = useState(false)
-  const [showAnalysis, setShowAnalysis] = useState(false)
+  const [showSettings, setShowSettings] = useState(true)
+  const [showAnalysis, setShowAnalysis] = useState(true)
   const [showAll, setShowAll] = useState(true)
   const [limit, setLimit] = useState(500)
   const [threshold, setThreshold] = useState(0.5)
@@ -118,8 +118,8 @@ export default function Graph() {
   }, [pendingAnalysis, clusterInsight, selectedModel])
 
   return (
-    <div className="h-[calc(100vh-4.5rem)] flex flex-col -mx-6">
-      <div className="flex items-center justify-between mb-4 px-6">
+    <div className="h-screen flex flex-col">
+      <div className="flex items-center justify-between px-4 py-2 flex-shrink-0">
         <div className="flex items-center gap-3">
           <Network className="h-6 w-6 text-primary" />
           <div>
@@ -162,7 +162,7 @@ export default function Graph() {
       </div>
 
       {showSettings && (
-        <div className="mb-4 mx-6 p-4 border border-border rounded-lg bg-card">
+        <div className="mx-4 mb-2 p-3 border border-border rounded-lg bg-card flex-shrink-0">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
             <div className="flex items-center gap-3 col-span-2 lg:col-span-1">
               <label className="flex items-center gap-2 cursor-pointer">
@@ -243,7 +243,7 @@ export default function Graph() {
         </div>
       )}
 
-      <div className="flex-1 flex overflow-hidden border-y border-border">
+      <div className="flex-1 flex overflow-hidden border-t border-border min-h-0">
         <div className="flex-1 overflow-hidden">
           <ObsidianGraph
             data={data}

@@ -268,7 +268,7 @@ export default function NotebookDetail() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-full">
+      <div className="p-6 flex items-center justify-center h-full">
         <LoadingSpinner size="lg" />
       </div>
     )
@@ -292,7 +292,7 @@ export default function NotebookDetail() {
   if (!notebook) return null
 
   return (
-    <div>
+    <div className="p-6">
       <div className="flex items-center gap-4 mb-6">
         <button
           onClick={() => navigate('/notebooks')}

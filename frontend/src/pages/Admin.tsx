@@ -183,7 +183,7 @@ export default function Admin() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="p-6 flex flex-col gap-6">
       <div>
         <h1 className="text-2xl font-bold mb-1">{t('admin.title')}</h1>
         <p className="text-sm text-muted-foreground">{t('admin.systemInfo')}</p>

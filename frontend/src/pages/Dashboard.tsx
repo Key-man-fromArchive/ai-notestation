@@ -71,7 +71,7 @@ export default function Dashboard() {
   const totalNotebooks = notebooksData?.items?.length ?? 0
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="p-6 flex flex-col gap-6">
       <div>
         <h1 className="text-2xl font-bold mb-1">{t('dashboard.title')}</h1>
         <p className="text-sm text-muted-foreground">

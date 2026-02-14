@@ -50,7 +50,7 @@ export default function Operations() {
     totalNotes > 0 ? Math.round((indexedNotes / totalNotes) * 100) : 0
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="p-6 flex flex-col gap-6">
       <div>
         <h1 className="text-2xl font-bold mb-1">{t('operations.title')}</h1>
         <p className="text-sm text-muted-foreground">

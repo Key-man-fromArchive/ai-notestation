@@ -479,7 +479,7 @@ export default function NoteDetail() {
   const formatDate = (iso: string) => formatDateWithTz(iso, timezone)
 
   return (
-    <div className="h-full overflow-y-auto">
+    <div className="p-6 h-full overflow-y-auto">
       <div className={`${editorWidthClass} mx-auto p-6`}>
         {/* 뒤로가기 버튼 */}
         <button
