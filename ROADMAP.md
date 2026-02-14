@@ -2,7 +2,7 @@
 
 > 리서치 기반 로드맵 — ReSeek(논문), Web-Shepherd(논문), Reseek(제품) 분석 종합
 >
-> 현재 버전: **v1.5.1** | 최종 갱신: 2026-02-14
+> 현재 버전: **v1.6.0** | 최종 갱신: 2026-02-14
 >
 > **상세 계획**: [docs/roadmap/](docs/roadmap/) | **마스터 TODO**: [docs/roadmap/TODO.md](docs/roadmap/TODO.md)
 >
@@ -10,14 +10,14 @@
 
 ---
 
-## 현재 보유 기능 (v1.5.1)
+## 현재 보유 기능 (v1.6.0)
 
 | 영역 | 기능 |
 |------|------|
 | **검색** | Hybrid Search (FTS + Trigram + Semantic), RRF 병합, 12개 파라미터 튜닝 UI |
 | **AI** | 6개 태스크 (insight, search_qa, writing, spellcheck, template, summarize), SSE 스트리밍, AI 품질 게이트 |
 | **AI 프로바이더** | OpenAI, Anthropic, Google, ZhipuAI 자동 감지 + OAuth |
-| **멀티모달** | 3엔진 하이브리드 OCR (GLM-OCR → PaddleOCR-VL → AI Vision 자동 폴백), Vision 설명 생성, 듀얼 파이프라인 배치 분석, 캐시 기반 AI Insight 최적화 |
+| **멀티모달** | 3엔진 하이브리드 OCR (GLM-OCR → PaddleOCR-VL → AI Vision 자동 폴백), GLM-OCR 레이아웃 시각화, PDF 50페이지 청크 OCR, Vision 설명 생성, 듀얼 파이프라인 배치 분석, 캐시 기반 AI Insight 최적화 |
 | **에디터** | Tiptap 리치텍스트, 항상 편집 가능, 자동 저장 (3초/30초/이탈 시), 너비 4단계 조절, KaTeX 수식 렌더링 |
 | **동기화** | Synology NoteStation 양방향 동기화, NSX 포맷 지원 |
 | **백업** | 통합 백업 시스템 — DB 백업(임베딩·OCR·Vision·설정) + 네이티브 백업(노트·이미지·첨부) 병렬 생성, StreamingResponse 대용량 안전 다운로드, 설정 백업 |
@@ -91,7 +91,7 @@
 - Settings 페이지 6탭 재구성 (General, AI Models, Search Engine, Data Analysis, Connection, Admin)
 - 마크다운 수식 렌더링 (KaTeX) 지원
 
-### v1.4.1 ~ v1.5.1 추가 구현 (로드맵 외)
+### v1.4.1 ~ v1.6.0 추가 구현 (로드맵 외)
 
 - **그래프 기본값 Settings 연동** (v1.4.1) — 유사도, 연결 수, 노드 수 기본값을 Settings에서 관리
 - **PDF 하이브리드 텍스트 추출** (v1.4.1) — 페이지별 OCR fallback, 텍스트 레이어 부실 페이지만 선별 OCR
@@ -101,7 +101,7 @@
 
 ---
 
-## Phase 4 — 멀티모달 확장 (v1.3.0 ~ 진행 중)
+## Phase 4 — 멀티모달 확장 ✅ (v1.3.0 ~ v1.6.0)
 
 > 핵심 근거: Reseek 제품 (OCR, PDF), Web-Shepherd 논문 ("text-only가 더 나을 수 있다" 주의)
 
@@ -117,9 +117,11 @@
 - v1.3.1: **듀얼 파이프라인 아키텍처** — 독립 병렬 처리, 6배 처리량 향상
 - **핵심 아키텍처**:
   - `OCRService` — 3엔진 하이브리드 + 자동 폴백 체인:
-    - 1차: GLM-OCR (ZhipuAI layout_parsing, 마크다운 출력)
+    - 1차: GLM-OCR (ZhipuAI layout_parsing, 마크다운 출력, 레이아웃 시각화)
     - 2차: PaddleOCR-VL (로컬 CPU, 120초 타임아웃)
     - 3차: AI Vision 클라우드 (7개 모델 우선순위: glm-4.6v-flash → claude-sonnet-4-5)
+  - `GlmOcrEngine` — 네이티브 PDF 지원 + 50페이지 단위 자동 청크 처리 (v1.6.0)
+  - `PDFExtractor` — GLM-OCR 엔진 시 네이티브 PDF 경로, 실패 시 하이브리드 폴백
   - `ImageAnalysisService` — 듀얼 파이프라인 배치 프로세서:
     - OCR 파이프라인 (동시성=1, GLM-OCR rate limit)
     - Vision 파이프라인 (동시성=8, 429 방지) — 이미지 설명 생성
@@ -135,6 +137,12 @@
 - 3개 POST 엔드포인트 (`/capture/url`, `/capture/arxiv`, `/capture/pubmed`)
 - Notes 페이지 "외부 캡처" 버튼 → 3탭 모달 (URL/arXiv/PubMed)
 - 캡처 결과 → Note 즉시 생성 + 메타데이터 content_json 저장
+
+### 4-4. GLM-OCR 강화 ✅ (v1.6.0)
+- `need_layout_visualization=True` 기본 활성화 — 인식 결과 시각화 이미지 반환
+- `OCRResult`에 `layout_visualization` 필드 추가
+- PDF 네이티브 지원: GLM-OCR `start_page_id`/`end_page_id`로 50페이지 단위 자동 분할 → 결과 병합
+- `PDFExtractor`: `glm_ocr` 엔진일 때 네이티브 PDF 경로 사용, 실패 시 하이브리드 폴백
 
 ---
 
@@ -176,6 +184,7 @@
 | 4-1 | PDF 추출 | ✅ | ★★★★☆ | ★★★☆☆ | v1.2.0 구현 완료 |
 | 4-2 | OCR + Vision 이미지 분석 | ✅ | ★★★★★ | ★★★★☆ | v1.3.1 — 3엔진 하이브리드 OCR + 듀얼 파이프라인 |
 | **4-3** | **외부 콘텐츠 캡처** | **✅ v1.4.0** | ★★★☆☆ | ★★★☆☆ | URL/arXiv/PubMed 캡처 |
+| **4-4** | **GLM-OCR 강화** | **✅ v1.6.0** | ★★★★☆ | ★★☆☆☆ | 레이아웃 시각화 + PDF 50p 청크 |
 | **5-1** | **평가 프레임워크** | **🔲** | ★★★★★ | ★★★★★ | 장기적 품질 기반, 높은 초기 투자 |
 | **5-2** | **검색 품질 메트릭** | **🔲** | ★★★★☆ | ★★★☆☆ | Correctness vs Utility 대시보드 |
 | **5-3** | **사용자 피드백 루프** | **🔲** | ★★★★☆ | ★★★☆☆ | 엄지 up/down + 자동 최적화 |
