@@ -764,11 +764,13 @@ function BatchImageAnalysisSection() {
 
 function SearchIndexSection() {
   const { t } = useTranslation()
+  const [showForceConfirm, setShowForceConfirm] = useState(false)
   const {
     status,
     totalNotes,
     indexedNotes,
     pendingNotes,
+    staleNotes,
     progress,
     error,
     triggerIndex,
@@ -777,6 +779,11 @@ function SearchIndexSection() {
 
   const handleTriggerIndex = () => {
     triggerIndex()
+  }
+
+  const handleForceReindex = () => {
+    setShowForceConfirm(false)
+    triggerIndex(true)
   }
 
   const indexPercentage =
@@ -810,6 +817,14 @@ function SearchIndexSection() {
             {pendingNotes.toLocaleString()} {t('common.count_items', { count: pendingNotes })}
           </span>
         </div>
+        {staleNotes > 0 && (
+          <div className="flex justify-between text-sm">
+            <span>{t('settings.staleIndex')}</span>
+            <span className="font-medium text-orange-600">
+              {staleNotes.toLocaleString()} {t('common.count_items', { count: staleNotes })}
+            </span>
+          </div>
+        )}
 
         {status === 'indexing' && (
           <div className="mt-2">
@@ -838,7 +853,7 @@ function SearchIndexSection() {
       <div className="flex items-center gap-3">
         <button
           onClick={handleTriggerIndex}
-          disabled={isIndexing || pendingNotes === 0}
+          disabled={isIndexing || (pendingNotes === 0 && staleNotes === 0)}
           className={cn(
             'flex items-center gap-2 px-4 py-2 rounded-md',
             'bg-primary text-primary-foreground',
@@ -850,13 +865,51 @@ function SearchIndexSection() {
           {isIndexing ? t('settings.indexing') : t('settings.startIndex')}
         </button>
 
-        {status === 'completed' && pendingNotes === 0 && (
+        <button
+          onClick={() => setShowForceConfirm(true)}
+          disabled={isIndexing || totalNotes === 0}
+          className={cn(
+            'flex items-center gap-2 px-4 py-2 rounded-md',
+            'border border-destructive/30 text-destructive',
+            'hover:bg-destructive/5 transition-colors',
+            'disabled:opacity-50 disabled:cursor-not-allowed',
+          )}
+        >
+          <Database className="h-4 w-4" aria-hidden="true" />
+          {t('settings.forceReindex')}
+        </button>
+
+        {status === 'completed' && pendingNotes === 0 && staleNotes === 0 && (
           <div className="flex items-center gap-2 text-green-600">
             <CheckCircle className="h-4 w-4" aria-hidden="true" />
             <span className="text-sm">{t('settings.allIndexed')}</span>
           </div>
         )}
       </div>
+
+      {showForceConfirm && (
+        <div className="mt-3 p-3 bg-destructive/5 border border-destructive/20 rounded-lg">
+          <p className="text-sm text-destructive mb-2">{t('settings.forceReindexConfirm')}</p>
+          <div className="flex gap-2">
+            <button
+              onClick={handleForceReindex}
+              className={cn(
+                'px-3 py-1.5 text-sm rounded-md',
+                'bg-destructive text-destructive-foreground',
+                'hover:bg-destructive/90 transition-colors',
+              )}
+            >
+              {t('settings.forceReindexConfirmYes')}
+            </button>
+            <button
+              onClick={() => setShowForceConfirm(false)}
+              className="px-3 py-1.5 text-sm rounded-md bg-muted text-muted-foreground hover:bg-muted/80 transition-colors"
+            >
+              {t('common.cancel')}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -6,6 +6,7 @@ interface IndexStatus {
   total_notes: number
   indexed_notes: number
   pending_notes: number
+  stale_notes: number
   current_batch: number
   total_batches: number
   error_message: string | null
@@ -28,8 +29,9 @@ export function useSearchIndex() {
     },
   })
 
-  const triggerMutation = useMutation<IndexTriggerResponse>({
-    mutationFn: () => apiClient.post('/search/index', {}),
+  const triggerMutation = useMutation<IndexTriggerResponse, Error, { force?: boolean }>({
+    mutationFn: ({ force } = {}) =>
+      apiClient.post(`/search/index${force ? '?force=true' : ''}`, {}),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['search', 'index', 'status'] })
     },
@@ -45,10 +47,11 @@ export function useSearchIndex() {
     totalNotes: data?.total_notes ?? 0,
     indexedNotes: data?.indexed_notes ?? 0,
     pendingNotes: data?.pending_notes ?? 0,
+    staleNotes: data?.stale_notes ?? 0,
     progress,
     error: data?.error_message,
     isLoading,
-    triggerIndex: triggerMutation.mutateAsync,
+    triggerIndex: (force?: boolean) => triggerMutation.mutateAsync({ force }),
     isIndexing: triggerMutation.isPending || data?.status === 'indexing',
   }
 }

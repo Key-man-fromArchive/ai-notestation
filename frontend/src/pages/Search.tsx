@@ -414,17 +414,22 @@ export default function Search() {
               {judgeInfo && (
                 <span
                   className={cn(
-                    'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium',
+                    'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium cursor-help',
                     judgeInfo.strategy === 'fts_only' && 'bg-blue-100 text-blue-700',
-                    judgeInfo.strategy === 'semantic_only' && 'bg-purple-100 text-purple-700',
                     judgeInfo.strategy === 'hybrid' && 'bg-emerald-100 text-emerald-700',
                   )}
-                  title={judgeInfo.skip_reason || undefined}
+                  title={
+                    judgeInfo.strategy === 'fts_only'
+                      ? `FTS sufficient (${judgeInfo.fts_result_count ?? 0} results, avg score ${(judgeInfo.fts_avg_score ?? 0).toFixed(2)}, coverage ${((judgeInfo.term_coverage ?? 0) * 100).toFixed(0)}%)`
+                      : judgeInfo.strategy === 'hybrid'
+                      ? `FTS insufficient (${judgeInfo.fts_result_count ?? 0} results, avg score ${(judgeInfo.fts_avg_score ?? 0).toFixed(2)}) → Semantic boost`
+                      : judgeInfo.skip_reason || undefined
+                  }
                 >
                   {judgeInfo.strategy === 'fts_only' && <Zap className="h-3 w-3" />}
-                  {judgeInfo.strategy === 'semantic_only' && <Brain className="h-3 w-3" />}
                   {judgeInfo.strategy === 'hybrid' && <Layers className="h-3 w-3" />}
                   {t(`search.strategy_${judgeInfo.strategy}`)}
+                  <span className="ml-0.5 opacity-80">{(judgeInfo.confidence * 100).toFixed(0)}</span>
                 </span>
               )}
             </div>
