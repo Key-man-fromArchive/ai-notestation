@@ -15,8 +15,8 @@ logger = logging.getLogger(__name__)
 
 # Vision-capable models in priority order (cost-optimized)
 _VISION_MODELS = [
-    "glm-4.6v-flash",    # Free, 14s avg, good quality
-    "glm-4.6v",          # $0.3/M, 70-100s, better quality
+    "glm-4.6v",          # $0.3/M, better quality, higher rate limit
+    "glm-4.6v-flash",    # Free, 14s avg, good quality but lower rate limit
     "glm-4.5v",          # $0.6/M, 60-97s, proven reliable
     "gpt-4o-mini",
     "gemini-2.0-flash",

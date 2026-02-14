@@ -38,7 +38,7 @@ def _get_vision_model() -> str:
 class ImageAnalysisService:
     """Batch processor for OCR and Vision analysis of note images."""
 
-    OCR_CONCURRENCY = 1  # glm-ocr supports 1 concurrent
+    OCR_CONCURRENCY = 8  # glm-ocr supports higher concurrency
     VISION_CONCURRENCY = 8  # glm-4.6v supports 10, but 8 avoids 429 rate limits
 
     def __init__(self) -> None:
