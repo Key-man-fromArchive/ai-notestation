@@ -29,6 +29,10 @@ import {
   AlertCircle,
   RotateCcw,
   X,
+  Download,
+  Upload,
+  Settings,
+  FileArchive,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { apiClient } from '@/lib/api'
@@ -134,6 +138,13 @@ interface TrashListResponse {
   total_count: number
   total_size_bytes: number
   total_size_pretty: string
+}
+
+interface DbBackupItem {
+  filename: string
+  size: number
+  size_pretty: string
+  created_at: string
 }
 
 const OPERATION_ICON: Record<string, typeof FileX> = {
@@ -327,11 +338,155 @@ function OverviewTab() {
 
 function DatabaseTab() {
   const { t } = useTranslation()
+  const queryClient = useQueryClient()
   const { data, isLoading } = useQuery({
     queryKey: ['admin', 'db-stats'],
     queryFn: () => apiClient.get<DbStatsData>('/admin/db/stats'),
     refetchInterval: 30000,
   })
+
+  // --- Settings backup state ---
+  const [settingsFile, setSettingsFile] = useState<File | null>(null)
+  const [settingsMsg, setSettingsMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  const [isExportingSettings, setIsExportingSettings] = useState(false)
+  const [isImportingSettings, setIsImportingSettings] = useState(false)
+
+  // --- DB backup state ---
+  const { data: backups, refetch: refetchBackups } = useQuery({
+    queryKey: ['admin', 'db-backups'],
+    queryFn: () => apiClient.get<{ backups: DbBackupItem[]; total: number }>('/admin/db/backup/list'),
+  })
+  const [dbMsg, setDbMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  const [isCreatingBackup, setIsCreatingBackup] = useState(false)
+  const [restoreFile, setRestoreFile] = useState<File | null>(null)
+  const [isRestoring, setIsRestoring] = useState(false)
+  const [restoreConfirmText, setRestoreConfirmText] = useState('')
+  const [showRestoreConfirm, setShowRestoreConfirm] = useState(false)
+
+  // --- Settings export ---
+  const handleSettingsExport = async () => {
+    setIsExportingSettings(true)
+    setSettingsMsg(null)
+    try {
+      const token = apiClient.getToken()
+      const response = await fetch('/api/backup/settings/export', {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+      if (!response.ok) throw new Error(await response.text())
+      const blob = await response.blob()
+      const cd = response.headers.get('Content-Disposition')
+      const filename = cd?.split('filename=')[1]?.replace(/"/g, '') || 'settings_backup.json'
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      window.URL.revokeObjectURL(url)
+      setSettingsMsg({ ok: true, text: t('admin.settingsExportSuccess') })
+    } catch (e) {
+      setSettingsMsg({ ok: false, text: e instanceof Error ? e.message : t('admin.settingsExportFailed') })
+    } finally {
+      setIsExportingSettings(false)
+    }
+  }
+
+  // --- Settings import ---
+  const handleSettingsImport = async () => {
+    if (!settingsFile) return
+    setIsImportingSettings(true)
+    setSettingsMsg(null)
+    try {
+      const token = apiClient.getToken()
+      const formData = new FormData()
+      formData.append('file', settingsFile)
+      const response = await fetch('/api/backup/settings/import', {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+      })
+      if (!response.ok) throw new Error(await response.text())
+      const result = await response.json()
+      setSettingsFile(null)
+      setSettingsMsg({ ok: true, text: t('admin.settingsImportSuccess', { count: result.setting_count }) })
+    } catch (e) {
+      setSettingsMsg({ ok: false, text: e instanceof Error ? e.message : t('admin.settingsImportFailed') })
+    } finally {
+      setIsImportingSettings(false)
+    }
+  }
+
+  // --- DB backup create ---
+  const handleCreateBackup = async () => {
+    setIsCreatingBackup(true)
+    setDbMsg(null)
+    try {
+      const result = await apiClient.post<{ filename: string }>('/admin/db/backup', {})
+      setDbMsg({ ok: true, text: t('admin.dbBackupSuccess', { filename: result.filename }) })
+      refetchBackups()
+    } catch (e) {
+      setDbMsg({ ok: false, text: e instanceof Error ? e.message : t('admin.dbBackupFailed') })
+    } finally {
+      setIsCreatingBackup(false)
+    }
+  }
+
+  // --- DB backup download ---
+  const handleDownloadBackup = async (filename: string) => {
+    const token = apiClient.getToken()
+    const response = await fetch(`/api/admin/db/backup/download/${filename}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+    if (!response.ok) return
+    const blob = await response.blob()
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    window.URL.revokeObjectURL(url)
+  }
+
+  // --- DB backup delete ---
+  const handleDeleteBackup = async (filename: string) => {
+    try {
+      await apiClient.delete(`/admin/db/backup/${filename}`)
+      refetchBackups()
+      setDbMsg({ ok: true, text: t('admin.dbBackupDeleted') })
+    } catch {
+      setDbMsg({ ok: false, text: t('admin.dbBackupDeleteFailed') })
+    }
+  }
+
+  // --- DB restore ---
+  const handleRestore = async () => {
+    if (!restoreFile) return
+    setIsRestoring(true)
+    setDbMsg(null)
+    try {
+      const token = apiClient.getToken()
+      const formData = new FormData()
+      formData.append('file', restoreFile)
+      const response = await fetch('/api/admin/db/restore?confirm=true', {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+      })
+      if (!response.ok) throw new Error(await response.text())
+      setRestoreFile(null)
+      setShowRestoreConfirm(false)
+      setRestoreConfirmText('')
+      setDbMsg({ ok: true, text: t('admin.dbRestoreSuccess') })
+      queryClient.invalidateQueries({ queryKey: ['admin'] })
+    } catch (e) {
+      setDbMsg({ ok: false, text: e instanceof Error ? e.message : t('admin.dbRestoreFailed') })
+    } finally {
+      setIsRestoring(false)
+    }
+  }
 
   if (isLoading) return <LoadingSpinner />
 
@@ -381,6 +536,288 @@ function DatabaseTab() {
               ))}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* Settings Backup */}
+      <div className="border border-border rounded-lg bg-card">
+        <div className="px-4 py-3 bg-muted/50 border-b border-border flex items-center gap-2">
+          <Settings className="h-4 w-4" />
+          <h3 className="font-semibold">{t('admin.settingsBackup')}</h3>
+        </div>
+        <div className="p-4 space-y-4">
+          <p className="text-sm text-muted-foreground">{t('admin.settingsBackupDesc')}</p>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={handleSettingsExport}
+              disabled={isExportingSettings}
+              className={cn(
+                'flex items-center gap-2 px-4 py-2 rounded-md text-sm',
+                'bg-primary text-primary-foreground hover:bg-primary/90 transition-colors',
+                'disabled:opacity-50 disabled:cursor-not-allowed',
+              )}
+            >
+              <Download className="h-4 w-4" />
+              {isExportingSettings ? t('common.exporting', 'Exporting...') : t('admin.settingsExport')}
+            </button>
+          </div>
+
+          <div className="flex flex-col gap-3">
+            <label
+              className={cn(
+                'flex items-center justify-center gap-2 px-4 py-4 border-2 border-dashed border-input rounded-md cursor-pointer',
+                'hover:border-primary/50 hover:bg-muted/30 transition-colors',
+                isImportingSettings && 'opacity-50 cursor-not-allowed',
+              )}
+            >
+              <input
+                type="file"
+                accept=".json"
+                onChange={(e) => setSettingsFile(e.target.files?.[0] || null)}
+                disabled={isImportingSettings}
+                className="sr-only"
+              />
+              <Upload className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">
+                {settingsFile ? settingsFile.name : t('admin.selectJsonFile')}
+              </span>
+            </label>
+
+            {settingsFile && (
+              <div className="flex items-center justify-between p-3 bg-muted/50 rounded-md">
+                <div className="flex items-center gap-2">
+                  <FileArchive className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">{settingsFile.name}</span>
+                  <span className="text-xs text-muted-foreground">
+                    ({(settingsFile.size / 1024).toFixed(1)} KB)
+                  </span>
+                </div>
+                <button
+                  onClick={handleSettingsImport}
+                  disabled={isImportingSettings}
+                  className={cn(
+                    'flex items-center gap-2 px-4 py-2 rounded-md text-sm',
+                    'bg-primary text-primary-foreground hover:bg-primary/90 transition-colors',
+                    'disabled:opacity-50 disabled:cursor-not-allowed',
+                  )}
+                >
+                  <Upload className="h-4 w-4" />
+                  {isImportingSettings ? t('common.importing', 'Importing...') : t('admin.settingsImport')}
+                </button>
+              </div>
+            )}
+
+            {settingsMsg && (
+              <div
+                className={cn(
+                  'flex items-center gap-2 p-3 rounded-md',
+                  settingsMsg.ok
+                    ? 'bg-green-500/10 border border-green-500/20'
+                    : 'bg-destructive/10 border border-destructive/20',
+                )}
+              >
+                {settingsMsg.ok ? (
+                  <CheckCircle className="h-4 w-4 text-green-600" />
+                ) : (
+                  <AlertCircle className="h-4 w-4 text-destructive" />
+                )}
+                <span className={cn('text-sm', settingsMsg.ok ? 'text-green-700' : 'text-destructive')}>
+                  {settingsMsg.text}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Database Backup */}
+      <div className="border border-border rounded-lg bg-card">
+        <div className="px-4 py-3 bg-muted/50 border-b border-border flex items-center gap-2">
+          <Database className="h-4 w-4" />
+          <h3 className="font-semibold">{t('admin.dbBackup')}</h3>
+        </div>
+        <div className="p-4 space-y-4">
+          <p className="text-sm text-muted-foreground">{t('admin.dbBackupDesc')}</p>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={handleCreateBackup}
+              disabled={isCreatingBackup}
+              className={cn(
+                'flex items-center gap-2 px-4 py-2 rounded-md text-sm',
+                'bg-primary text-primary-foreground hover:bg-primary/90 transition-colors',
+                'disabled:opacity-50 disabled:cursor-not-allowed',
+              )}
+            >
+              {isCreatingBackup ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4" />
+              )}
+              {isCreatingBackup ? t('admin.dbCreatingBackup') : t('admin.dbCreateBackup')}
+            </button>
+          </div>
+
+          {/* Backup list */}
+          {backups && backups.backups.length > 0 && (
+            <div className="border border-border rounded-md overflow-hidden">
+              <div className="px-3 py-2 bg-muted/30 border-b border-border">
+                <p className="text-sm font-medium">{t('admin.dbBackupList')}</p>
+              </div>
+              <div className="divide-y divide-border">
+                {backups.backups.map((b) => (
+                  <div key={b.filename} className="flex items-center justify-between px-3 py-2 hover:bg-muted/20">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <FileArchive className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-sm font-mono truncate">{b.filename}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {b.size_pretty} &middot; {new Date(b.created_at).toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        onClick={() => handleDownloadBackup(b.filename)}
+                        className="p-1.5 rounded hover:bg-muted transition-colors"
+                        title="Download"
+                      >
+                        <Download className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteBackup(b.filename)}
+                        className="p-1.5 rounded hover:bg-destructive/10 text-destructive transition-colors"
+                        title="Delete"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {backups && backups.backups.length === 0 && (
+            <p className="text-sm text-muted-foreground italic">{t('admin.dbBackupEmpty')}</p>
+          )}
+
+          {/* Restore section */}
+          <div className="pt-2 border-t border-border space-y-3">
+            <p className="text-sm font-medium flex items-center gap-2">
+              <RotateCcw className="h-4 w-4" />
+              {t('admin.dbRestore')}
+            </p>
+            <label
+              className={cn(
+                'flex items-center justify-center gap-2 px-4 py-4 border-2 border-dashed border-input rounded-md cursor-pointer',
+                'hover:border-primary/50 hover:bg-muted/30 transition-colors',
+                isRestoring && 'opacity-50 cursor-not-allowed',
+              )}
+            >
+              <input
+                type="file"
+                accept=".sql.gz"
+                onChange={(e) => {
+                  setRestoreFile(e.target.files?.[0] || null)
+                  setShowRestoreConfirm(false)
+                  setRestoreConfirmText('')
+                }}
+                disabled={isRestoring}
+                className="sr-only"
+              />
+              <Upload className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">
+                {restoreFile ? restoreFile.name : t('admin.selectSqlGzFile')}
+              </span>
+            </label>
+
+            {restoreFile && !showRestoreConfirm && (
+              <div className="flex items-center justify-between p-3 bg-muted/50 rounded-md">
+                <div className="flex items-center gap-2">
+                  <FileArchive className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">{restoreFile.name}</span>
+                  <span className="text-xs text-muted-foreground">
+                    ({(restoreFile.size / 1024 / 1024).toFixed(2)} MB)
+                  </span>
+                </div>
+                <button
+                  onClick={() => setShowRestoreConfirm(true)}
+                  className={cn(
+                    'flex items-center gap-2 px-4 py-2 rounded-md text-sm',
+                    'bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors',
+                  )}
+                >
+                  <RotateCcw className="h-4 w-4" />
+                  {t('admin.dbRestore')}
+                </button>
+              </div>
+            )}
+
+            {showRestoreConfirm && (
+              <div className="p-4 border-2 border-destructive/50 bg-destructive/5 rounded-lg space-y-3">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5 text-destructive" />
+                  <h4 className="font-semibold text-destructive">{t('admin.dbRestoreConfirmTitle')}</h4>
+                </div>
+                <p className="text-sm text-muted-foreground">{t('admin.dbRestoreConfirmDesc')}</p>
+                <input
+                  type="text"
+                  value={restoreConfirmText}
+                  onChange={(e) => setRestoreConfirmText(e.target.value)}
+                  placeholder={t('admin.dbRestoreConfirmPlaceholder')}
+                  className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      setShowRestoreConfirm(false)
+                      setRestoreConfirmText('')
+                    }}
+                    className="px-4 py-2 rounded-md text-sm border border-input hover:bg-muted transition-colors"
+                  >
+                    {t('common.cancel', 'Cancel')}
+                  </button>
+                  <button
+                    onClick={handleRestore}
+                    disabled={restoreConfirmText !== t('admin.dbRestoreConfirmPlaceholder') || isRestoring}
+                    className={cn(
+                      'flex items-center gap-2 px-4 py-2 rounded-md text-sm',
+                      'bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors',
+                      'disabled:opacity-50 disabled:cursor-not-allowed',
+                    )}
+                  >
+                    {isRestoring ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <RotateCcw className="h-4 w-4" />
+                    )}
+                    {isRestoring ? t('admin.dbRestoring') : t('admin.dbRestore')}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {dbMsg && (
+            <div
+              className={cn(
+                'flex items-center gap-2 p-3 rounded-md',
+                dbMsg.ok
+                  ? 'bg-green-500/10 border border-green-500/20'
+                  : 'bg-destructive/10 border border-destructive/20',
+              )}
+            >
+              {dbMsg.ok ? (
+                <CheckCircle className="h-4 w-4 text-green-600" />
+              ) : (
+                <AlertCircle className="h-4 w-4 text-destructive" />
+              )}
+              <span className={cn('text-sm', dbMsg.ok ? 'text-green-700' : 'text-destructive')}>
+                {dbMsg.text}
+              </span>
+            </div>
+          )}
         </div>
       </div>
     </div>

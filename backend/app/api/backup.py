@@ -10,14 +10,17 @@ import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.admin import require_admin
+from app.api.settings import _load_from_db, _save_to_db, sync_api_keys_to_env
 from app.config import get_settings
 from app.database import async_session_factory, get_db
 from app.models import Note, NoteAttachment, NoteImage
+from app.services.activity_log import get_trigger_name, log_activity
 from app.services.auth_service import get_current_user
 from app.synology_gateway.notestation import NoteStationService
 from app.utils.datetime_utils import datetime_from_iso, datetime_to_iso
@@ -329,4 +332,93 @@ async def import_backup(
         "note_count": len(notes_payload),
         "image_count": len(images_payload),
         "attachment_count": len(attachments_payload),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Settings backup endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.get("/backup/settings/export")
+async def export_settings(
+    current_user: dict = Depends(require_admin),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> Response:
+    """Export all application settings as a downloadable JSON file.
+
+    Requires admin access. Returns a JSON file containing all current
+    settings with metadata (version, timestamp, count).
+    """
+    all_settings = await _load_from_db(db)
+
+    timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+    payload = {
+        "version": "settings-1",
+        "created_at": datetime.now(UTC).isoformat(),
+        "setting_count": len(all_settings),
+        "settings": all_settings,
+    }
+
+    content = json.dumps(payload, ensure_ascii=False, indent=2)
+    filename = f"settings_backup_{timestamp}.json"
+
+    return Response(
+        content=content,
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.post("/backup/settings/import")
+async def import_settings(
+    file: UploadFile = File(..., description="Settings backup JSON file"),  # noqa: B008
+    current_user: dict = Depends(require_admin),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> dict:
+    """Import application settings from a previously exported JSON file.
+
+    Requires admin access. Validates the file structure, then upserts
+    each setting and refreshes API key environment variables.
+    """
+    try:
+        raw = await file.read()
+        data = json.loads(raw.decode("utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid JSON file: {exc}",
+        ) from exc
+
+    if "version" not in data or "settings" not in data:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid settings backup: missing 'version' or 'settings' key",
+        )
+
+    imported_settings = data["settings"]
+    if not isinstance(imported_settings, dict):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid settings backup: 'settings' must be an object",
+        )
+
+    count = 0
+    for key, value in imported_settings.items():
+        await _save_to_db(db, key, value)
+        count += 1
+
+    await sync_api_keys_to_env(db)
+
+    await log_activity(
+        "settings",
+        "completed",
+        message=f"설정 백업 복원: {count}개 항목",
+        details={"setting_count": count, "version": data.get("version")},
+        triggered_by=get_trigger_name(current_user),
+    )
+
+    return {
+        "status": "imported",
+        "setting_count": count,
     }

@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import logging
+import os
+import re
+import urllib.parse
+from datetime import UTC, datetime
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -777,3 +783,282 @@ async def purge_all_trash(
         triggered_by=get_trigger_name(admin),
     )
     return {"status": "ok", "purged_count": count}
+
+
+# --- Database Backup / Restore ---
+
+
+_BACKUP_FILENAME_PATTERN = re.compile(r"^db_backup_\d{8}_\d{6}\.sql\.gz$")
+
+
+def _parse_database_url() -> dict[str, str]:
+    """Parse DATABASE_URL into pg_dump/psql connection parameters."""
+    settings = get_settings()
+    parsed = urllib.parse.urlparse(settings.DATABASE_URL)
+    return {
+        "host": parsed.hostname or "db",
+        "port": str(parsed.port or 5432),
+        "user": parsed.username or "labnote",
+        "password": parsed.password or "",
+        "dbname": parsed.path.lstrip("/") or "labnote",
+    }
+
+
+def _backup_dir() -> Path:
+    """Return (and ensure) the backup directory."""
+    settings = get_settings()
+    backup_path = Path(settings.NSX_EXPORTS_PATH) / "backups"
+    backup_path.mkdir(parents=True, exist_ok=True)
+    return backup_path
+
+
+@router.post("/db/backup")
+async def create_db_backup(
+    current_user: dict = Depends(require_admin),  # noqa: B008
+) -> dict:
+    """Create a gzip-compressed pg_dump backup of the database."""
+    db_params = _parse_database_url()
+    backup_path = _backup_dir()
+
+    timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+    filename = f"db_backup_{timestamp}.sql.gz"
+    dest = backup_path / filename
+
+    env = os.environ.copy()
+    env["PGPASSWORD"] = db_params["password"]
+
+    # pg_dump → gzip pipeline
+    dump_proc = await asyncio.create_subprocess_exec(
+        "pg_dump",
+        "-h",
+        db_params["host"],
+        "-p",
+        db_params["port"],
+        "-U",
+        db_params["user"],
+        "-d",
+        db_params["dbname"],
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        env=env,
+    )
+
+    gzip_proc = await asyncio.create_subprocess_exec(
+        "gzip",
+        stdin=dump_proc.stdout,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+
+    # Allow dump_proc to receive SIGPIPE if gzip exits early
+    if dump_proc.stdout:
+        dump_proc.stdout.close()  # type: ignore[unused-ignore]
+
+    gzip_stdout, gzip_stderr = await gzip_proc.communicate()
+    _, dump_stderr = await dump_proc.communicate()
+
+    if dump_proc.returncode != 0:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"pg_dump failed: {dump_stderr.decode().strip()}",
+        )
+    if gzip_proc.returncode != 0:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"gzip failed: {gzip_stderr.decode().strip()}",
+        )
+
+    dest.write_bytes(gzip_stdout)
+    file_size = dest.stat().st_size
+    created_at = datetime.now(UTC).isoformat()
+
+    await log_activity(
+        "admin",
+        "completed",
+        message=f"DB 백업 생성: {filename}",
+        details={"filename": filename, "size": file_size},
+        triggered_by=get_trigger_name(current_user),
+    )
+
+    return {
+        "filename": filename,
+        "size": file_size,
+        "size_pretty": _human_size(file_size),
+        "created_at": created_at,
+    }
+
+
+@router.get("/db/backup/list")
+async def list_db_backups(
+    current_user: dict = Depends(require_admin),  # noqa: B008
+) -> dict:
+    """List available database backup files, newest first."""
+    backup_path = _backup_dir()
+
+    backups = []
+    for f in sorted(backup_path.glob("db_backup_*.sql.gz"), reverse=True):
+        stat = f.stat()
+        backups.append(
+            {
+                "filename": f.name,
+                "size": stat.st_size,
+                "size_pretty": _human_size(stat.st_size),
+                "created_at": datetime.fromtimestamp(stat.st_mtime, tz=UTC).isoformat(),
+            }
+        )
+
+    return {"backups": backups, "total": len(backups)}
+
+
+@router.get("/db/backup/download/{filename}")
+async def download_db_backup(
+    filename: str,
+    current_user: dict = Depends(require_admin),  # noqa: B008
+):
+    """Download a specific backup file."""
+    if not _BACKUP_FILENAME_PATTERN.match(filename):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid backup filename",
+        )
+
+    file_path = _backup_dir() / filename
+    if not file_path.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Backup file not found",
+        )
+
+    return FileResponse(
+        path=str(file_path),
+        filename=filename,
+        media_type="application/gzip",
+    )
+
+
+@router.post("/db/restore")
+async def restore_db_backup(
+    file: UploadFile = File(...),  # noqa: B008
+    confirm: bool = Query(False),  # noqa: B008
+    current_user: dict = Depends(require_admin),  # noqa: B008
+) -> dict:
+    """Restore database from an uploaded .sql.gz dump file."""
+    _require_confirm(confirm)
+
+    if not file.filename or not file.filename.endswith(".sql.gz"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only .sql.gz files are accepted",
+        )
+
+    db_params = _parse_database_url()
+    backup_path = _backup_dir()
+    tmp_file = backup_path / f"_restore_tmp_{file.filename}"
+
+    try:
+        # Save uploaded file
+        content = await file.read()
+        tmp_file.write_bytes(content)
+
+        env = os.environ.copy()
+        env["PGPASSWORD"] = db_params["password"]
+
+        # gunzip → psql pipeline
+        gunzip_proc = await asyncio.create_subprocess_exec(
+            "gunzip",
+            "-c",
+            str(tmp_file),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=env,
+        )
+
+        psql_proc = await asyncio.create_subprocess_exec(
+            "psql",
+            "-h",
+            db_params["host"],
+            "-p",
+            db_params["port"],
+            "-U",
+            db_params["user"],
+            "-d",
+            db_params["dbname"],
+            stdin=gunzip_proc.stdout,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=env,
+        )
+
+        if gunzip_proc.stdout:
+            gunzip_proc.stdout.close()  # type: ignore[unused-ignore]
+
+        psql_stdout, psql_stderr = await psql_proc.communicate()
+        _, gunzip_stderr = await gunzip_proc.communicate()
+
+        if gunzip_proc.returncode != 0:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"gunzip failed: {gunzip_stderr.decode().strip()}",
+            )
+        if psql_proc.returncode != 0:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"psql failed: {psql_stderr.decode().strip()}",
+            )
+    finally:
+        # Always clean up the temp file
+        with contextlib.suppress(OSError):
+            tmp_file.unlink()
+
+    await log_activity(
+        "admin",
+        "completed",
+        message=f"DB 복원 완료: {file.filename}",
+        details={"filename": file.filename, "size": len(content)},
+        triggered_by=get_trigger_name(current_user),
+    )
+
+    return {
+        "status": "ok",
+        "message": f"Database restored from {file.filename}",
+        "size": len(content),
+        "size_pretty": _human_size(len(content)),
+    }
+
+
+@router.delete("/db/backup/{filename}")
+async def delete_db_backup(
+    filename: str,
+    current_user: dict = Depends(require_admin),  # noqa: B008
+) -> dict:
+    """Delete a specific backup file."""
+    if not _BACKUP_FILENAME_PATTERN.match(filename):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid backup filename",
+        )
+
+    file_path = _backup_dir() / filename
+    if not file_path.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Backup file not found",
+        )
+
+    file_size = file_path.stat().st_size
+    file_path.unlink()
+
+    await log_activity(
+        "admin",
+        "completed",
+        message=f"DB 백업 삭제: {filename}",
+        details={"filename": filename, "freed_bytes": file_size},
+        triggered_by=get_trigger_name(current_user),
+    )
+
+    return {
+        "status": "ok",
+        "filename": filename,
+        "freed_bytes": file_size,
+        "freed_size": _human_size(file_size),
+    }
