@@ -24,6 +24,8 @@ htmlcov/
 coverage.xml
 
 # Node
+/package.json
+/package-lock.json
 node_modules/
 frontend/dist/
 .vite/
