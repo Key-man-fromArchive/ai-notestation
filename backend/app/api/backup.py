@@ -659,6 +659,59 @@ async def list_settings_backups(
     return {"backups": backups, "total": len(backups)}
 
 
+@router.post("/backup/settings/restore/{filename}")
+async def restore_settings_from_server(
+    filename: str,
+    current_user: dict = Depends(require_admin),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> dict:
+    """Restore settings from a server-side backup file (no upload needed)."""
+    if not _SETTINGS_BACKUP_FILENAME_PATTERN.match(filename):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid settings backup filename",
+        )
+
+    file_path = _settings_backup_dir() / filename
+    if not file_path.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Settings backup file not found",
+        )
+
+    try:
+        data = json.loads(file_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid JSON file: {exc}",
+        ) from exc
+
+    if "version" not in data or "settings" not in data:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid settings backup: missing 'version' or 'settings' key",
+        )
+
+    imported_settings = data["settings"]
+    count = 0
+    for key, value in imported_settings.items():
+        await _save_to_db(db, key, value)
+        count += 1
+
+    await sync_api_keys_to_env(db)
+
+    await log_activity(
+        "settings",
+        "completed",
+        message=f"설정 백업 복원 (서버): {filename} ({count}개 항목)",
+        details={"filename": filename, "setting_count": count, "version": data.get("version")},
+        triggered_by=get_trigger_name(current_user),
+    )
+
+    return {"status": "restored", "filename": filename, "setting_count": count}
+
+
 @router.get("/backup/settings/download/{filename}")
 async def download_settings_backup(
     filename: str,

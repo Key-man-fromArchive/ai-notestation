@@ -764,6 +764,8 @@
     "dbBackupDeleteFailed": "백업 삭제 실패",
     "settingsBackupList": "설정 백업 목록",
     "settingsCount": "{{count}}개 설정",
+    "settingsRestore": "복원",
+    "settingsRestoreConfirm": "이 백업에서 설정을 복원하시겠습니까? 현재 설정이 덮어씌워집니다.",
     "settingsBackupDeleted": "설정 백업을 삭제했습니다",
     "settingsBackupDeleteFailed": "설정 백업 삭제 실패",
     "showAll": "전체 보기 ({{count}})",

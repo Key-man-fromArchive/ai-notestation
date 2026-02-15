@@ -575,6 +575,27 @@ function DatabaseTab() {
     }
   }
 
+  // --- Settings restore from server ---
+  const handleRestoreSettingsFromServer = async (filename: string) => {
+    if (!confirm(t('admin.settingsRestoreConfirm', `Restore settings from ${filename}?`))) return
+    setIsImportingSettings(true)
+    setSettingsMsg(null)
+    try {
+      const token = apiClient.getToken()
+      const response = await fetch(`/api/backup/settings/restore/${filename}`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+      if (!response.ok) throw new Error(await response.text())
+      const result = await response.json()
+      setSettingsMsg({ ok: true, text: t('admin.settingsImportSuccess', { count: result.setting_count }) })
+    } catch (e) {
+      setSettingsMsg({ ok: false, text: e instanceof Error ? e.message : t('admin.settingsImportFailed') })
+    } finally {
+      setIsImportingSettings(false)
+    }
+  }
+
   // --- Settings backup download ---
   const handleDownloadSettingsBackup = async (filename: string) => {
     const token = apiClient.getToken()
@@ -1185,6 +1206,14 @@ function DatabaseTab() {
                       </div>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        onClick={() => handleRestoreSettingsFromServer(b.filename)}
+                        disabled={isImportingSettings}
+                        className="p-1.5 rounded hover:bg-primary/10 text-primary transition-colors disabled:opacity-50"
+                        title={t('admin.settingsRestore', 'Restore')}
+                      >
+                        <RotateCcw className="h-4 w-4" />
+                      </button>
                       <button
                         onClick={() => handleDownloadSettingsBackup(b.filename)}
                         className="p-1.5 rounded hover:bg-muted transition-colors"

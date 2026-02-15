@@ -764,6 +764,8 @@
     "dbBackupDeleteFailed": "Backup deletion failed",
     "settingsBackupList": "Settings Backup List",
     "settingsCount": "{{count}} settings",
+    "settingsRestore": "Restore",
+    "settingsRestoreConfirm": "Restore settings from this backup? Current settings will be overwritten.",
     "settingsBackupDeleted": "Settings backup deleted",
     "settingsBackupDeleteFailed": "Settings backup deletion failed",
     "showAll": "Show all ({{count}})",
