@@ -13,9 +13,10 @@ import { SearchBar } from '@/components/SearchBar'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
 import { EmptyState } from '@/components/EmptyState'
 import { useSearchIndex } from '@/hooks/useSearchIndex'
-import { Search as SearchIcon, FileText, AlertCircle, Loader2, Filter, X, Sparkles, TextSearch, Calendar, Zap, Layers, Wand2, ArrowRight, Expand, Target, Link2, RotateCcw } from 'lucide-react'
+import { Search as SearchIcon, FileText, AlertCircle, Loader2, Filter, X, Sparkles, TextSearch, Calendar, Zap, Layers, Wand2, ArrowRight, Expand, Target, Link2, RotateCcw, ThumbsUp, ThumbsDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useTimezone } from '@/hooks/useTimezone'
+import { useSearchFeedback } from '@/hooks/useFeedback'
 
 const MAX_REFINE_TURNS = 4
 
@@ -42,6 +43,10 @@ export default function Search() {
   const [customFeedback, setCustomFeedback] = useState('')
   const [refineHistory, setRefineHistory] = useState<RefineHistoryItem[]>([])
   const [refinedResults, setRefinedResults] = useState<RefineResponse | null>(null)
+
+  // Feedback state
+  const [feedbackState, setFeedbackState] = useState<Record<string, boolean | null>>({})
+  const searchFeedback = useSearchFeedback()
 
   const filters = useMemo(() => ({
     notebook: notebook || undefined,
@@ -131,6 +136,7 @@ export default function Search() {
   const allResults = data?.pages.flatMap((page) => page.results) ?? []
   const totalCount = data?.pages[0]?.total ?? 0
   const judgeInfo = data?.pages[0]?.judge_info
+  const searchEventId = data?.pages[0]?.search_event_id
 
   const currentTurn = refineHistory.length + 1
   const canRefine = currentTurn <= MAX_REFINE_TURNS && allResults.length > 0
@@ -537,6 +543,48 @@ export default function Search() {
                           <div className="mt-1 text-[11px] text-muted-foreground">
                             <span className="font-medium">{t('search.matchedTerms')}:</span>{' '}
                             {result.match_explanation.matched_terms.join(', ')}
+                          </div>
+                        )}
+                        {searchEventId && (
+                          <div className="flex items-center gap-1 mt-2">
+                            <button
+                              onClick={(e) => {
+                                e.preventDefault()
+                                const newVal = feedbackState[result.note_id] === true ? null : true
+                                setFeedbackState(prev => ({ ...prev, [result.note_id]: newVal }))
+                                if (newVal !== null) {
+                                  searchFeedback.mutate({ search_event_id: searchEventId, note_id: result.note_id, relevant: newVal })
+                                }
+                              }}
+                              className={cn(
+                                'p-1 rounded transition-colors',
+                                feedbackState[result.note_id] === true
+                                  ? 'text-green-600 bg-green-50'
+                                  : 'text-muted-foreground hover:text-green-600 hover:bg-green-50'
+                              )}
+                              title={t('feedback.relevant')}
+                            >
+                              <ThumbsUp className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.preventDefault()
+                                const newVal = feedbackState[result.note_id] === false ? null : false
+                                setFeedbackState(prev => ({ ...prev, [result.note_id]: newVal }))
+                                if (newVal !== null) {
+                                  searchFeedback.mutate({ search_event_id: searchEventId, note_id: result.note_id, relevant: newVal })
+                                }
+                              }}
+                              className={cn(
+                                'p-1 rounded transition-colors',
+                                feedbackState[result.note_id] === false
+                                  ? 'text-red-600 bg-red-50'
+                                  : 'text-muted-foreground hover:text-red-600 hover:bg-red-50'
+                              )}
+                              title={t('feedback.irrelevant')}
+                            >
+                              <ThumbsDown className="h-3.5 w-3.5" />
+                            </button>
                           </div>
                         )}
                       </div>

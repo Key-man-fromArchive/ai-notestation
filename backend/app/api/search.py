@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
@@ -124,6 +125,7 @@ class SearchResponse(BaseModel):
     search_type: str
     total: int
     judge_info: JudgeInfoResponse | None = None
+    search_event_id: int | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -269,6 +271,7 @@ async def search(
         SearchResponse with matching results, query echo, and total count.
     """
     username = current_user.get("username", "")
+    user_id = current_user.get("user_id")
     logger.info(
         "Search request: user=%s, query=%r, type=%s, limit=%d, offset=%d, notebook=%s",
         username,
@@ -278,6 +281,8 @@ async def search(
         offset,
         notebook,
     )
+
+    t_start = time.monotonic()
 
     api_key = await _get_openai_api_key(db, username)
     page: SearchPage = SearchPage(results=[], total=0)
@@ -327,7 +332,26 @@ async def search(
         except Exception:
             logger.warning("Reranking failed, returning unranked results")
 
-    return SearchResponse(
+    duration_ms = int((time.monotonic() - t_start) * 1000)
+    judge_strategy = page.judge_info.strategy if page.judge_info else None
+
+    # Fire-and-forget search event recording (zero latency impact)
+    from app.services.search_metrics import search_metrics
+
+    async def _record() -> int | None:
+        return await search_metrics.record_search(
+            query=q,
+            search_type=type.value,
+            result_count=page.total,
+            duration_ms=duration_ms,
+            user_id=user_id,
+            judge_strategy=judge_strategy,
+        )
+
+    record_task = asyncio.create_task(_record())
+
+    # Build response
+    response = SearchResponse(
         results=[
             SearchResultResponse(
                 note_id=r.note_id,
@@ -366,6 +390,15 @@ async def search(
             term_coverage=page.judge_info.term_coverage,
         ) if page.judge_info else None,
     )
+
+    # Try to attach search_event_id (wait briefly)
+    try:
+        event_id = await asyncio.wait_for(record_task, timeout=0.5)
+        response.search_event_id = event_id
+    except TimeoutError:
+        pass
+
+    return response
 
 
 # ---------------------------------------------------------------------------

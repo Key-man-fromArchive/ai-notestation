@@ -36,6 +36,11 @@ import {
   ChevronDown,
   ChevronUp,
   Package,
+  BarChart3,
+  MessageSquare,
+  FlaskConical,
+  Star,
+  TrendingUp,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { apiClient } from '@/lib/api'
@@ -185,6 +190,9 @@ export const ADMIN_TABS = [
   { id: 'nas', labelKey: 'admin.nas', icon: Server },
   { id: 'providers', labelKey: 'admin.providers', icon: Brain },
   { id: 'storage', labelKey: 'admin.storageManagement', icon: Trash2 },
+  { id: 'metrics', labelKey: 'admin.searchMetrics', icon: BarChart3 },
+  { id: 'feedback', labelKey: 'admin.feedback', icon: MessageSquare },
+  { id: 'evaluation', labelKey: 'admin.evaluation', icon: FlaskConical },
 ] as const
 
 export type AdminTabId = (typeof ADMIN_TABS)[number]['id']
@@ -243,6 +251,9 @@ export function AdminTabContent() {
         {activeTab === 'nas' && <NasTab />}
         {activeTab === 'providers' && <ProvidersTab />}
         {activeTab === 'storage' && <StorageTab />}
+        {activeTab === 'metrics' && <MetricsTab />}
+        {activeTab === 'feedback' && <FeedbackTab />}
+        {activeTab === 'evaluation' && <EvaluationTab />}
       </div>
     </div>
   )
@@ -2035,6 +2046,643 @@ function TrashSection({
           })}
         </div>
       )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Metrics Tab
+// ---------------------------------------------------------------------------
+
+function MetricsTab() {
+  const { t } = useTranslation()
+  const [period, setPeriod] = useState<string>('7d')
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['admin', 'metrics', period],
+    queryFn: () => apiClient.get<{
+      total_searches: number
+      avg_result_count: number
+      avg_duration_ms: number
+      zero_result_rate: number
+      daily_volume: Array<{ date: string; count: number }>
+      type_distribution: Array<{ type: string; count: number }>
+      top_zero_result_queries: Array<{ query: string; count: number }>
+      response_time_p50: number
+      response_time_p95: number
+    }>(`/admin/metrics/search?period=${period}`),
+  })
+
+  if (isLoading) return <LoadingSpinner />
+
+  return (
+    <div className="space-y-6">
+      {/* Period Selector */}
+      <div className="flex items-center gap-2">
+        {['7d', '30d', '90d'].map((p) => (
+          <button
+            key={p}
+            onClick={() => setPeriod(p)}
+            className={cn(
+              'px-3 py-1.5 text-sm rounded-md transition-colors',
+              period === p
+                ? 'bg-primary text-primary-foreground'
+                : 'border border-input hover:bg-muted text-muted-foreground'
+            )}
+          >
+            {p}
+          </button>
+        ))}
+      </div>
+
+      {/* Key Metrics */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="p-4 border border-border rounded-lg bg-card">
+          <p className="text-sm text-muted-foreground">{t('admin.totalSearches')}</p>
+          <p className="text-2xl font-bold">{data?.total_searches?.toLocaleString() ?? 0}</p>
+        </div>
+        <div className="p-4 border border-border rounded-lg bg-card">
+          <p className="text-sm text-muted-foreground">{t('admin.avgResults')}</p>
+          <p className="text-2xl font-bold">{data?.avg_result_count ?? 0}</p>
+        </div>
+        <div className="p-4 border border-border rounded-lg bg-card">
+          <p className="text-sm text-muted-foreground">{t('admin.zeroResultRate')}</p>
+          <p className="text-2xl font-bold">{data?.zero_result_rate ?? 0}%</p>
+        </div>
+        <div className="p-4 border border-border rounded-lg bg-card">
+          <p className="text-sm text-muted-foreground">{t('admin.responseTime')}</p>
+          <p className="text-2xl font-bold">
+            P50: {data?.response_time_p50 ?? 0}ms
+          </p>
+          <p className="text-xs text-muted-foreground">
+            P95: {data?.response_time_p95 ?? 0}ms
+          </p>
+        </div>
+      </div>
+
+      {/* Daily Volume Chart (simple bar visualization) */}
+      {data?.daily_volume && data.daily_volume.length > 0 && (
+        <div className="p-4 border border-border rounded-lg bg-card">
+          <h3 className="font-semibold mb-4">{t('admin.dailySearchVolume')}</h3>
+          <div className="flex items-end gap-1 h-32">
+            {data.daily_volume.map((d) => {
+              const maxCount = Math.max(...data.daily_volume.map((v) => v.count), 1)
+              const height = (d.count / maxCount) * 100
+              return (
+                <div key={d.date} className="flex-1 flex flex-col items-center gap-1">
+                  <span className="text-[10px] text-muted-foreground">{d.count}</span>
+                  <div
+                    className="w-full bg-primary/70 rounded-t"
+                    style={{ height: `${height}%`, minHeight: d.count > 0 ? '4px' : '0' }}
+                  />
+                  <span className="text-[9px] text-muted-foreground truncate w-full text-center">
+                    {d.date.slice(5)}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Type Distribution */}
+      {data?.type_distribution && data.type_distribution.length > 0 && (
+        <div className="p-4 border border-border rounded-lg bg-card">
+          <h3 className="font-semibold mb-4">{t('admin.searchTypeDistribution')}</h3>
+          <div className="space-y-2">
+            {data.type_distribution.map((item) => {
+              const total = data.type_distribution.reduce((sum, i) => sum + i.count, 0)
+              const pct = total > 0 ? Math.round((item.count / total) * 100) : 0
+              return (
+                <div key={item.type} className="flex items-center gap-3">
+                  <span className="text-sm font-mono w-20">{item.type}</span>
+                  <div className="flex-1 h-4 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-primary/70 rounded-full"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                  <span className="text-sm text-muted-foreground w-16 text-right">
+                    {item.count} ({pct}%)
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Zero Result Queries */}
+      {data?.top_zero_result_queries && data.top_zero_result_queries.length > 0 && (
+        <div className="p-4 border border-border rounded-lg bg-card">
+          <h3 className="font-semibold mb-4">{t('admin.zeroResultQueries')}</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="text-left px-3 py-2">{t('search.title')}</th>
+                  <th className="text-right px-3 py-2">{t('admin.rowCount')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.top_zero_result_queries.map((q) => (
+                  <tr key={q.query} className="border-b border-border last:border-0">
+                    <td className="px-3 py-2 font-mono text-xs">{q.query}</td>
+                    <td className="px-3 py-2 text-right">{q.count}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Feedback Tab
+// ---------------------------------------------------------------------------
+
+function FeedbackTab() {
+  const { t } = useTranslation()
+  const [period, setPeriod] = useState<string>('30d')
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['admin', 'feedback', period],
+    queryFn: () => apiClient.get<{
+      search_feedback: {
+        total: number
+        positive_count: number
+        positive_rate: number
+        trend: Array<{ date: string; positive: number; total: number; rate: number }>
+      }
+      ai_feedback: {
+        by_feature: Array<{ feature: string; avg_rating: number; count: number }>
+        by_model: Array<{ model: string; avg_rating: number; count: number }>
+      }
+    }>(`/feedback/summary?period=${period}`),
+  })
+
+  const { data: optimization } = useQuery({
+    queryKey: ['admin', 'feedback', 'optimization'],
+    queryFn: () => apiClient.get<{
+      recommendations: Array<{ search_type: string; positive_rate: number; sample_size: number }>
+      confidence: string
+    }>('/feedback/optimization'),
+  })
+
+  if (isLoading) return <LoadingSpinner />
+
+  return (
+    <div className="space-y-6">
+      {/* Period Selector */}
+      <div className="flex items-center gap-2">
+        {['7d', '30d', '90d'].map((p) => (
+          <button
+            key={p}
+            onClick={() => setPeriod(p)}
+            className={cn(
+              'px-3 py-1.5 text-sm rounded-md transition-colors',
+              period === p
+                ? 'bg-primary text-primary-foreground'
+                : 'border border-input hover:bg-muted text-muted-foreground'
+            )}
+          >
+            {p}
+          </button>
+        ))}
+      </div>
+
+      {/* Search Feedback Summary */}
+      <div className="p-4 border border-border rounded-lg bg-card">
+        <h3 className="font-semibold mb-4 flex items-center gap-2">
+          <TrendingUp className="h-4 w-4" />
+          {t('admin.searchFeedback')}
+        </h3>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div>
+            <p className="text-sm text-muted-foreground">{t('admin.totalFeedback')}</p>
+            <p className="text-2xl font-bold">{data?.search_feedback.total ?? 0}</p>
+          </div>
+          <div>
+            <p className="text-sm text-muted-foreground">{t('admin.positiveCount')}</p>
+            <p className="text-2xl font-bold">{data?.search_feedback.positive_count ?? 0}</p>
+          </div>
+          <div>
+            <p className="text-sm text-muted-foreground">{t('admin.positiveRate')}</p>
+            <p className="text-2xl font-bold">{data?.search_feedback.positive_rate ?? 0}%</p>
+          </div>
+        </div>
+
+        {/* Trend */}
+        {data?.search_feedback.trend && data.search_feedback.trend.length > 0 && (
+          <div className="mt-4 flex items-end gap-1 h-24">
+            {data.search_feedback.trend.map((d) => {
+              const maxTotal = Math.max(...data.search_feedback.trend.map((v) => v.total), 1)
+              const height = (d.total / maxTotal) * 100
+              const positiveHeight = d.total > 0 ? (d.positive / d.total) * height : 0
+              return (
+                <div key={d.date} className="flex-1 flex flex-col items-center gap-0.5" title={`${d.date}: ${d.rate}%`}>
+                  <div className="w-full flex flex-col-reverse" style={{ height: `${height}%`, minHeight: '2px' }}>
+                    <div className="bg-green-500/70 rounded-t" style={{ height: `${positiveHeight}%` }} />
+                    <div className="bg-red-300/70" style={{ height: `${height - positiveHeight}%` }} />
+                  </div>
+                  <span className="text-[9px] text-muted-foreground">{d.date.slice(5)}</span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* AI Feedback by Feature */}
+      {data?.ai_feedback.by_feature && data.ai_feedback.by_feature.length > 0 && (
+        <div className="p-4 border border-border rounded-lg bg-card">
+          <h3 className="font-semibold mb-4 flex items-center gap-2">
+            <Star className="h-4 w-4" />
+            {t('admin.aiFeedbackByFeature')}
+          </h3>
+          <div className="space-y-3">
+            {data.ai_feedback.by_feature.map((item) => (
+              <div key={item.feature} className="flex items-center gap-3">
+                <span className="text-sm font-medium w-28 truncate">{item.feature}</span>
+                <div className="flex gap-0.5">
+                  {[1, 2, 3, 4, 5].map((s) => (
+                    <Star
+                      key={s}
+                      className={cn(
+                        'h-4 w-4',
+                        s <= Math.round(item.avg_rating)
+                          ? 'text-yellow-400 fill-yellow-400'
+                          : 'text-gray-200'
+                      )}
+                    />
+                  ))}
+                </div>
+                <span className="text-sm text-muted-foreground">
+                  {item.avg_rating.toFixed(1)} ({item.count})
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* AI Feedback by Model */}
+      {data?.ai_feedback.by_model && data.ai_feedback.by_model.length > 0 && (
+        <div className="p-4 border border-border rounded-lg bg-card">
+          <h3 className="font-semibold mb-4">{t('admin.aiFeedbackByModel')}</h3>
+          <div className="space-y-2">
+            {data.ai_feedback.by_model.map((item) => (
+              <div key={item.model} className="flex items-center gap-3">
+                <span className="text-sm font-mono w-40 truncate">{item.model}</span>
+                <div className="flex-1 h-4 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-yellow-400 rounded-full"
+                    style={{ width: `${(item.avg_rating / 5) * 100}%` }}
+                  />
+                </div>
+                <span className="text-sm text-muted-foreground w-20 text-right">
+                  {item.avg_rating.toFixed(1)} ({item.count})
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Optimization Recommendations */}
+      {optimization && optimization.recommendations.length > 0 && (
+        <div className="p-4 border border-border rounded-lg bg-card">
+          <h3 className="font-semibold mb-4">{t('admin.optimizationRecommendations')}</h3>
+          <p className="text-xs text-muted-foreground mb-3">
+            {t('admin.confidence')}: {optimization.confidence}
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="text-left px-3 py-2">{t('admin.searchType')}</th>
+                  <th className="text-right px-3 py-2">{t('admin.positiveRate')}</th>
+                  <th className="text-right px-3 py-2">{t('admin.sampleSize')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {optimization.recommendations.map((r) => (
+                  <tr key={r.search_type} className="border-b border-border last:border-0">
+                    <td className="px-3 py-2 font-mono text-xs">{r.search_type}</td>
+                    <td className="px-3 py-2 text-right">{r.positive_rate}%</td>
+                    <td className="px-3 py-2 text-right">{r.sample_size}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Empty state */}
+      {data?.search_feedback.total === 0 && data?.ai_feedback.by_feature.length === 0 && (
+        <div className="text-center py-12 text-muted-foreground">
+          <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-50" />
+          <p>{t('admin.noFeedbackData')}</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Evaluation Tab
+// ---------------------------------------------------------------------------
+
+function EvaluationTab() {
+  const { t } = useTranslation()
+  const [selectedRunId, setSelectedRunId] = useState<number | null>(null)
+  const [taskType, setTaskType] = useState<string>('qa')
+  const [testCount, setTestCount] = useState<number>(10)
+  const [selectedModels, setSelectedModels] = useState<string[]>([])
+
+  const { data: runs, isLoading: runsLoading } = useQuery({
+    queryKey: ['admin', 'evaluation', 'list'],
+    queryFn: () => apiClient.get<{ runs: Array<{
+      id: number; status: string; task_type: string; models: string[];
+      test_count: number; progress: number; triggered_by: string | null;
+      created_at: string | null; completed_at: string | null; winner: string | null
+    }>; total: number }>('/admin/evaluation/list'),
+  })
+
+  const { data: providers } = useQuery({
+    queryKey: ['admin', 'providers'],
+    queryFn: () => apiClient.get<{ providers: Array<{ name: string; models: Array<{ id: string }> }> }>('/admin/providers'),
+  })
+
+  const allModels = providers?.providers.flatMap((p) => p.models.map((m) => m.id)) ?? []
+
+  const { data: selectedRun } = useQuery({
+    queryKey: ['admin', 'evaluation', selectedRunId],
+    queryFn: () => apiClient.get<{
+      id: number; status: string; task_type: string; models: string[];
+      test_count: number; progress: number; results: {
+        winner: string | null; summary: string;
+        models: Record<string, Record<string, number>>; metrics: string[]
+      } | null; error: string | null; triggered_by: string | null;
+      created_at: string | null; completed_at: string | null
+    }>(`/admin/evaluation/${selectedRunId}`),
+    enabled: selectedRunId !== null,
+    refetchInterval: (query) => {
+      const data = query.state.data
+      if (data && (data.status === 'running' || data.status === 'pending')) return 3000
+      return false
+    },
+  })
+
+  const startMutation = useMutation({
+    mutationFn: (payload: { task_type: string; models: string[]; test_count: number }) =>
+      apiClient.post<{ run_id: number }>('/admin/evaluation/run', payload),
+    onSuccess: (data) => {
+      setSelectedRunId(data.run_id)
+    },
+  })
+
+  const handleStart = () => {
+    if (selectedModels.length < 1) return
+    startMutation.mutate({ task_type: taskType, models: selectedModels, test_count: testCount })
+  }
+
+  const toggleModel = (modelId: string) => {
+    setSelectedModels((prev) =>
+      prev.includes(modelId) ? prev.filter((m) => m !== modelId) : [...prev, modelId]
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Run Configuration */}
+      <div className="p-4 border border-border rounded-lg bg-card">
+        <h3 className="font-semibold mb-4 flex items-center gap-2">
+          <FlaskConical className="h-4 w-4" />
+          {t('admin.runEvaluation')}
+        </h3>
+
+        <div className="space-y-4">
+          {/* Task Type */}
+          <div>
+            <label className="text-sm font-medium block mb-1">{t('admin.taskType')}</label>
+            <div className="flex gap-2">
+              {['qa', 'search'].map((tt) => (
+                <button
+                  key={tt}
+                  onClick={() => setTaskType(tt)}
+                  className={cn(
+                    'px-3 py-1.5 text-sm rounded-md transition-colors',
+                    taskType === tt
+                      ? 'bg-primary text-primary-foreground'
+                      : 'border border-input hover:bg-muted'
+                  )}
+                >
+                  {tt.toUpperCase()}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Test Count */}
+          <div>
+            <label className="text-sm font-medium block mb-1">{t('admin.testCount')}</label>
+            <input
+              type="number"
+              min={1}
+              max={50}
+              value={testCount}
+              onChange={(e) => setTestCount(Number(e.target.value))}
+              className="w-24 px-3 py-1.5 text-sm border border-input rounded-md bg-background"
+            />
+          </div>
+
+          {/* Model Selection */}
+          <div>
+            <label className="text-sm font-medium block mb-1">{t('admin.selectModels')}</label>
+            <div className="flex flex-wrap gap-2">
+              {allModels.map((model) => (
+                <button
+                  key={model}
+                  onClick={() => toggleModel(model)}
+                  className={cn(
+                    'px-2.5 py-1 text-xs rounded-md transition-colors border',
+                    selectedModels.includes(model)
+                      ? 'bg-primary/10 border-primary/30 text-primary'
+                      : 'border-input hover:bg-muted text-muted-foreground'
+                  )}
+                >
+                  {model}
+                </button>
+              ))}
+              {allModels.length === 0 && (
+                <p className="text-sm text-muted-foreground">{t('admin.noProviders')}</p>
+              )}
+            </div>
+          </div>
+
+          {/* Start Button */}
+          <button
+            onClick={handleStart}
+            disabled={selectedModels.length < 1 || startMutation.isPending}
+            className={cn(
+              'flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium',
+              'bg-primary text-primary-foreground hover:bg-primary/90 transition-colors',
+              'disabled:opacity-50 disabled:cursor-not-allowed'
+            )}
+          >
+            {startMutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <FlaskConical className="h-4 w-4" />
+            )}
+            {t('admin.startEvaluation')}
+          </button>
+        </div>
+      </div>
+
+      {/* Selected Run Progress/Results */}
+      {selectedRun && (
+        <div className="p-4 border border-border rounded-lg bg-card">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold">
+              {t('admin.evaluationRun')} #{selectedRun.id}
+            </h3>
+            <span className={cn(
+              'text-xs px-2 py-1 rounded-full',
+              selectedRun.status === 'completed' && 'bg-green-100 text-green-700',
+              selectedRun.status === 'running' && 'bg-blue-100 text-blue-700',
+              selectedRun.status === 'pending' && 'bg-yellow-100 text-yellow-700',
+              selectedRun.status === 'failed' && 'bg-red-100 text-red-700',
+            )}>
+              {selectedRun.status}
+            </span>
+          </div>
+
+          {/* Progress Bar */}
+          {(selectedRun.status === 'running' || selectedRun.status === 'pending') && (
+            <div className="mb-4">
+              <div className="flex items-center justify-between text-sm mb-1">
+                <span className="text-muted-foreground">{t('admin.progress')}</span>
+                <span>{selectedRun.progress}%</span>
+              </div>
+              <div className="h-2 bg-muted rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-primary rounded-full transition-all"
+                  style={{ width: `${selectedRun.progress}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Error */}
+          {selectedRun.error && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-700 mb-4">
+              {selectedRun.error}
+            </div>
+          )}
+
+          {/* Results */}
+          {selectedRun.results && (
+            <div className="space-y-4">
+              <div className="p-3 bg-green-50 border border-green-200 rounded-md">
+                <p className="text-sm font-medium text-green-700">{selectedRun.results.summary}</p>
+              </div>
+
+              {/* Model Comparison Bar Charts */}
+              {selectedRun.results.models && selectedRun.results.metrics && (
+                <div className="space-y-3">
+                  {selectedRun.results.metrics.map((metric) => (
+                    <div key={metric}>
+                      <p className="text-sm font-medium mb-1">{metric}</p>
+                      <div className="space-y-1">
+                        {Object.entries(selectedRun.results!.models).map(([model, scores]) => (
+                          <div key={model} className="flex items-center gap-2">
+                            <span className="text-xs font-mono w-40 truncate">{model}</span>
+                            <div className="flex-1 h-5 bg-muted rounded-full overflow-hidden">
+                              <div
+                                className={cn(
+                                  'h-full rounded-full',
+                                  model === selectedRun.results?.winner
+                                    ? 'bg-green-500'
+                                    : 'bg-primary/60'
+                                )}
+                                style={{ width: `${((scores as Record<string, number>)[metric] ?? 0) * 100}%` }}
+                              />
+                            </div>
+                            <span className="text-xs w-12 text-right">
+                              {((scores as Record<string, number>)[metric] ?? 0).toFixed(3)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* History */}
+      <div className="border border-border rounded-lg bg-card">
+        <div className="px-4 py-3 bg-muted/50 border-b border-border">
+          <h3 className="font-semibold">{t('admin.evaluationHistory')}</h3>
+        </div>
+        {runsLoading ? (
+          <div className="p-6 flex justify-center">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : !runs?.runs.length ? (
+          <div className="p-6 text-center text-sm text-muted-foreground">
+            <FlaskConical className="h-8 w-8 mx-auto mb-2 opacity-30" />
+            {t('admin.noEvaluationRuns')}
+          </div>
+        ) : (
+          <div className="divide-y divide-border">
+            {runs.runs.map((run) => (
+              <div
+                key={run.id}
+                onClick={() => setSelectedRunId(run.id)}
+                className={cn(
+                  'flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-muted/20',
+                  selectedRunId === run.id && 'bg-primary/5'
+                )}
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <FlaskConical className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">
+                      #{run.id} &middot; {run.task_type.toUpperCase()} &middot; {run.models.length} {t('admin.availableModels').toLowerCase()}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {run.created_at ? new Date(run.created_at).toLocaleString() : ''}
+                      {run.winner && ` · Winner: ${run.winner}`}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {run.status === 'running' && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                  <span className={cn(
+                    'text-xs px-2 py-0.5 rounded-full',
+                    run.status === 'completed' && 'bg-green-100 text-green-700',
+                    run.status === 'running' && 'bg-blue-100 text-blue-700',
+                    run.status === 'pending' && 'bg-yellow-100 text-yellow-700',
+                    run.status === 'failed' && 'bg-red-100 text-red-700',
+                  )}>
+                    {run.progress}%
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

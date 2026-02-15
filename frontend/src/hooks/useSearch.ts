@@ -46,6 +46,7 @@ interface SearchResponse {
   search_type: string
   total: number
   judge_info?: JudgeInfo | null
+  search_event_id?: number | null
 }
 
 type SearchType = 'search' | 'semantic' | 'hybrid' | 'exact'

@@ -12,6 +12,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    SmallInteger,
     String,
     Text,
     UniqueConstraint,
@@ -444,3 +445,84 @@ class GraphInsight(Base):
         Index("idx_graph_insights_org_id", "org_id"),
         Index("idx_graph_insights_created_at", "created_at"),
     )
+
+
+class SearchEvent(Base):
+    """Log every search query for metrics and quality tracking."""
+
+    __tablename__ = "search_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    query: Mapped[str] = mapped_column(String(500), nullable=False)
+    search_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    result_count: Mapped[int] = mapped_column(Integer, server_default="0")
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    clicked_note_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    judge_strategy: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    details: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index("idx_search_events_user_created", "user_id", "created_at"),
+        Index("idx_search_events_type_created", "search_type", "created_at"),
+    )
+
+
+class SearchFeedback(Base):
+    """Thumbs up/down feedback per search result."""
+
+    __tablename__ = "search_feedback"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    search_event_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("search_events.id", ondelete="CASCADE"), nullable=False
+    )
+    note_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    relevant: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("search_event_id", "note_id", "user_id", name="uq_search_feedback_event_note_user"),
+    )
+
+
+class AIFeedback(Base):
+    """Star rating (1-5) on AI responses."""
+
+    __tablename__ = "ai_feedback"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    feature: Mapped[str] = mapped_column(String(50), nullable=False)
+    rating: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    model_used: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    request_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    details: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint("rating >= 1 AND rating <= 5", name="ck_ai_feedback_rating_range"),
+        Index("idx_ai_feedback_feature", "feature"),
+        Index("idx_ai_feedback_created", "created_at"),
+    )
+
+
+class EvaluationRun(Base):
+    """A/B test evaluation run results."""
+
+    __tablename__ = "evaluation_runs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    status: Mapped[str] = mapped_column(String(20), server_default="pending")
+    task_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    models: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    test_count: Mapped[int] = mapped_column(Integer, server_default="10")
+    progress: Mapped[int] = mapped_column(Integer, server_default="0")
+    results: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    triggered_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
