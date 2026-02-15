@@ -650,20 +650,20 @@ function ImageSyncSection() {
           <div className="flex justify-between text-sm">
             <span>{t('settings.inProgress')}</span>
             <span className="font-medium">
-              {processedNotes.toLocaleString()} / {t('common.count_notes', { count: totalNotes.toLocaleString() })}
+              {processedNotes.toLocaleString()} / {t('common.count_notes', { count: totalNotes })}
             </span>
           </div>
           <div className="flex justify-between text-sm">
             <span>{t('settings.extractedImages')}</span>
             <span className="font-medium text-green-600">
-              {t('common.count_items', { count: imagesExtracted.toLocaleString() })}
+              {t('common.count_items', { count: imagesExtracted })}
             </span>
           </div>
           {failedNotes > 0 && (
             <div className="flex justify-between text-sm">
               <span>{t('settings.failedCount')}</span>
               <span className="font-medium text-destructive">
-                {t('common.count_items', { count: failedNotes.toLocaleString() })}
+                {t('common.count_items', { count: failedNotes })}
               </span>
             </div>
           )}
@@ -993,25 +993,25 @@ function SearchIndexSection() {
       <div className="space-y-3 mb-4">
         <div className="flex justify-between text-sm">
           <span>{t('settings.totalNotes')}</span>
-          <span className="font-medium">{t('common.count_items', { count: totalNotes.toLocaleString() })}</span>
+          <span className="font-medium">{t('common.count_items', { count: totalNotes })}</span>
         </div>
         <div className="flex justify-between text-sm">
           <span>{t('settings.indexed')}</span>
           <span className="font-medium text-green-600">
-            {t('common.count_items', { count: indexedNotes.toLocaleString() })} ({indexPercentage}%)
+            {t('common.count_items', { count: indexedNotes })} ({indexPercentage}%)
           </span>
         </div>
         <div className="flex justify-between text-sm">
           <span>{t('settings.pendingIndex')}</span>
           <span className="font-medium text-amber-600">
-            {t('common.count_items', { count: pendingNotes.toLocaleString() })}
+            {t('common.count_items', { count: pendingNotes })}
           </span>
         </div>
         {staleNotes > 0 && (
           <div className="flex justify-between text-sm">
             <span>{t('settings.staleIndex')}</span>
             <span className="font-medium text-orange-600">
-              {t('common.count_items', { count: staleNotes.toLocaleString() })}
+              {t('common.count_items', { count: staleNotes })}
             </span>
           </div>
         )}

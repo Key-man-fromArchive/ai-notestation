@@ -53,7 +53,7 @@ export default function Dashboard() {
   const { t, i18n } = useTranslation()
   const { status: syncStatus, lastSync, error: syncError, triggerSync } = useSync()
   const timezone = useTimezone()
-  const { data: rediscoveryData, isLoading: rediscoveryLoading, refresh: refreshRediscovery } = useRediscovery()
+  const { data: rediscoveryData, refresh: refreshRediscovery } = useRediscovery()
   const { stats: imageStats } = useImageAnalysisStats()
 
   const { data, isLoading } = useQuery<NotesResponse>({

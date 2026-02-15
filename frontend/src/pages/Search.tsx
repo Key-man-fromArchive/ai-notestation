@@ -13,7 +13,7 @@ import { SearchBar } from '@/components/SearchBar'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
 import { EmptyState } from '@/components/EmptyState'
 import { useSearchIndex } from '@/hooks/useSearchIndex'
-import { Search as SearchIcon, FileText, AlertCircle, Loader2, Filter, X, Sparkles, TextSearch, Calendar, Zap, Brain, Layers, Wand2, ArrowRight, Expand, Target, Link2, RotateCcw } from 'lucide-react'
+import { Search as SearchIcon, FileText, AlertCircle, Loader2, Filter, X, Sparkles, TextSearch, Calendar, Zap, Layers, Wand2, ArrowRight, Expand, Target, Link2, RotateCcw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useTimezone } from '@/hooks/useTimezone'
 

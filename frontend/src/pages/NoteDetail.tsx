@@ -93,7 +93,7 @@ export default function NoteDetail() {
   const handleExtractPdf = async (fileId: string) => {
     setExtractingFileId(fileId)
     try {
-      await apiClient.post(`/files/${fileId}/extract`)
+      await apiClient.post(`/files/${fileId}/extract`, {})
       const poll = setInterval(async () => {
         try {
           const result = await apiClient.get<{ extraction_status: string; page_count: number; text: string }>(`/files/${fileId}/text`)
@@ -124,7 +124,7 @@ export default function NoteDetail() {
   const handleExtractImage = async (imageId: number) => {
     setOcrQueue(prev => new Set(prev).add(imageId))
     try {
-      await apiClient.post(`/images/${imageId}/extract`)
+      await apiClient.post(`/images/${imageId}/extract`, {})
       const poll = setInterval(async () => {
         try {
           const result = await apiClient.get<{ extraction_status: string; text: string }>(`/images/${imageId}/text`)
@@ -146,7 +146,7 @@ export default function NoteDetail() {
   const handleVisionImage = async (imageId: number) => {
     setVisionQueue(prev => new Set(prev).add(imageId))
     try {
-      const res = await apiClient.post<{ status: string }>(`/images/${imageId}/vision`)
+      const res = await apiClient.post<{ status: string }>(`/images/${imageId}/vision`, {})
       if (res.status === 'already_completed') {
         setVisionQueue(prev => { const next = new Set(prev); next.delete(imageId); return next })
         queryClient.invalidateQueries({ queryKey: ['note', id] })
@@ -195,7 +195,7 @@ export default function NoteDetail() {
     setExtractingNasImage(key)
     try {
       const res = await apiClient.post<{ image_id: number; status: string }>(
-        `/nas-images/${noteId}/${attKey}/${filename}/ocr`
+        `/nas-images/${noteId}/${attKey}/${filename}/ocr`, {}
       )
       if (res.status === 'already_completed') {
         // Image already has OCR, refresh note to show it
@@ -877,13 +877,13 @@ export default function NoteDetail() {
 
                     {/* Extraction status icon */}
                     {canExtract && status === 'completed' && (
-                      <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-green-600" title={isPdf ? t('files.viewExtractedText') : t('ocr.viewExtractedText')} />
+                      <span title={isPdf ? t('files.viewExtractedText') : t('ocr.viewExtractedText')}><CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-green-600" /></span>
                     )}
                     {canExtract && status === 'pending' && (
-                      <Loader2 className="h-3.5 w-3.5 shrink-0 text-amber-600 animate-spin" title={isPdf ? t('files.extracting') : t('ocr.extracting')} />
+                      <span title={isPdf ? t('files.extracting') : t('ocr.extracting')}><Loader2 className="h-3.5 w-3.5 shrink-0 text-amber-600 animate-spin" /></span>
                     )}
                     {canExtract && status === 'failed' && (
-                      <AlertCircle className="h-3.5 w-3.5 shrink-0 text-destructive" title={isPdf ? t('files.extractionFailed') : t('ocr.extractionFailed')} />
+                      <span title={isPdf ? t('files.extractionFailed') : t('ocr.extractionFailed')}><AlertCircle className="h-3.5 w-3.5 shrink-0 text-destructive" /></span>
                     )}
 
                     <button
@@ -933,26 +933,26 @@ export default function NoteDetail() {
                     <span className="ml-auto flex items-center gap-1">
                       {/* OCR status */}
                       {imgStatus === 'completed' && (
-                        <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-green-600" title={t('ocr.viewExtractedText')} />
+                        <span title={t('ocr.viewExtractedText')}><CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-green-600" /></span>
                       )}
                       {imgStatus === 'empty' && (
-                        <ScanText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" title={t('ocr.noTextFound')} />
+                        <span title={t('ocr.noTextFound')}><ScanText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" /></span>
                       )}
                       {imgStatus === 'pending' && (
-                        <Loader2 className="h-3.5 w-3.5 shrink-0 text-amber-600 animate-spin" title={t('ocr.extracting')} />
+                        <span title={t('ocr.extracting')}><Loader2 className="h-3.5 w-3.5 shrink-0 text-amber-600 animate-spin" /></span>
                       )}
                       {imgStatus === 'failed' && (
-                        <AlertCircle className="h-3.5 w-3.5 shrink-0 text-destructive" title={t('ocr.extractionFailed')} />
+                        <span title={t('ocr.extractionFailed')}><AlertCircle className="h-3.5 w-3.5 shrink-0 text-destructive" /></span>
                       )}
                       {/* Vision status */}
                       {vStatus === 'completed' && (
-                        <Sparkles className="h-3.5 w-3.5 shrink-0 text-blue-600" title={t('vision.viewDescription')} />
+                        <span title={t('vision.viewDescription')}><Sparkles className="h-3.5 w-3.5 shrink-0 text-blue-600" /></span>
                       )}
                       {vStatus === 'pending' && (
-                        <Loader2 className="h-3.5 w-3.5 shrink-0 text-blue-400 animate-spin" title={t('vision.analyzing')} />
+                        <span title={t('vision.analyzing')}><Loader2 className="h-3.5 w-3.5 shrink-0 text-blue-400 animate-spin" /></span>
                       )}
                       {vStatus === 'failed' && (
-                        <AlertCircle className="h-3.5 w-3.5 shrink-0 text-orange-500" title={t('vision.failed')} />
+                        <span title={t('vision.failed')}><AlertCircle className="h-3.5 w-3.5 shrink-0 text-orange-500" /></span>
                       )}
                     </span>
                   </div>
