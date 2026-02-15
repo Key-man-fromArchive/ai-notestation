@@ -238,7 +238,15 @@
     "noSharedUsers": "아직 공유된 사용자가 없습니다.",
     "unknown": "알 수 없음",
     "revokeAccess": "권한 삭제",
-    "notes": "노트 ({{count}}개)"
+    "notes": "노트 ({{count}}개)",
+    "categoryLabel": "카테고리",
+    "categoryNone": "미분류",
+    "category_labnote": "연구 노트",
+    "category_daily_log": "업무록",
+    "category_meeting": "회의록",
+    "category_sop": "표준 운영 절차",
+    "category_protocol": "실험 프로토콜",
+    "category_reference": "참고 자료"
   },
   "search": {
     "title": "노트 검색",

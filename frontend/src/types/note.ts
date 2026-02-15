@@ -91,10 +91,13 @@ export interface LegacyNotebook {
 /**
  * 노트북 정보 (new entity-based)
  */
+export type NotebookCategory = 'labnote' | 'daily_log' | 'meeting' | 'sop' | 'protocol' | 'reference'
+
 export interface Notebook {
   id: number
   name: string
   description: string | null
+  category: NotebookCategory | null
   note_count: number
   is_public: boolean
   created_at: string

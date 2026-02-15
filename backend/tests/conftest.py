@@ -9,12 +9,28 @@ import sqlalchemy
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-# Set test environment variables before importing app modules
-os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://labnote:labnote@db:5432/labnote_test")
+# SAFETY: Force test database URL to prevent accidental production DB wipe.
+# NEVER use setdefault — it's a no-op when DATABASE_URL is already set (e.g. in Docker).
+TEST_DATABASE_URL = "postgresql+asyncpg://labnote:labnote@db:5432/labnote_test"
+os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 os.environ.setdefault("JWT_SECRET", "test-secret-key-for-testing-only")
 os.environ.setdefault("SYNOLOGY_URL", "http://localhost:5000")
 os.environ.setdefault("SYNOLOGY_USER", "testuser")
 os.environ.setdefault("SYNOLOGY_PASSWORD", "testpassword")
+
+
+def _assert_test_database(url: str) -> None:
+    """Raise if the database URL does not point to a test database.
+
+    This is a safety guard to prevent DROP SCHEMA on production.
+    """
+    if "_test" not in url and url != TEST_DATABASE_URL:
+        raise RuntimeError(
+            f"REFUSING to run tests: DATABASE_URL does not look like a test database.\n"
+            f"  URL: {url}\n"
+            f"  Expected '_test' in the database name.\n"
+            f"  This safety check prevents accidental production data loss."
+        )
 
 
 @pytest.fixture(scope="session")
@@ -32,8 +48,11 @@ async def test_db() -> AsyncGenerator[AsyncSession, None]:
     from app.database import Base
     import app.models  # noqa: F401 - Import to register models with Base
 
+    db_url = os.environ["DATABASE_URL"]
+    _assert_test_database(db_url)
+
     engine = create_async_engine(
-        os.environ["DATABASE_URL"],
+        db_url,
         echo=False,
         pool_pre_ping=True,
     )
@@ -68,8 +87,11 @@ async def async_session() -> AsyncGenerator[AsyncSession, None]:
     from app.database import Base
     import app.models  # noqa: F401 - Import to register models with Base
 
+    db_url = os.environ["DATABASE_URL"]
+    _assert_test_database(db_url)
+
     engine = create_async_engine(
-        os.environ["DATABASE_URL"],
+        db_url,
         echo=False,
         pool_pre_ping=True,
     )

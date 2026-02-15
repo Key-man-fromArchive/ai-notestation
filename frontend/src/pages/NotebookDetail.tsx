@@ -17,6 +17,9 @@ import {
   Network,
 } from 'lucide-react'
 import { useNotebook, useUpdateNotebook, useDeleteNotebook } from '@/hooks/useNotebooks'
+import type { NotebookCategory } from '@/types/note'
+
+const CATEGORY_OPTIONS: (NotebookCategory | '')[] = ['', 'labnote', 'daily_log', 'meeting', 'sop', 'protocol', 'reference']
 import { useNotebookAccess } from '@/hooks/useNotebookAccess'
 import { ShareDialog } from '@/components/ShareDialog'
 import { useNotes } from '@/hooks/useNotes'
@@ -48,16 +51,21 @@ function EditModal({
   notebookId,
   initialName,
   initialDescription,
+  initialCategory,
 }: {
   isOpen: boolean
   onClose: () => void
   notebookId: number
   initialName: string
   initialDescription: string | null
+  initialCategory: string | null
 }) {
   const { t } = useTranslation()
   const [name, setName] = useState(initialName)
   const [description, setDescription] = useState(initialDescription ?? '')
+  const [category, setCategory] = useState<NotebookCategory | ''>(
+    (initialCategory as NotebookCategory) ?? ''
+  )
   const { mutateAsync: updateNotebook, isPending } = useUpdateNotebook()
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -67,7 +75,11 @@ function EditModal({
     try {
       await updateNotebook({
         id: notebookId,
-        data: { name: name.trim(), description: description.trim() || undefined },
+        data: {
+          name: name.trim(),
+          description: description.trim() || undefined,
+          category: category || null,
+        },
       })
       onClose()
     } catch {
@@ -110,6 +122,21 @@ function EditModal({
                 className="w-full mt-1 px-3 py-2 rounded-md border border-input bg-background resize-none focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 rows={3}
               />
+            </div>
+            <div>
+              <label htmlFor="edit-category" className="text-sm font-medium">{t('notebooks.categoryLabel')}</label>
+              <select
+                id="edit-category"
+                value={category}
+                onChange={e => setCategory(e.target.value as NotebookCategory | '')}
+                className="w-full mt-1 px-3 py-2 rounded-md border border-input bg-background focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {CATEGORY_OPTIONS.map(cat => (
+                  <option key={cat || '__none'} value={cat}>
+                    {cat ? t(`notebooks.category_${cat}`) : t('notebooks.categoryNone')}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
           <div className="mt-6 flex justify-end gap-3">
@@ -384,6 +411,7 @@ export default function NotebookDetail() {
         notebookId={notebookId}
         initialName={notebook.name}
         initialDescription={notebook.description}
+        initialCategory={notebook.category}
       />
 
       <ShareDialog

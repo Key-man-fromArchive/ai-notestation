@@ -24,7 +24,9 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Note
+from app.constants import NotePermission
+from app.models import Note, Notebook
+from app.services.notebook_access_control import grant_notebook_access
 from app.synology_gateway.notestation import NoteStationService
 
 logger = logging.getLogger(__name__)
@@ -60,10 +62,12 @@ class SyncService:
         notestation: NoteStationService,
         db: AsyncSession,
         write_enabled: bool = False,
+        user_id: int | None = None,
     ) -> None:
         self._notestation = notestation
         self._db = db
         self._write_enabled = write_enabled
+        self._user_id = user_id
 
     # ------------------------------------------------------------------
     # Public API
@@ -85,9 +89,12 @@ class SyncService:
             # Step 1: Push local changes to NoteStation
             pushed = await self._push_local_changes()
 
+            # Step 1.5: Sync notebooks (NAS → DB)
+            notebook_map = await self._fetch_notebook_map()
+            notebook_db_map = await self._sync_notebooks(notebook_map)
+
             # Step 2: Fetch all remote notes (list – summary only)
             remote_notes = await self._fetch_all_notes()
-            notebook_map = await self._fetch_notebook_map()
             existing = await self._get_existing_notes()
 
             remote_ids: set[str] = set()
@@ -109,7 +116,7 @@ class SyncService:
                         detail = note_summary
 
                     merged = _merge_note_data(note_summary, detail, notebook_map)
-                    new_note = self._note_to_model(merged, synced_at=now)
+                    new_note = self._note_to_model(merged, synced_at=now, notebook_db_map=notebook_db_map)
                     self._db.add(new_note)
                     added += 1
                     continue
@@ -148,7 +155,7 @@ class SyncService:
                         detail = note_summary
 
                     merged = _merge_note_data(note_summary, detail, notebook_map)
-                    self._update_note(db_note, merged, synced_at=now)
+                    self._update_note(db_note, merged, synced_at=now, notebook_db_map=notebook_db_map)
                     updated += 1
 
                 else:
@@ -256,7 +263,14 @@ class SyncService:
                     is_new_note = True
 
                 if is_new_note:
-                    parent_id = name_to_id.get(note.notebook_name)
+                    # Prefer Notebook.synology_id for stable NAS parent_id resolution
+                    parent_id = None
+                    if note.notebook_id:
+                        notebook = await self._db.get(Notebook, note.notebook_id)
+                        if notebook and notebook.synology_id:
+                            parent_id = notebook.synology_id
+                    if not parent_id:
+                        parent_id = name_to_id.get(note.notebook_name)
                     if not parent_id:
                         logger.warning(
                             "Cannot create note %s: notebook '%s' not found on NAS",
@@ -313,6 +327,90 @@ class SyncService:
             await self._db.flush()
 
         return pushed
+
+    # ------------------------------------------------------------------
+    # Notebook sync
+    # ------------------------------------------------------------------
+
+    async def _sync_notebooks(self, notebook_map: dict[str, str]) -> dict[str, int]:
+        """Sync NAS notebooks to the local DB.
+
+        Args:
+            notebook_map: Mapping of NAS object_id -> notebook title.
+
+        Returns:
+            Mapping of NAS object_id -> local notebooks.id.
+        """
+        if not notebook_map:
+            return {}
+
+        # Load existing notebooks with synology_id set
+        stmt = select(Notebook).where(Notebook.synology_id.isnot(None))
+        result = await self._db.execute(stmt)
+        by_synology_id: dict[str, Notebook] = {
+            nb.synology_id: nb for nb in result.scalars().all()
+        }
+
+        # Load all notebooks by name (for migration path: synology_id not yet set)
+        stmt = select(Notebook)
+        result = await self._db.execute(stmt)
+        by_name: dict[str, Notebook] = {
+            nb.name: nb for nb in result.scalars().all()
+        }
+
+        db_map: dict[str, int] = {}
+        created = 0
+        updated = 0
+
+        for nas_id, title in notebook_map.items():
+            nb: Notebook | None = None
+
+            # 1. Match by synology_id (stable)
+            if nas_id in by_synology_id:
+                nb = by_synology_id[nas_id]
+                # Detect NAS-side rename
+                if nb.name != title:
+                    logger.info("Notebook renamed on NAS: '%s' → '%s'", nb.name, title)
+                    nb.name = title
+                    updated += 1
+
+            # 2. Fallback: match by name (migration path)
+            elif title in by_name:
+                nb = by_name[title]
+                nb.synology_id = nas_id
+                logger.info("Linked existing notebook '%s' to NAS id %s", title, nas_id)
+                updated += 1
+
+            # 3. New notebook
+            else:
+                nb = Notebook(name=title, synology_id=nas_id)
+                self._db.add(nb)
+                await self._db.flush()
+                created += 1
+                logger.info("Created notebook '%s' (NAS id %s)", title, nas_id)
+
+            # Grant access to sync user
+            if nb and self._user_id:
+                try:
+                    await grant_notebook_access(
+                        db=self._db,
+                        notebook_id=nb.id,
+                        user_id=self._user_id,
+                        org_id=None,
+                        permission=NotePermission.ADMIN,
+                        granted_by=self._user_id,
+                    )
+                except Exception:
+                    logger.warning("Failed to grant access for notebook %s", nb.id)
+
+            if nb:
+                db_map[nas_id] = nb.id
+
+        if created or updated:
+            await self._db.flush()
+            logger.info("Notebook sync: %d created, %d updated", created, updated)
+
+        return db_map
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -402,7 +500,12 @@ class SyncService:
         notes = result.scalars().all()
         return {note.synology_note_id: note for note in notes}
 
-    def _note_to_model(self, note_data: dict, synced_at: datetime) -> Note:
+    def _note_to_model(
+        self,
+        note_data: dict,
+        synced_at: datetime,
+        notebook_db_map: dict[str, int] | None = None,
+    ) -> Note:
         """Convert a merged Synology note dict to a Note ORM model.
 
         The ``note_data`` dict is expected to have been normalised by
@@ -411,6 +514,7 @@ class SyncService:
         Args:
             note_data: Merged note dict (summary + detail).
             synced_at: The timestamp to set as ``synced_at``.
+            notebook_db_map: Optional mapping of NAS notebook id -> DB notebook id.
 
         Returns:
             A new :class:`Note` instance (not yet added to the session).
@@ -422,12 +526,19 @@ class SyncService:
         content_html = extract_data_uri_images(content_html)
         content_text = NoteStationService.extract_text(content_html)
 
+        # Resolve notebook FK
+        notebook_id = None
+        if notebook_db_map:
+            parent_id = note_data.get("parent_id", "")
+            notebook_id = notebook_db_map.get(parent_id)
+
         return Note(
             synology_note_id=str(note_data["object_id"]),
             title=note_data.get("title", ""),
             content_html=content_html,
             content_text=content_text,
             notebook_name=note_data.get("notebook_name"),
+            notebook_id=notebook_id,
             tags=note_data.get("tag"),
             is_todo=note_data.get("category") == "todo",
             is_shortcut=False,
@@ -438,13 +549,20 @@ class SyncService:
             nas_ver=note_data.get("ver"),
         )
 
-    def _update_note(self, db_note: Note, note_data: dict, synced_at: datetime) -> None:
+    def _update_note(
+        self,
+        db_note: Note,
+        note_data: dict,
+        synced_at: datetime,
+        notebook_db_map: dict[str, int] | None = None,
+    ) -> None:
         """Update an existing Note ORM model with fresh data from NoteStation.
 
         Args:
             db_note: The existing DB model to update in-place.
             note_data: Merged note dict (summary + detail).
             synced_at: The timestamp to set as ``synced_at``.
+            notebook_db_map: Optional mapping of NAS notebook id -> DB notebook id.
         """
         from app.utils.note_utils import extract_data_uri_images
 
@@ -464,6 +582,13 @@ class SyncService:
         db_note.synced_at = synced_at
         db_note.link_id = note_data.get("link_id")
         db_note.nas_ver = note_data.get("ver")
+
+        # Update notebook FK
+        if notebook_db_map:
+            parent_id = note_data.get("parent_id", "")
+            notebook_id = notebook_db_map.get(parent_id)
+            if notebook_id:
+                db_note.notebook_id = notebook_id
 
 
 # ------------------------------------------------------------------

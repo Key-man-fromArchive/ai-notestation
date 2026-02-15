@@ -184,17 +184,41 @@ def mock_notestation() -> AsyncMock:
     return ns
 
 
+def _make_mock_db_execute(notes_result: list | None = None):
+    """Create a mock execute that returns empty results for Notebook queries
+    and configurable results for Note queries.
+
+    The _sync_notebooks method issues two SELECT Notebook queries before
+    _get_existing_notes issues SELECT Note. This helper distinguishes them
+    by checking the SQL string for 'notebooks' table references.
+    """
+    _notes = notes_result if notes_result is not None else []
+
+    async def _execute(stmt, *args, **kwargs):
+        sql_str = str(stmt)
+        mock_result = MagicMock()
+        if "notebooks" in sql_str:
+            # Notebook queries return empty
+            mock_result.scalars.return_value.all.return_value = []
+        else:
+            mock_result.scalars.return_value.all.return_value = _notes
+        return mock_result
+
+    return _execute
+
+
 @pytest.fixture
 def mock_db() -> AsyncMock:
     """Provide a mocked AsyncSession."""
     db = AsyncMock()
-    # Mock execute to return a mock result
-    db.execute = AsyncMock()
+    # Default execute: empty for all queries
+    db.execute = AsyncMock(side_effect=_make_mock_db_execute())
     db.add = MagicMock()
     db.delete = AsyncMock()
     db.flush = AsyncMock()
     db.commit = AsyncMock()
     db.rollback = AsyncMock()
+    db.get = AsyncMock(return_value=None)
     return db
 
 
@@ -226,9 +250,7 @@ class TestSyncNewNotes:
         )
 
         # DB has no existing notes
-        mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = []
-        mock_db.execute.return_value = mock_result
+        mock_db.execute.side_effect = _make_mock_db_execute([])
 
         result = await sync_service.sync_all()
 
@@ -236,8 +258,11 @@ class TestSyncNewNotes:
         assert result.updated == 0
         assert result.deleted == 0
         assert result.total == 2
-        # db.add should have been called twice (once per new note)
-        assert mock_db.add.call_count == 2
+        # db.add: 2 notebooks (from SAMPLE_NOTEBOOKS) + 2 notes
+        assert mock_db.add.call_count == 4
+        # Verify the last 2 adds are Note instances
+        note_adds = [c[0][0] for c in mock_db.add.call_args_list if isinstance(c[0][0], Note)]
+        assert len(note_adds) == 2
 
     @pytest.mark.asyncio
     async def test_new_note_has_correct_fields(self, sync_service, mock_notestation, mock_db):
@@ -273,9 +298,7 @@ class TestSyncNewNotes:
             "category": "todo",
         }
 
-        mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = []
-        mock_db.execute.return_value = mock_result
+        mock_db.execute.side_effect = _make_mock_db_execute([])
 
         await sync_service.sync_all()
 
@@ -323,9 +346,7 @@ class TestSyncUpdatedNotes:
             title="Research Note #1",
             source_updated_at=datetime(2024, 1, 29, 0, 0, 0, tzinfo=UTC),
         )
-        mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = [old_note]
-        mock_db.execute.return_value = mock_result
+        mock_db.execute.side_effect = _make_mock_db_execute([old_note])
 
         result = await sync_service.sync_all()
 
@@ -362,9 +383,7 @@ class TestSyncUpdatedNotes:
             title="Research Note #1",
             source_updated_at=datetime.fromtimestamp(1706500100, tz=UTC),
         )
-        mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = [existing_note]
-        mock_db.execute.return_value = mock_result
+        mock_db.execute.side_effect = _make_mock_db_execute([existing_note])
 
         result = await sync_service.sync_all()
 
@@ -389,9 +408,7 @@ class TestSyncDeletedNotes:
 
         # DB has one note that no longer exists in Synology
         orphan_note = _make_db_note("n999", title="Deleted Note")
-        mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = [orphan_note]
-        mock_db.execute.return_value = mock_result
+        mock_db.execute.side_effect = _make_mock_db_execute([orphan_note])
 
         result = await sync_service.sync_all()
 
@@ -411,9 +428,7 @@ class TestSyncDeletedNotes:
             _make_db_note("n200"),
             _make_db_note("n300"),
         ]
-        mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = orphans
-        mock_db.execute.return_value = mock_result
+        mock_db.execute.side_effect = _make_mock_db_execute(orphans)
 
         result = await sync_service.sync_all()
 
@@ -434,9 +449,7 @@ class TestSyncedAtTimestamp:
         """SyncResult.synced_at should be a UTC datetime."""
         mock_notestation.list_notes.return_value = {"notes": [], "total": 0}
 
-        mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = []
-        mock_db.execute.return_value = mock_result
+        mock_db.execute.side_effect = _make_mock_db_execute([])
 
         result = await sync_service.sync_all()
 
@@ -473,9 +486,7 @@ class TestSyncedAtTimestamp:
             "category": "note",
         }
 
-        mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = []
-        mock_db.execute.return_value = mock_result
+        mock_db.execute.side_effect = _make_mock_db_execute([])
 
         await sync_service.sync_all()
 
@@ -521,9 +532,7 @@ class TestHtmlToPlainText:
             "category": "note",
         }
 
-        mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = []
-        mock_db.execute.return_value = mock_result
+        mock_db.execute.side_effect = _make_mock_db_execute([])
 
         await sync_service.sync_all()
 
@@ -564,9 +573,7 @@ class TestHtmlToPlainText:
             "category": "note",
         }
 
-        mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = []
-        mock_db.execute.return_value = mock_result
+        mock_db.execute.side_effect = _make_mock_db_execute([])
 
         await sync_service.sync_all()
 
@@ -648,9 +655,7 @@ class TestSyncResult:
             ),
             _make_db_note("n002", title="To Delete"),
         ]
-        mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = existing_notes
-        mock_db.execute.return_value = mock_result
+        mock_db.execute.side_effect = _make_mock_db_execute(existing_notes)
 
         result = await sync_service.sync_all()
 
@@ -673,9 +678,7 @@ class TestEmptySync:
         """No notes in Synology and no notes in DB => all zeros."""
         mock_notestation.list_notes.return_value = {"notes": [], "total": 0}
 
-        mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = []
-        mock_db.execute.return_value = mock_result
+        mock_db.execute.side_effect = _make_mock_db_execute([])
 
         result = await sync_service.sync_all()
 
@@ -708,9 +711,7 @@ class TestEmptySync:
             title="Note 1",
             source_updated_at=datetime.fromtimestamp(1706500100, tz=UTC),
         )
-        mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = [existing]
-        mock_db.execute.return_value = mock_result
+        mock_db.execute.side_effect = _make_mock_db_execute([existing])
 
         result = await sync_service.sync_all()
 
@@ -747,9 +748,7 @@ class TestErrorHandling:
         )
 
         # First execute (get existing notes) succeeds
-        mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = []
-        mock_db.execute.return_value = mock_result
+        mock_db.execute.side_effect = _make_mock_db_execute([])
 
         # flush raises an error
         mock_db.flush.side_effect = Exception("DB write error")
@@ -826,9 +825,7 @@ class TestPagination:
 
         mock_notestation.get_note.side_effect = _get_note
 
-        mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = []
-        mock_db.execute.return_value = mock_result
+        mock_db.execute.side_effect = _make_mock_db_execute([])
 
         result = await sync_service.sync_all()
 
@@ -876,9 +873,7 @@ class TestPagination:
 
         mock_notestation.get_note.side_effect = _get_note
 
-        mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = []
-        mock_db.execute.return_value = mock_result
+        mock_db.execute.side_effect = _make_mock_db_execute([])
 
         result = await sync_service.sync_all()
 
@@ -901,9 +896,7 @@ class TestCommitOnSuccess:
         """After successful sync, db.flush() should be called."""
         mock_notestation.list_notes.return_value = {"notes": [], "total": 0}
 
-        mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = []
-        mock_db.execute.return_value = mock_result
+        mock_db.execute.side_effect = _make_mock_db_execute([])
 
         await sync_service.sync_all()
 

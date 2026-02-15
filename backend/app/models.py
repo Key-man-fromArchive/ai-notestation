@@ -77,6 +77,8 @@ class Notebook(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    synology_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    category: Mapped[str | None] = mapped_column(String(50), nullable=True)
     owner_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     org_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     is_public: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -88,8 +90,11 @@ class Notebook(Base):
 
     __table_args__ = (
         UniqueConstraint("org_id", "name", name="uq_notebooks_org_name"),
+        UniqueConstraint("org_id", "synology_id", name="uq_notebooks_org_synology_id"),
         Index("idx_notebooks_owner_id", "owner_id"),
         Index("idx_notebooks_org_id", "org_id"),
+        Index("idx_notebooks_synology_id", "synology_id"),
+        Index("idx_notebooks_category", "category"),
     )
 
 

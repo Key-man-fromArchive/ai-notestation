@@ -97,6 +97,7 @@ class SyncState:
         self.conflicts_count: int | None = None
         self.write_enabled: bool | None = None
         self.triggered_by: str | None = None
+        self.user_id: int | None = None
 
 
 # Module-level singleton -- shared across requests.
@@ -114,7 +115,7 @@ class Sync2FARequiredError(Exception):
     pass
 
 
-async def _create_sync_service() -> tuple:
+async def _create_sync_service(user_id: int | None = None) -> tuple:
     from app.api.settings import get_nas_config
     from app.database import async_session_factory
     from app.services.sync_service import SyncService
@@ -142,7 +143,7 @@ async def _create_sync_service() -> tuple:
     write_enabled = await notestation.discover_write_capability()
     logger.info("NoteStation write capability: %s", write_enabled)
 
-    service = SyncService(notestation=notestation, db=session, write_enabled=write_enabled)
+    service = SyncService(notestation=notestation, db=session, write_enabled=write_enabled, user_id=user_id)
 
     return service, session, write_enabled
 
@@ -243,7 +244,7 @@ async def _run_sync_background(state: SyncState) -> None:
     await log_activity("sync", "started", triggered_by=state.triggered_by)
 
     try:
-        service, session, write_enabled = await _create_sync_service()
+        service, session, write_enabled = await _create_sync_service(user_id=state.user_id)
         state.write_enabled = write_enabled
         try:
             result = await service.sync_all()
@@ -370,6 +371,7 @@ async def trigger_sync(
         )
 
     _sync_state.triggered_by = current_user.get("username", "unknown")
+    _sync_state.user_id = current_user.get("user_id")
     background_tasks.add_task(_run_sync_background, _sync_state)
 
     return SyncTriggerResponse(

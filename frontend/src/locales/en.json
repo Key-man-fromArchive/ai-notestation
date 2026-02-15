@@ -238,7 +238,15 @@
     "noSharedUsers": "No shared users yet.",
     "unknown": "Unknown",
     "revokeAccess": "Revoke access",
-    "notes": "Notes ({{count}})"
+    "notes": "Notes ({{count}})",
+    "categoryLabel": "Category",
+    "categoryNone": "Uncategorized",
+    "category_labnote": "Lab Note",
+    "category_daily_log": "Daily Log",
+    "category_meeting": "Meeting",
+    "category_sop": "SOP",
+    "category_protocol": "Protocol",
+    "category_reference": "Reference"
   },
   "search": {
     "title": "Search Notes",

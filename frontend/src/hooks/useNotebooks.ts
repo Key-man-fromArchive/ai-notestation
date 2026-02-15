@@ -11,11 +11,13 @@ const NOTEBOOK_KEY = (id: number) => ['notebook', id]
 interface NotebookCreateRequest {
   name: string
   description?: string
+  category?: string | null
 }
 
 interface NotebookUpdateRequest {
   name?: string
   description?: string
+  category?: string | null
 }
 
 export function useNotebooks() {

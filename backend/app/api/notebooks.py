@@ -7,7 +7,7 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -28,20 +28,42 @@ from app.services.notebook_access_control import (
 router = APIRouter(prefix="/notebooks", tags=["notebooks"])
 
 
+VALID_CATEGORIES = {"labnote", "daily_log", "meeting", "sop", "protocol", "reference"}
+
+
+def _validate_category(v: str | None) -> str | None:
+    if v is not None and v not in VALID_CATEGORIES:
+        raise ValueError(f"Invalid category. Must be one of: {', '.join(sorted(VALID_CATEGORIES))}")
+    return v
+
+
 class NotebookCreate(BaseModel):
     name: str
     description: str | None = None
+    category: str | None = None
+
+    @field_validator("category")
+    @classmethod
+    def check_category(cls, v: str | None) -> str | None:
+        return _validate_category(v)
 
 
 class NotebookUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
+    category: str | None = None
+
+    @field_validator("category")
+    @classmethod
+    def check_category(cls, v: str | None) -> str | None:
+        return _validate_category(v)
 
 
 class NotebookResponse(BaseModel):
     id: int
     name: str
     description: str | None
+    category: str | None
     note_count: int
     is_public: bool
     created_at: str
@@ -80,6 +102,7 @@ async def list_notebooks(
             id=notebook.id,
             name=notebook.name,
             description=notebook.description,
+            category=notebook.category,
             note_count=note_count,
             is_public=notebook.is_public,
             created_at=notebook.created_at.isoformat(),
@@ -101,6 +124,7 @@ async def create_notebook(
     new_notebook = Notebook(
         name=notebook.name,
         description=notebook.description,
+        category=notebook.category,
     )
 
     db.add(new_notebook)
@@ -132,6 +156,7 @@ async def create_notebook(
         id=new_notebook.id,
         name=new_notebook.name,
         description=new_notebook.description,
+        category=new_notebook.category,
         note_count=note_count,
         is_public=new_notebook.is_public or False,
         created_at=new_notebook.created_at.isoformat(),
@@ -165,6 +190,7 @@ async def get_notebook(
         id=notebook.id,
         name=notebook.name,
         description=notebook.description,
+        category=notebook.category,
         note_count=note_count,
         is_public=notebook.is_public,
         created_at=notebook.created_at.isoformat(),
@@ -195,6 +221,8 @@ async def update_notebook(
         existing_notebook.name = notebook.name
     if notebook.description is not None:
         existing_notebook.description = notebook.description
+    if notebook.category is not None:
+        existing_notebook.category = notebook.category
 
     await db.commit()
     await log_activity(
@@ -212,6 +240,7 @@ async def update_notebook(
         id=existing_notebook.id,
         name=existing_notebook.name,
         description=existing_notebook.description,
+        category=existing_notebook.category,
         note_count=note_count,
         is_public=existing_notebook.is_public,
         created_at=existing_notebook.created_at.isoformat(),

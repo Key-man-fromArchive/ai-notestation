@@ -34,6 +34,7 @@ class TestListNotebooks:
             mock_notebook1.name = "Work Notes"
             mock_notebook1.description = "Work related notes"
             mock_notebook1.is_public = False
+            mock_notebook1.category = None
             mock_notebook1.created_at = datetime(2025, 1, 1, tzinfo=UTC)
             mock_notebook1.updated_at = datetime(2025, 1, 2, tzinfo=UTC)
 
@@ -42,6 +43,7 @@ class TestListNotebooks:
             mock_notebook2.name = "Personal"
             mock_notebook2.description = None
             mock_notebook2.is_public = True
+            mock_notebook2.category = None
             mock_notebook2.created_at = datetime(2025, 1, 3, tzinfo=UTC)
             mock_notebook2.updated_at = datetime(2025, 1, 4, tzinfo=UTC)
 
@@ -103,6 +105,7 @@ class TestCreateNotebook:
         mock_notebook.name = "New Notebook"
         mock_notebook.description = "Test description"
         mock_notebook.is_public = False
+        mock_notebook.category = None
         mock_notebook.created_at = datetime(2025, 2, 7, tzinfo=UTC)
         mock_notebook.updated_at = datetime(2025, 2, 7, tzinfo=UTC)
 
@@ -122,6 +125,7 @@ class TestCreateNotebook:
             def add_side_effect(obj):
                 obj.id = 300
                 obj.is_public = False
+                obj.category = None
                 obj.created_at = datetime(2025, 2, 7, tzinfo=UTC)
                 obj.updated_at = datetime(2025, 2, 7, tzinfo=UTC)
 
@@ -166,6 +170,7 @@ class TestCreateNotebook:
                 obj.id = 400
                 obj.description = None
                 obj.is_public = False
+                obj.category = None
                 obj.created_at = datetime(2025, 2, 7, tzinfo=UTC)
                 obj.updated_at = datetime(2025, 2, 7, tzinfo=UTC)
 
@@ -199,6 +204,7 @@ class TestGetNotebook:
             mock_notebook.name = "Test Notebook"
             mock_notebook.description = "Test"
             mock_notebook.is_public = False
+            mock_notebook.category = None
             mock_notebook.created_at = datetime(2025, 1, 1, tzinfo=UTC)
             mock_notebook.updated_at = datetime(2025, 1, 2, tzinfo=UTC)
 
@@ -279,6 +285,7 @@ class TestUpdateNotebook:
             mock_notebook.name = "Old Name"
             mock_notebook.description = "Old description"
             mock_notebook.is_public = False
+            mock_notebook.category = None
             mock_notebook.created_at = datetime(2025, 1, 1, tzinfo=UTC)
             mock_notebook.updated_at = datetime(2025, 1, 2, tzinfo=UTC)
 
@@ -340,6 +347,7 @@ class TestUpdateNotebook:
             mock_notebook.name = "Old Name"
             mock_notebook.description = "Keep this"
             mock_notebook.is_public = False
+            mock_notebook.category = None
             mock_notebook.created_at = datetime(2025, 1, 1, tzinfo=UTC)
             mock_notebook.updated_at = datetime(2025, 1, 2, tzinfo=UTC)
 
