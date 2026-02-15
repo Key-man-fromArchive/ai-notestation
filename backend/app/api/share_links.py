@@ -14,7 +14,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models import Note, Notebook, ShareLink, User
+from app.models import Note, Notebook, ShareLink
 from app.services.activity_log import log_activity
 from app.services.auth_service import get_current_user
 from app.services.notebook_access_control import can_manage_notebook_access
@@ -80,7 +80,7 @@ def _share_link_to_response(link: ShareLink) -> ShareLinkResponse:
 async def create_notebook_share_link(
     notebook_id: int,
     data: ShareLinkCreate,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[dict, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> ShareLinkResponse:
     """Create a share link for a notebook."""
@@ -91,13 +91,13 @@ async def create_notebook_share_link(
     if not notebook:
         raise HTTPException(status_code=404, detail="Notebook not found")
 
-    if not await can_manage_notebook_access(db, current_user.id, notebook_id):
+    if not await can_manage_notebook_access(db, current_user["user_id"], notebook_id):
         raise HTTPException(status_code=403, detail="Insufficient permissions")
 
     active_count_result = await db.execute(
         select(func.count(ShareLink.id)).where(
             ShareLink.notebook_id == notebook_id,
-            ShareLink.created_by == current_user.id,
+            ShareLink.created_by == current_user["user_id"],
             ShareLink.is_active == True,  # noqa: E712
         )
     )
@@ -117,7 +117,7 @@ async def create_notebook_share_link(
         link_type=data.link_type,
         email_restriction=data.email_restriction,
         expires_at=expires_at,
-        created_by=current_user.id,
+        created_by=current_user["user_id"],
         is_active=True,
         access_count=0,
     )
@@ -129,7 +129,7 @@ async def create_notebook_share_link(
         "share_link", "completed",
         message="노트북 공유 링크 생성",
         details={"notebook_id": notebook_id, "link_type": data.link_type},
-        triggered_by=current_user.email,
+        triggered_by=current_user["email"],
     )
 
     return _share_link_to_response(share_link)
@@ -138,7 +138,7 @@ async def create_notebook_share_link(
 @router.get("/{notebook_id}/links", response_model=ShareLinksListResponse)
 async def list_notebook_share_links(
     notebook_id: int,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[dict, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> ShareLinksListResponse:
     """List all active share links for a notebook."""
@@ -147,7 +147,7 @@ async def list_notebook_share_links(
     if not notebook:
         raise HTTPException(status_code=404, detail="Notebook not found")
 
-    if not await can_manage_notebook_access(db, current_user.id, notebook_id):
+    if not await can_manage_notebook_access(db, current_user["user_id"], notebook_id):
         raise HTTPException(status_code=403, detail="Insufficient permissions")
 
     links_result = await db.execute(
@@ -168,7 +168,7 @@ async def list_notebook_share_links(
 async def revoke_share_link(
     notebook_id: int,
     link_id: int,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[dict, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> None:
     """Revoke (soft delete) a share link."""
@@ -177,7 +177,7 @@ async def revoke_share_link(
     if not notebook:
         raise HTTPException(status_code=404, detail="Notebook not found")
 
-    if not await can_manage_notebook_access(db, current_user.id, notebook_id):
+    if not await can_manage_notebook_access(db, current_user["user_id"], notebook_id):
         raise HTTPException(status_code=403, detail="Insufficient permissions")
 
     link_result = await db.execute(
@@ -197,7 +197,7 @@ async def revoke_share_link(
         "share_link", "completed",
         message="공유 링크 삭제",
         details={"notebook_id": notebook_id, "link_id": link_id},
-        triggered_by=current_user.email,
+        triggered_by=current_user["email"],
     )
 
 
@@ -208,7 +208,7 @@ note_router = APIRouter(prefix="/notes", tags=["share_links"])
 async def create_note_share_link(
     note_id: int,
     data: ShareLinkCreate,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[dict, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> ShareLinkResponse:
     """Create a share link for a note."""
@@ -219,13 +219,13 @@ async def create_note_share_link(
     if not note:
         raise HTTPException(status_code=404, detail="Note not found")
 
-    if not await can_manage_notebook_access(db, current_user.id, note.notebook_id):
+    if not await can_manage_notebook_access(db, current_user["user_id"], note.notebook_id):
         raise HTTPException(status_code=403, detail="Insufficient permissions")
 
     active_count_result = await db.execute(
         select(func.count(ShareLink.id)).where(
             ShareLink.note_id == note_id,
-            ShareLink.created_by == current_user.id,
+            ShareLink.created_by == current_user["user_id"],
             ShareLink.is_active == True,  # noqa: E712
         )
     )
@@ -245,7 +245,7 @@ async def create_note_share_link(
         link_type=data.link_type,
         email_restriction=data.email_restriction,
         expires_at=expires_at,
-        created_by=current_user.id,
+        created_by=current_user["user_id"],
         is_active=True,
         access_count=0,
     )
@@ -257,7 +257,7 @@ async def create_note_share_link(
         "share_link", "completed",
         message="노트 공유 링크 생성",
         details={"note_id": note_id, "link_type": data.link_type},
-        triggered_by=current_user.email,
+        triggered_by=current_user["email"],
     )
 
     return _share_link_to_response(share_link)
