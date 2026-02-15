@@ -771,12 +771,32 @@ async def get_note(
                 await db.commit()
                 logger.info("Extracted data URI images for note %s", note_id)
 
+        # Fetch NAS attachment metadata only when the note still has
+        # NoteStation ref="..." images (not yet rewritten to proxy URLs).
+        # After rewriting, persist the result so subsequent opens skip NAS.
+        nas_attachments: dict[str, dict] | None = None
+        if ' ref="' in raw_html and not image_map:
+            try:
+                nas_detail = await ns_service.get_note(note_id)
+                att_raw = nas_detail.get("attachment")
+                if isinstance(att_raw, dict):
+                    nas_attachments = att_raw
+            except Exception:
+                logger.debug("Could not fetch NAS attachment metadata for note %s", note_id)
+
         content = rewrite_image_urls(
             raw_html,
             note_id,
             attachment_lookup=None,
             image_map=image_map,
+            nas_attachments=nas_attachments,
         )
+
+        # Lazy-cache: persist rewritten HTML so future opens are instant
+        if nas_attachments and content != raw_html:
+            db_note.content_html = content
+            await db.commit()
+            logger.info("Cached NAS image URLs for note %s", note_id)
 
         updated_at = db_note.source_updated_at or db_note.updated_at
         created_at = db_note.source_created_at or db_note.created_at

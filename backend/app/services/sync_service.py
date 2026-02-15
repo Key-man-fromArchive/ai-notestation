@@ -519,11 +519,21 @@ class SyncService:
         Returns:
             A new :class:`Note` instance (not yet added to the session).
         """
-        from app.utils.note_utils import extract_data_uri_images
+        from app.utils.note_utils import extract_data_uri_images, rewrite_image_urls
 
+        note_id = str(note_data["object_id"])
         content_html = note_data.get("content", "")
         # Extract data URI images to local files (rehype-raw can't parse huge data URIs)
         content_html = extract_data_uri_images(content_html)
+
+        # Pre-bake NAS image proxy URLs so note opens never need a NAS call
+        att_raw = note_data.get("attachment")
+        nas_attachments = att_raw if isinstance(att_raw, dict) else None
+        if nas_attachments:
+            content_html = rewrite_image_urls(
+                content_html, note_id, nas_attachments=nas_attachments,
+            )
+
         content_text = NoteStationService.extract_text(content_html)
 
         # Resolve notebook FK
@@ -564,11 +574,20 @@ class SyncService:
             synced_at: The timestamp to set as ``synced_at``.
             notebook_db_map: Optional mapping of NAS notebook id -> DB notebook id.
         """
-        from app.utils.note_utils import extract_data_uri_images
+        from app.utils.note_utils import extract_data_uri_images, rewrite_image_urls
 
+        note_id = str(note_data.get("object_id", db_note.synology_note_id))
         content_html = note_data.get("content", "")
         # Extract data URI images to local files (rehype-raw can't parse huge data URIs)
         content_html = extract_data_uri_images(content_html)
+
+        # Pre-bake NAS image proxy URLs so note opens never need a NAS call
+        att_raw = note_data.get("attachment")
+        nas_attachments = att_raw if isinstance(att_raw, dict) else None
+        if nas_attachments:
+            content_html = rewrite_image_urls(
+                content_html, note_id, nas_attachments=nas_attachments,
+            )
 
         db_note.title = note_data.get("title", "")
         db_note.content_html = content_html
