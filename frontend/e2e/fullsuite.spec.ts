@@ -9,11 +9,18 @@ test.describe('Auth', () => {
   test('login page rejects wrong password', async ({ page }) => {
     await page.goto('/login')
 
-    await page.getByLabel(/이메일|email/i).fill('ai-note@labnote.ai')
-    await page.getByLabel(/비밀번호|password/i).fill('wrongpassword')
-    await page.getByRole('button', { name: /로그인/i }).click()
+    // Wait for page to load
+    await page.waitForLoadState('networkidle')
 
-    await expect(page.locator('.text-destructive')).toBeVisible({ timeout: 15000 })
+    // Fill in credentials using textbox role
+    await page.getByRole('textbox', { name: /email/i }).fill('ceo@invirustech.com')
+    await page.getByLabel(/password/i).fill('wrongpassword')
+
+    // Click login button
+    await page.getByRole('button', { name: /login|로그인/i }).click()
+
+    // Wait for error message to appear
+    await expect(page.getByText(/invalid email or password/i)).toBeVisible({ timeout: 10000 })
   })
 
   test('unauthenticated user is redirected to login', async ({ page }) => {
@@ -189,7 +196,7 @@ test.describe('Members Page', () => {
 
   test('current user is listed as owner', async ({ page }) => {
     await page.goto('/members')
-    await expect(page.getByText('ai-note@labnote.ai')).toBeVisible()
+    await expect(page.getByText('ceo@invirustech.com')).toBeVisible()
     await expect(page.getByText('Owner')).toBeVisible()
   })
 
@@ -238,7 +245,7 @@ test.describe('Admin Dashboard', () => {
     await page.goto('/admin')
     const main = page.locator('main')
     await main.getByRole('button', { name: /사용자/i }).click()
-    await expect(page.getByText(/ai-note@labnote.ai/i)).toBeVisible()
+    await expect(page.getByText(/ceo@invirustech.com/i)).toBeVisible()
     await expect(page.getByText(/Owner/).first()).toBeVisible()
   })
 
