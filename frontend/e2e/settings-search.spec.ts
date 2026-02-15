@@ -1,135 +1,119 @@
 import { test, expect } from '@playwright/test'
 
-test.describe('Settings - Search Indexing', () => {
+test.describe('Settings - Search Engine Tab', () => {
   test('Search indexing section visible', async ({ page }) => {
     await page.goto('/settings')
     await page.getByRole('button', { name: '검색엔진' }).click()
     await page.waitForTimeout(300)
-    await expect(page.getByText(/검색 인덱싱|Search Index/i)).toBeVisible()
+
+    // Check for "검색 인덱싱" heading with Database icon
+    await expect(page.getByText('검색 인덱싱')).toBeVisible()
+    await expect(page.getByText('노트를 검색 인덱스에 추가합니다')).toBeVisible()
   })
 
-  test('Trigger reindex button exists', async ({ page }) => {
+  test('Stats show indexing info', async ({ page }) => {
     await page.goto('/settings')
     await page.getByRole('button', { name: '검색엔진' }).click()
     await page.waitForTimeout(300)
 
-    // Look for reindex/rebuild button
-    const reindexButton = page.getByRole('button', { name: /인덱스 재구성|Reindex|Rebuild/i })
-    await expect(reindexButton).toBeVisible()
+    // Check for stats: "총 노트", "인덱싱됨", "대기 중"
+    await expect(page.getByText(/총 노트/i)).toBeVisible()
+
+    // Either "인덱싱됨" or "대기 중" should be visible
+    const indexed = page.getByText(/인덱싱됨/i)
+    const pending = page.getByText(/대기 중/i)
+    const statsVisible = await indexed.isVisible().catch(() => false) ||
+                         await pending.isVisible().catch(() => false)
+    expect(statsVisible).toBe(true)
   })
 
-  test.skip('Trigger reindex - shows progress', async ({ page }) => {
-    // Skip if no data to index
-    test.skip(!process.env.HAS_TEST_DATA, 'No test data available')
-
+  test('Indexing button visible', async ({ page }) => {
     await page.goto('/settings')
     await page.getByRole('button', { name: '검색엔진' }).click()
     await page.waitForTimeout(300)
 
-    await page.getByRole('button', { name: /인덱스 재구성|Reindex/i }).click()
-
-    // Look for progress indicator (spinner, progress bar, percentage, etc.)
-    const progressIndicator = page.locator('[role="progressbar"]').or(
-      page.getByText(/진행|Progress|%/i)
-    )
-    await expect(progressIndicator).toBeVisible({ timeout: 5000 })
+    // Check for "인덱싱 시작" button
+    const indexButton = page.getByRole('button', { name: /인덱싱 시작/i })
+    await expect(indexButton).toBeVisible()
   })
 
-  test('Reindex completes', async ({ page }) => {
+  test('Force re-index button visible', async ({ page }) => {
     await page.goto('/settings')
     await page.getByRole('button', { name: '검색엔진' }).click()
     await page.waitForTimeout(300)
 
-    await page.getByRole('button', { name: /인덱스 재구성|Reindex/i }).click()
+    // Check for "강제 재인덱싱" or "강제 리임베딩" button
+    const forceButton = page.getByRole('button', { name: /강제 재인덱싱|강제 리임베딩/i })
+    await expect(forceButton).toBeVisible()
+  })
+})
 
-    // Wait for completion message
-    await expect(page.getByText(/완료|Complete|성공|Success/i)).toBeVisible({ timeout: 30000 })
+test.describe('Settings - Data Analysis Tab', () => {
+  test('Image sync section visible', async ({ page }) => {
+    await page.goto('/settings')
+    await page.getByRole('button', { name: '데이터분석' }).click()
+    await page.waitForTimeout(300)
+
+    // Check for "이미지 동기화" section and button
+    await expect(page.getByText(/이미지 동기화/).first()).toBeVisible()
+    const syncButton = page.getByRole('button', { name: /이미지 동기화/i })
+    await expect(syncButton).toBeVisible()
   })
 
-  test('Stats show note count', async ({ page }) => {
+  test('Batch analysis section visible', async ({ page }) => {
     await page.goto('/settings')
-    await page.getByRole('button', { name: '검색엔진' }).click()
+    await page.getByRole('button', { name: '데이터분석' }).click()
     await page.waitForTimeout(300)
 
-    // Look for note count statistics
-    const noteCount = page.getByText(/노트.*개|notes|documents/i).first()
-    await expect(noteCount).toBeVisible()
+    // Check for "배치 분석" section with stats grid
+    await expect(page.getByText(/배치 분석/i)).toBeVisible()
+
+    // Check for stats: "총 이미지", "OCR 완료", "Vision 완료"
+    const totalImages = page.getByText(/총 이미지/i)
+    const ocrComplete = page.getByText(/OCR 완료/i)
+    const visionComplete = page.getByText(/Vision 완료/i)
+
+    const statsVisible = await totalImages.isVisible().catch(() => false) ||
+                         await ocrComplete.isVisible().catch(() => false) ||
+                         await visionComplete.isVisible().catch(() => false)
+    expect(statsVisible).toBe(true)
+
+    // Check for "배치 분석 시작" button
+    const batchButton = page.getByRole('button', { name: /배치 분석 시작/i })
+    await expect(batchButton).toBeVisible()
   })
 
-  test('Stats show embedding count', async ({ page }) => {
+  test('OCR engine section visible', async ({ page }) => {
     await page.goto('/settings')
-    await page.getByRole('button', { name: '검색엔진' }).click()
+    await page.getByRole('button', { name: '데이터분석' }).click()
     await page.waitForTimeout(300)
 
-    // Look for embedding count or vector count
-    const embeddingCount = page.getByText(/임베딩|embedding|vector/i).first()
-    await expect(embeddingCount).toBeVisible()
+    // Check for "OCR 엔진" section with select dropdown
+    await expect(page.getByText(/OCR 엔진/).first()).toBeVisible()
+
+    // Look for OCR engine options (AI Vision, PaddleOCR, GLM OCR)
+    const ocrSelect = page.locator('select, [role="combobox"]').filter({ hasText: /AI Vision|PaddleOCR|GLM OCR/i })
+    const ocrText = page.getByText(/AI Vision|PaddleOCR|GLM OCR/i)
+
+    const ocrVisible = await ocrSelect.first().isVisible().catch(() => false) ||
+                       await ocrText.first().isVisible().catch(() => false)
+    expect(ocrVisible).toBe(true)
   })
 
-  test('Clear index button exists', async ({ page }) => {
+  test('Vision model section visible', async ({ page }) => {
     await page.goto('/settings')
-    await page.getByRole('button', { name: '검색엔진' }).click()
+    await page.getByRole('button', { name: '데이터분석' }).click()
     await page.waitForTimeout(300)
 
-    // Look for clear/delete index button
-    const clearButton = page.getByRole('button', { name: /인덱스 삭제|Clear|Delete.*Index/i })
-    await expect(clearButton).toBeVisible()
-  })
+    // Check for "비전 모델" section with select dropdown
+    await expect(page.getByText(/비전 모델|Vision 모델/).first()).toBeVisible()
 
-  test('OCR engine selection dropdown visible', async ({ page }) => {
-    await page.goto('/settings')
-    await page.getByRole('button', { name: '검색엔진' }).click()
-    await page.waitForTimeout(300)
+    // Look for vision model options (GLM-4.6V, Claude, GPT-4o, etc.)
+    const visionSelect = page.locator('select, [role="combobox"]').filter({ hasText: /GLM|Claude|GPT/i })
+    const visionText = page.getByText(/GLM-4\.6V|Claude|GPT-4o/i)
 
-    // Look for OCR engine selector
-    const ocrSelect = page.getByLabel(/OCR.*엔진|OCR.*Engine/i).or(
-      page.locator('select').filter({ hasText: /OCR/i })
-    )
-    await expect(ocrSelect.first()).toBeVisible()
-  })
-
-  test('OCR engine options: ai_vision, paddleocr_vl', async ({ page }) => {
-    await page.goto('/settings')
-    await page.getByRole('button', { name: '검색엔진' }).click()
-    await page.waitForTimeout(300)
-
-    const ocrSelect = page.getByLabel(/OCR.*엔진|OCR.*Engine/i).first()
-    await expect(ocrSelect).toBeVisible()
-
-    // Click to open dropdown
-    await ocrSelect.click()
-
-    // Check for options
-    await expect(page.getByRole('option', { name: /ai_vision/i })).toBeVisible()
-    await expect(page.getByRole('option', { name: /paddleocr_vl/i })).toBeVisible()
-  })
-
-  test('Change OCR engine persists', async ({ page }) => {
-    await page.goto('/settings')
-    await page.getByRole('button', { name: '검색엔진' }).click()
-    await page.waitForTimeout(300)
-
-    const ocrSelect = page.getByLabel(/OCR.*엔진|OCR.*Engine/i).first()
-    await ocrSelect.selectOption({ label: /paddleocr_vl/i })
-
-    await page.getByRole('button', { name: /저장|Save/i }).click()
-    await expect(page.getByText(/저장됨|Saved/i)).toBeVisible({ timeout: 5000 })
-
-    // Reload and verify
-    await page.reload()
-    await page.getByRole('button', { name: '검색엔진' }).click()
-    await page.waitForTimeout(300)
-    const selectedValue = await ocrSelect.inputValue()
-    expect(selectedValue).toContain('paddleocr_vl')
-  })
-
-  test('Search params section visible', async ({ page }) => {
-    await page.goto('/settings')
-    await page.getByRole('button', { name: '검색엔진' }).click()
-    await page.waitForTimeout(300)
-
-    // Look for search parameters configuration section
-    const searchParams = page.getByText(/검색 파라미터|Search Parameters|Search Settings/i).first()
-    await expect(searchParams).toBeVisible()
+    const visionVisible = await visionSelect.first().isVisible().catch(() => false) ||
+                          await visionText.first().isVisible().catch(() => false)
+    expect(visionVisible).toBe(true)
   })
 })

@@ -15,7 +15,7 @@ async function checkExportFeature(page: any) {
 test.describe('단일 노트 내보내기', () => {
   let token: string
   let notebookId: number
-  let noteId: number
+  let noteId: string
   const BASE_URL = 'http://localhost:8001/api'
 
   test.beforeEach(async ({ page, request }) => {
@@ -33,7 +33,7 @@ test.describe('단일 노트 내보내기', () => {
       tags: ['테스트', '내보내기'],
       notebook_id: notebookId
     })
-    noteId = note.id
+    noteId = note.note_id
   })
 
   test.afterEach(async ({ request }) => {
@@ -194,7 +194,7 @@ test.describe('단일 노트 내보내기', () => {
       notebook_id: notebookId
     })
 
-    await page.goto(`http://localhost:3000/notes/${noteWithImageRes.id}`)
+    await page.goto(`http://localhost:3000/notes/${noteWithImageRes.note_id}`)
 
     if (!(await checkExportFeature(page))) return
 
@@ -219,7 +219,7 @@ test.describe('단일 노트 내보내기', () => {
       notebook_id: notebookId
     })
 
-    await page.goto(`http://localhost:3000/notes/${emptyNoteRes.id}`)
+    await page.goto(`http://localhost:3000/notes/${emptyNoteRes.note_id}`)
 
     if (!(await checkExportFeature(page))) return
 
@@ -278,7 +278,7 @@ test.describe('단일 노트 내보내기', () => {
       notebook_id: notebookId
     })
 
-    await page.goto(`http://localhost:3000/notes/${largeNoteRes.id}`)
+    await page.goto(`http://localhost:3000/notes/${largeNoteRes.note_id}`)
 
     if (!(await checkExportFeature(page))) return
 
