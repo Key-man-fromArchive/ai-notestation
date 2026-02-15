@@ -55,6 +55,7 @@ USER_CONTEXT_TEMPLATES: dict[str, str] = {
 def build_messages(
     note_content: str,
     additional_context: str | None = None,
+    category_context: str | None = None,
     lang: str = "ko",
 ) -> list[Message]:
     """Build message list for insight extraction.
@@ -62,6 +63,7 @@ def build_messages(
     Args:
         note_content: The research note content to analyze.
         additional_context: Optional extra context or instructions.
+        category_context: Optional category-specific AI prompt to inject.
         lang: Language for prompts ("ko" or "en"). Defaults to "ko".
 
     Returns:
@@ -73,12 +75,16 @@ def build_messages(
     if not note_content or not note_content.strip():
         raise ValueError("note_content must not be empty")
 
+    system_content = SYSTEM_PROMPTS[lang]
+    if category_context:
+        system_content += f"\n\n[카테고리 분석 지침]\n{category_context}"
+
     user_parts = [USER_PROMPT_TEMPLATES[lang].format(note_content=note_content)]
 
     if additional_context:
         user_parts.append(USER_CONTEXT_TEMPLATES[lang].format(additional_context=additional_context))
 
     return [
-        Message(role="system", content=SYSTEM_PROMPTS[lang]),
+        Message(role="system", content=system_content),
         Message(role="user", content="".join(user_parts)),
     ]

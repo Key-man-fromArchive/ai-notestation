@@ -47,6 +47,7 @@ USER_PROMPT_TEMPLATES: dict[str, str] = {
 def build_messages(
     question: str,
     context_notes: list[str],
+    category_context: str | None = None,
     lang: str = "ko",
     **kwargs: object,
 ) -> list[Message]:
@@ -55,6 +56,7 @@ def build_messages(
     Args:
         question: The user's question.
         context_notes: List of retrieved note contents as context.
+        category_context: Optional category-specific AI prompt to inject.
         lang: Language for prompts ("ko" or "en"). Defaults to "ko".
         **kwargs: Reserved for future extensions.
 
@@ -69,6 +71,10 @@ def build_messages(
     if not context_notes:
         raise ValueError("context_notes must not be empty")
 
+    system_content = SYSTEM_PROMPTS[lang]
+    if category_context:
+        system_content += f"\n\n[카테고리 분석 지침]\n{category_context}"
+
     note_label = NOTE_LABEL_TEMPLATES[lang]
     notes_section = "\n\n".join(
         f"{note_label.format(index=i + 1)}\n{note}" for i, note in enumerate(context_notes)
@@ -77,6 +83,6 @@ def build_messages(
     user_content = USER_PROMPT_TEMPLATES[lang].format(notes_section=notes_section, question=question)
 
     return [
-        Message(role="system", content=SYSTEM_PROMPTS[lang]),
+        Message(role="system", content=system_content),
         Message(role="user", content=user_content),
     ]

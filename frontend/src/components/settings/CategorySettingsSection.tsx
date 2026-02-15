@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Tag, Plus, Trash2, Save, CheckCircle, RotateCcw, Lock } from 'lucide-react'
+import { Tag, Plus, Trash2, Save, CheckCircle, RotateCcw, Lock, ChevronDown, ChevronRight, Brain } from 'lucide-react'
 import { apiClient } from '@/lib/api'
 import { useCategories, CATEGORY_PRESETS_FALLBACK } from '@/lib/categories'
 import type { CategoryPreset } from '@/lib/categories'
@@ -29,6 +29,7 @@ export function CategorySettingsSection() {
   const [localCategories, setLocalCategories] = useState<CategoryPreset[]>([])
   const [initialized, setInitialized] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [expandedIndex, setExpandedIndex] = useState<number | null>(null)
 
   useEffect(() => {
     if (!initialized && serverCategories.length > 0) {
@@ -59,8 +60,16 @@ export function CategorySettingsSection() {
   const handleAdd = () => {
     setLocalCategories(prev => [
       ...prev,
-      { value: '', ko: '', en: '', color: 'bg-gray-100 text-gray-700' },
+      { value: '', ko: '', en: '', color: 'bg-gray-100 text-gray-700', prompt: '', extraction_hints: [], search_boost_terms: [] },
     ])
+  }
+
+  const handleArrayFieldChange = (index: number, field: 'extraction_hints' | 'search_boost_terms', raw: string) => {
+    setLocalCategories(prev => {
+      const next = [...prev]
+      next[index] = { ...next[index], [field]: raw ? raw.split(',').map(s => s.trim()).filter(Boolean) : [] }
+      return next
+    })
   }
 
   const handleRemove = (index: number) => {
@@ -111,7 +120,8 @@ export function CategorySettingsSection() {
       </p>
 
       {/* Header row */}
-      <div className="grid grid-cols-[1fr_1fr_1fr_120px_36px] gap-2 mb-2 px-1">
+      <div className="grid grid-cols-[24px_1fr_1fr_1fr_120px_36px] gap-2 mb-2 px-1">
+        <span />
         <span className="text-xs font-medium text-muted-foreground">{t('settings.categoryValue')}</span>
         <span className="text-xs font-medium text-muted-foreground">{t('settings.categoryKo')}</span>
         <span className="text-xs font-medium text-muted-foreground">{t('settings.categoryEn')}</span>
@@ -124,69 +134,113 @@ export function CategorySettingsSection() {
         {localCategories.map((cat, index) => {
           const isProtected = cat.value === 'labnote'
           const error = valueErrors.get(index)
+          const isExpanded = expandedIndex === index
 
           return (
-            <div
-              key={index}
-              className={cn(
-                'grid grid-cols-[1fr_1fr_1fr_120px_36px] gap-2 items-center',
-                isProtected && 'bg-primary/5 rounded-md px-1 py-1',
-              )}
-            >
-              <div className="relative">
+            <div key={index} className={cn(isProtected && 'bg-primary/5 rounded-md px-1 py-1')}>
+              <div className="grid grid-cols-[24px_1fr_1fr_1fr_120px_36px] gap-2 items-center">
+                <button
+                  onClick={() => setExpandedIndex(isExpanded ? null : index)}
+                  className="p-0.5 rounded text-muted-foreground hover:text-foreground transition-colors"
+                  aria-label={isExpanded ? 'Collapse AI settings' : 'Expand AI settings'}
+                >
+                  {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                </button>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={cat.value}
+                    onChange={e => handleFieldChange(index, 'value', e.target.value.replace(/[^a-z0-9_]/g, ''))}
+                    disabled={isProtected}
+                    placeholder="category_id"
+                    className={cn(
+                      'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                      'focus:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                      'disabled:opacity-60 disabled:cursor-not-allowed',
+                      error ? 'border-destructive' : 'border-input',
+                    )}
+                  />
+                  {isProtected && <Lock className="absolute right-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />}
+                  {error && <p className="text-[10px] text-destructive mt-0.5">{error}</p>}
+                </div>
                 <input
                   type="text"
-                  value={cat.value}
-                  onChange={e => handleFieldChange(index, 'value', e.target.value.replace(/[^a-z0-9_]/g, ''))}
-                  disabled={isProtected}
-                  placeholder="category_id"
-                  className={cn(
-                    'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
-                    'focus:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                    'disabled:opacity-60 disabled:cursor-not-allowed',
-                    error ? 'border-destructive' : 'border-input',
-                  )}
+                  value={cat.ko}
+                  onChange={e => handleFieldChange(index, 'ko', e.target.value)}
+                  placeholder="한국어"
+                  className="w-full px-2 py-1.5 text-sm rounded-md border border-input bg-background focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 />
-                {isProtected && <Lock className="absolute right-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />}
-                {error && <p className="text-[10px] text-destructive mt-0.5">{error}</p>}
+                <input
+                  type="text"
+                  value={cat.en}
+                  onChange={e => handleFieldChange(index, 'en', e.target.value)}
+                  placeholder="English"
+                  className="w-full px-2 py-1.5 text-sm rounded-md border border-input bg-background focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                />
+                <select
+                  value={cat.color}
+                  onChange={e => handleFieldChange(index, 'color', e.target.value)}
+                  className="w-full px-2 py-1.5 text-sm rounded-md border border-input bg-background focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  {COLOR_OPTIONS.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => handleRemove(index)}
+                  disabled={isProtected}
+                  className={cn(
+                    'p-1.5 rounded-md transition-colors',
+                    isProtected
+                      ? 'text-muted-foreground/30 cursor-not-allowed'
+                      : 'text-muted-foreground hover:text-destructive hover:bg-destructive/10',
+                  )}
+                  title={isProtected ? t('settings.categoryProtected') : undefined}
+                  aria-label={`Delete ${cat.value}`}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
               </div>
-              <input
-                type="text"
-                value={cat.ko}
-                onChange={e => handleFieldChange(index, 'ko', e.target.value)}
-                placeholder="한국어"
-                className="w-full px-2 py-1.5 text-sm rounded-md border border-input bg-background focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              />
-              <input
-                type="text"
-                value={cat.en}
-                onChange={e => handleFieldChange(index, 'en', e.target.value)}
-                placeholder="English"
-                className="w-full px-2 py-1.5 text-sm rounded-md border border-input bg-background focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              />
-              <select
-                value={cat.color}
-                onChange={e => handleFieldChange(index, 'color', e.target.value)}
-                className="w-full px-2 py-1.5 text-sm rounded-md border border-input bg-background focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                {COLOR_OPTIONS.map(opt => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
-              <button
-                onClick={() => handleRemove(index)}
-                disabled={isProtected}
-                className={cn(
-                  'p-1.5 rounded-md transition-colors',
-                  isProtected
-                    ? 'text-muted-foreground/30 cursor-not-allowed'
-                    : 'text-muted-foreground hover:text-destructive hover:bg-destructive/10',
-                )}
-                title={isProtected ? t('settings.categoryProtected') : undefined}
-                aria-label={`Delete ${cat.value}`}
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
+
+              {/* Expandable AI settings panel */}
+              {isExpanded && (
+                <div className="ml-6 mt-2 mb-1 p-3 border border-input rounded-md bg-muted/30 space-y-3">
+                  <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                    <Brain className="h-3.5 w-3.5" />
+                    {t('settings.categoryAiSettings')}
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground">{t('settings.categoryPrompt')}</label>
+                    <textarea
+                      value={cat.prompt || ''}
+                      onChange={e => handleFieldChange(index, 'prompt', e.target.value)}
+                      placeholder={t('settings.categoryPromptPlaceholder')}
+                      rows={3}
+                      className="w-full mt-1 px-2 py-1.5 text-sm rounded-md border border-input bg-background focus:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-y"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground">{t('settings.categoryExtractionHints')}</label>
+                    <input
+                      type="text"
+                      value={(cat.extraction_hints || []).join(', ')}
+                      onChange={e => handleArrayFieldChange(index, 'extraction_hints', e.target.value)}
+                      placeholder={t('settings.categoryExtractionHintsPlaceholder')}
+                      className="w-full mt-1 px-2 py-1.5 text-sm rounded-md border border-input bg-background focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground">{t('settings.categorySearchBoostTerms')}</label>
+                    <input
+                      type="text"
+                      value={(cat.search_boost_terms || []).join(', ')}
+                      onChange={e => handleArrayFieldChange(index, 'search_boost_terms', e.target.value)}
+                      placeholder={t('settings.categorySearchBoostTermsPlaceholder')}
+                      className="w-full mt-1 px-2 py-1.5 text-sm rounded-md border border-input bg-background focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           )
         })}

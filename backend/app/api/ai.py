@@ -29,7 +29,7 @@ from app.ai_router.prompts import insight, search_qa, spellcheck, summarize, tem
 from app.ai_router.router import AIRouter
 from app.ai_router.schemas import AIRequest, AIResponse, Message, ModelInfo, ProviderError
 from app.database import get_db
-from app.models import Note
+from app.models import Note, Notebook
 from app.search.engine import FullTextSearchEngine
 from app.services.auth_service import get_current_user
 from app.services.oauth_service import OAuthService
@@ -274,6 +274,31 @@ def _is_quality_gate_enabled_sync() -> bool:
     return bool(store.get("quality_gate_enabled", False))
 
 
+async def _get_category_prompt(note_id: str | None, db: AsyncSession) -> str | None:
+    """Look up the category prompt for a note via its notebook.
+
+    Resolves: note_id → Note.notebook_id → Notebook.category → category prompt.
+    """
+    if not note_id:
+        return None
+
+    from sqlalchemy import select
+
+    stmt = (
+        select(Notebook.category)
+        .join(Note, Note.notebook_id == Notebook.id)
+        .where(Note.synology_note_id == note_id)
+    )
+    category_value = (await db.execute(stmt)).scalar_one_or_none()
+    if not category_value:
+        return None
+
+    from app.api.notebooks import _get_categories
+
+    cat = next((c for c in _get_categories() if c["value"] == category_value), None)
+    return cat.get("prompt") if cat else None
+
+
 _SEARCH_CONTENT_MAX_CHARS = 12_000
 
 # Features that support multimodal (image) analysis
@@ -284,7 +309,7 @@ async def _search_and_fetch_notes(
     query: str,
     db: AsyncSession,
     limit: int = 5,
-) -> tuple[list[dict], str]:
+) -> tuple[list[dict], str, str | None]:
     """Search notes by query and return their content for AI analysis.
 
     Uses FullTextSearchEngine (always available, no API key required).
@@ -295,28 +320,39 @@ async def _search_and_fetch_notes(
         limit: Maximum number of notes to fetch.
 
     Returns:
-        A tuple of (notes_metadata, combined_content).
+        A tuple of (notes_metadata, combined_content, category_context).
         notes_metadata: list of dicts with note_id, title, score.
         combined_content: concatenated note texts, capped at 12k chars.
+        category_context: combined category prompts from matched notes (or None).
     """
     fts = FullTextSearchEngine(session=db)
     search_page = await fts.search(query, limit=limit)
     results = search_page.results
 
     if not results:
-        return [], ""
+        return [], "", None
 
-    # Fetch full content_text for matched notes
+    # Fetch full content_text + category for matched notes
     from sqlalchemy import select
 
     note_ids = [r.note_id for r in results]
-    stmt = select(Note.synology_note_id, Note.title, Note.content_text).where(
-        Note.synology_note_id.in_(note_ids)
+    stmt = (
+        select(Note.synology_note_id, Note.title, Note.content_text, Notebook.category)
+        .outerjoin(Notebook, Note.notebook_id == Notebook.id)
+        .where(Note.synology_note_id.in_(note_ids))
     )
     rows = await db.execute(stmt)
-    content_map: dict[str, tuple[str, str]] = {}
+    content_map: dict[str, tuple[str, str, str | None]] = {}
     for row in rows.fetchall():
-        content_map[row.synology_note_id] = (row.title, row.content_text or "")
+        content_map[row.synology_note_id] = (row.title, row.content_text or "", row.category)
+
+    # Collect unique category prompts
+    from app.api.notebooks import _get_categories
+
+    categories = _get_categories()
+    cat_prompt_map = {c["value"]: c.get("prompt", "") for c in categories}
+    seen_categories: set[str] = set()
+    category_prompts: list[str] = []
 
     # Build metadata and combined content (ranked order, 12k char limit)
     notes_metadata: list[dict] = []
@@ -324,19 +360,25 @@ async def _search_and_fetch_notes(
     remaining = _SEARCH_CONTENT_MAX_CHARS
 
     for r in results:
-        title, text = content_map.get(r.note_id, (r.title, ""))
+        title, text, category = content_map.get(r.note_id, (r.title, "", None))
         notes_metadata.append({
             "note_id": r.note_id,
             "title": title,
             "score": r.score,
         })
+        if category and category not in seen_categories:
+            seen_categories.add(category)
+            prompt = cat_prompt_map.get(category, "")
+            if prompt:
+                category_prompts.append(prompt)
         if remaining > 0 and text:
             chunk = text[:remaining]
             parts.append(f"## {title}\n{chunk}")
             remaining -= len(chunk)
 
     combined = "\n\n---\n\n".join(parts)
-    return notes_metadata, combined
+    cat_context = "\n".join(category_prompts) if category_prompts else None
+    return notes_metadata, combined, cat_context
 
 
 def _build_messages_for_feature(
@@ -369,6 +411,7 @@ def _build_messages_for_feature(
         return insight.build_messages(
             note_content=content,
             additional_context=f"사용자 검색 쿼리: {search_query}" if search_query else None,
+            category_context=opts.get("category_context"),
             lang=lang,
         )
     elif feature == "search_qa":
@@ -378,6 +421,7 @@ def _build_messages_for_feature(
         return search_qa.build_messages(
             question=content,
             context_notes=context_notes,
+            category_context=opts.get("category_context"),
             lang=lang,
         )
     elif feature == "writing":
@@ -438,7 +482,7 @@ async def ai_chat(
         request.feature == "insight" and opts.get("mode") == "search"
     )
     if is_search_mode:
-        notes_meta, combined = await _search_and_fetch_notes(content, db)
+        notes_meta, combined, cat_context = await _search_and_fetch_notes(content, db)
         if not combined:
             return AIChatResponse(
                 content=msg("search.no_results", lang),
@@ -447,7 +491,15 @@ async def ai_chat(
                 usage=None,
             )
         effective_options["search_query"] = content
+        if cat_context:
+            effective_options["category_context"] = cat_context
         content = combined
+
+    # Single-note mode: inject category context from the note's notebook
+    if request.note_id and not is_search_mode:
+        cat_prompt = await _get_category_prompt(request.note_id, db)
+        if cat_prompt:
+            effective_options["category_context"] = cat_prompt
 
     try:
         messages = _build_messages_for_feature(
@@ -612,7 +664,7 @@ async def ai_stream(
         request.feature == "insight" and opts.get("mode") == "search"
     )
     if is_search_mode:
-        notes_meta, combined = await _search_and_fetch_notes(content, db)
+        notes_meta, combined, cat_context = await _search_and_fetch_notes(content, db)
         notes_metadata = notes_meta
         if not combined:
             async def no_results_generator():
@@ -630,7 +682,15 @@ async def ai_stream(
                 },
             )
         effective_options["search_query"] = content
+        if cat_context:
+            effective_options["category_context"] = cat_context
         content = combined
+
+    # Single-note mode: inject category context from the note's notebook
+    if request.note_id and not is_search_mode:
+        cat_prompt = await _get_category_prompt(request.note_id, db)
+        if cat_prompt:
+            effective_options["category_context"] = cat_prompt
 
     try:
         messages = _build_messages_for_feature(

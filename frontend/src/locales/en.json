@@ -559,7 +559,14 @@
     "categoryValueRequired": "Value is required",
     "categoryValueDuplicate": "Value already exists",
     "categoryReset": "Reset to Defaults",
-    "categoryResetConfirm": "Reset categories to defaults? Custom categories will be removed."
+    "categoryResetConfirm": "Reset categories to defaults? Custom categories will be removed.",
+    "categoryAiSettings": "AI Settings",
+    "categoryPrompt": "AI Analysis Prompt",
+    "categoryPromptPlaceholder": "Instructions for AI when analyzing notes in this category",
+    "categoryExtractionHints": "Extraction Hints (comma-separated)",
+    "categoryExtractionHintsPlaceholder": "hypothesis, method, result, ...",
+    "categorySearchBoostTerms": "Search Boost Terms (comma-separated)",
+    "categorySearchBoostTermsPlaceholder": "experiment, result, hypothesis, ..."
   },
   "members": {
     "title": "Members",

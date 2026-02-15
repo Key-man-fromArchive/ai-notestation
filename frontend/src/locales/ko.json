@@ -559,7 +559,14 @@
     "categoryValueRequired": "값은 필수입니다",
     "categoryValueDuplicate": "이미 존재하는 값입니다",
     "categoryReset": "기본값으로 초기화",
-    "categoryResetConfirm": "카테고리를 기본값으로 초기화하시겠습니까? 사용자 정의 카테고리가 삭제됩니다."
+    "categoryResetConfirm": "카테고리를 기본값으로 초기화하시겠습니까? 사용자 정의 카테고리가 삭제됩니다.",
+    "categoryAiSettings": "AI 설정",
+    "categoryPrompt": "AI 분석 프롬프트",
+    "categoryPromptPlaceholder": "이 카테고리의 노트를 분석할 때 AI에게 제공할 지침",
+    "categoryExtractionHints": "추출 힌트 (콤마 구분)",
+    "categoryExtractionHintsPlaceholder": "hypothesis, method, result, ...",
+    "categorySearchBoostTerms": "검색 부스트 용어 (콤마 구분)",
+    "categorySearchBoostTermsPlaceholder": "실험, 결과, 가설, ..."
   },
   "members": {
     "title": "멤버",

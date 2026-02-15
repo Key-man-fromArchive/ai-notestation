@@ -13,7 +13,7 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models import GraphInsight, Note
+from app.models import GraphInsight, Note, Notebook
 from app.services.auth_service import get_current_user
 from app.services.graph_service import compute_graph_analysis
 from app.utils.i18n import get_language
@@ -341,8 +341,12 @@ async def cluster_insight(
 
     lang = get_language(http_request)
 
-    # Fetch note content
-    stmt = select(Note.id, Note.title, Note.content_text, Note.notebook_name).where(Note.id.in_(request.note_ids))
+    # Fetch note content + category
+    stmt = (
+        select(Note.id, Note.title, Note.content_text, Note.notebook_name, Notebook.category)
+        .outerjoin(Notebook, Note.notebook_id == Notebook.id)
+        .where(Note.id.in_(request.note_ids))
+    )
     result = await db.execute(stmt)
     rows = result.fetchall()
 
@@ -362,6 +366,14 @@ async def cluster_insight(
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
 
+    # Collect unique category prompts
+    from app.api.notebooks import _get_categories
+
+    categories = _get_categories()
+    cat_prompt_map = {c["value"]: c.get("prompt", "") for c in categories}
+    seen_categories: set[str] = set()
+    category_prompts: list[str] = []
+
     # Build notes list, respecting content limits
     notes_data: list[tuple[str, str]] = []
     notes_meta: list[dict] = []
@@ -373,11 +385,17 @@ async def cluster_insight(
         remaining -= len(content)
         notes_data.append((title, content))
         notes_meta.append({"id": row.id, "title": title, "notebook": row.notebook_name})
+        if row.category and row.category not in seen_categories:
+            seen_categories.add(row.category)
+            prompt = cat_prompt_map.get(row.category, "")
+            if prompt:
+                category_prompts.append(prompt)
         if remaining <= 0:
             break
 
     # Build prompt
-    messages = ci_prompt.build_messages(notes=notes_data, focus=request.focus)
+    cat_context = "\n".join(category_prompts) if category_prompts else None
+    messages = ci_prompt.build_messages(notes=notes_data, focus=request.focus, category_context=cat_context)
 
     # Get AI router with OAuth support
     ai_router = get_ai_router()
