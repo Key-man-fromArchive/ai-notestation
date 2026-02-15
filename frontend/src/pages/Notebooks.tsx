@@ -6,11 +6,15 @@ import { useNotebooks, useCreateNotebook } from '@/hooks/useNotebooks'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
 import { EmptyState } from '@/components/EmptyState'
 import { cn } from '@/lib/utils'
-import { CATEGORY_COLORS, CATEGORY_OPTIONS } from '@/lib/categories'
+import { useCategories, getCategoryColors, getCategoryOptions } from '@/lib/categories'
 import type { Notebook, NotebookCategory } from '@/types/note'
 
 function NotebookCard({ notebook, onClick }: { notebook: Notebook; onClick: () => void }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const categories = useCategories()
+  const colorMap = getCategoryColors(categories)
+  const cat = notebook.category ? categories.find(c => c.value === notebook.category) : null
+
   return (
     <button
       onClick={onClick}
@@ -38,9 +42,9 @@ function NotebookCard({ notebook, onClick }: { notebook: Notebook; onClick: () =
         <FileText className="h-3.5 w-3.5" />
         <span>{t('common.count_notes', { count: notebook.note_count })}</span>
         {notebook.category && (
-          <span className={cn('ml-auto inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium', CATEGORY_COLORS[notebook.category] ?? 'bg-gray-100 text-gray-700')}>
+          <span className={cn('ml-auto inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium', colorMap[notebook.category] ?? 'bg-gray-100 text-gray-700')}>
             <Tag className="h-2.5 w-2.5" />
-            {t(`notebooks.category_${notebook.category}`)}
+            {cat ? cat[i18n.language === 'ko' ? 'ko' : 'en'] : notebook.category}
           </span>
         )}
       </div>
@@ -55,7 +59,9 @@ function CreateNotebookModal({
   isOpen: boolean
   onClose: () => void
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const categories = useCategories()
+  const categoryOptions = getCategoryOptions(categories)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [category, setCategory] = useState<NotebookCategory | ''>('')
@@ -138,14 +144,17 @@ function CreateNotebookModal({
               <select
                 id="notebook-category"
                 value={category}
-                onChange={e => setCategory(e.target.value as NotebookCategory | '')}
+                onChange={e => setCategory(e.target.value)}
                 className="w-full mt-1 px-3 py-2 rounded-md border border-input bg-background focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
-                {CATEGORY_OPTIONS.map(cat => (
-                  <option key={cat || '__none'} value={cat}>
-                    {cat ? t(`notebooks.category_${cat}`) : t('notebooks.categoryNone')}
-                  </option>
-                ))}
+                {categoryOptions.map(val => {
+                  const preset = categories.find(c => c.value === val)
+                  return (
+                    <option key={val || '__none'} value={val}>
+                      {val ? (preset ? preset[i18n.language === 'ko' ? 'ko' : 'en'] : val) : t('notebooks.categoryNone')}
+                    </option>
+                  )
+                })}
               </select>
             </div>
           </div>

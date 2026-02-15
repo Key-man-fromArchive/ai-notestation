@@ -17,6 +17,7 @@ import {
   NsxImportSection,
   SearchParamsSection,
   GraphSettingsSection,
+  CategorySettingsSection,
   nasSettingsList,
   apiKeySettingsList,
 } from '@/components/settings'
@@ -40,6 +41,7 @@ import {
   ScanSearch,
   Columns3,
   Eye,
+  Tag,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -49,6 +51,7 @@ import { cn } from '@/lib/utils'
 
 const SETTINGS_TABS = [
   { id: 'general', labelKey: 'settings.tabs.general', icon: SettingsIcon },
+  { id: 'category', labelKey: 'settings.tabs.category', icon: Tag },
   { id: 'aiModel', labelKey: 'settings.tabs.aiModel', icon: Sparkles },
   { id: 'searchEngine', labelKey: 'settings.tabs.searchEngine', icon: Search },
   { id: 'dataAnalysis', labelKey: 'settings.tabs.dataAnalysis', icon: Image },
@@ -201,6 +204,8 @@ export default function Settings() {
             <GraphSettingsSection />
           </div>
         )}
+
+        {activeTab === 'category' && <CategorySettingsSection />}
 
         {activeTab === 'aiModel' && (
           <div className="flex flex-col gap-6">

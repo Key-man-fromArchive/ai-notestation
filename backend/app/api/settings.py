@@ -107,11 +107,13 @@ _SETTING_DESCRIPTIONS: dict[str, str] = {
     "vision_model": "Vision model for image description: glm-4.6v, glm-4.6v-flash, glm-4.5v, gpt-4o, etc.",
     "editor_width": "Editor width: compact, comfortable, wide, or full",
     "graph_settings": "그래프 기본 설정 (유사도, 연결 수, 노드 수, 전체 보기)",
+    "notebook_categories": "노트북 카테고리 프리셋 (value, ko, en, color)",
 }
 
 
 def _get_default_settings() -> dict[str, Any]:
     """Return default settings from environment variables."""
+    from app.constants import DEFAULT_NOTEBOOK_CATEGORIES
     from app.search.params import DEFAULT_SEARCH_PARAMS
 
     env = get_settings()
@@ -141,6 +143,7 @@ def _get_default_settings() -> dict[str, Any]:
             "node_limit": 500,
             "show_all": True,
         },
+        "notebook_categories": DEFAULT_NOTEBOOK_CATEGORIES,
     }
 
 

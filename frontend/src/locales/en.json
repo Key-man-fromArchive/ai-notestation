@@ -246,7 +246,13 @@
     "category_meeting": "Meeting",
     "category_sop": "SOP",
     "category_protocol": "Protocol",
-    "category_reference": "Reference"
+    "category_reference": "Reference",
+    "category_diary": "Diary",
+    "category_travel": "Travel",
+    "category_recipe": "Recipe",
+    "category_health": "Health",
+    "category_finance": "Finance",
+    "category_hobby": "Hobby"
   },
   "search": {
     "title": "Search Notes",
@@ -535,12 +541,25 @@
     "graphSettingsDesc": "Set default similarity, connections, and node limit for the Knowledge Graph page. You can temporarily adjust these on the graph page.",
     "tabs": {
       "general": "General",
+      "category": "Categories",
       "aiModel": "AI Models",
       "searchEngine": "Search Engine",
       "dataAnalysis": "Data Analysis",
       "connection": "Connection",
       "admin": "Admin"
-    }
+    },
+    "categoryTitle": "Notebook Categories",
+    "categoryDesc": "Manage categories that can be assigned to notebooks. Add, edit, or remove categories.",
+    "categoryValue": "Value (ID)",
+    "categoryKo": "Korean",
+    "categoryEn": "English",
+    "categoryColor": "Color",
+    "categoryAdd": "Add Category",
+    "categoryProtected": "Default category cannot be deleted",
+    "categoryValueRequired": "Value is required",
+    "categoryValueDuplicate": "Value already exists",
+    "categoryReset": "Reset to Defaults",
+    "categoryResetConfirm": "Reset categories to defaults? Custom categories will be removed."
   },
   "members": {
     "title": "Members",

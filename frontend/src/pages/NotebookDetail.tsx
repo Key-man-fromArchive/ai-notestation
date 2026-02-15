@@ -18,7 +18,7 @@ import {
 } from 'lucide-react'
 import { useNotebook, useUpdateNotebook, useDeleteNotebook } from '@/hooks/useNotebooks'
 import type { NotebookCategory } from '@/types/note'
-import { CATEGORY_OPTIONS } from '@/lib/categories'
+import { useCategories, getCategoryOptions } from '@/lib/categories'
 import { useNotebookAccess } from '@/hooks/useNotebookAccess'
 import { ShareDialog } from '@/components/ShareDialog'
 import { useNotes } from '@/hooks/useNotes'
@@ -59,7 +59,9 @@ function EditModal({
   initialDescription: string | null
   initialCategory: string | null
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const categories = useCategories()
+  const categoryOptions = getCategoryOptions(categories)
   const [name, setName] = useState(initialName)
   const [description, setDescription] = useState(initialDescription ?? '')
   const [category, setCategory] = useState<NotebookCategory | ''>(
@@ -127,14 +129,17 @@ function EditModal({
               <select
                 id="edit-category"
                 value={category}
-                onChange={e => setCategory(e.target.value as NotebookCategory | '')}
+                onChange={e => setCategory(e.target.value)}
                 className="w-full mt-1 px-3 py-2 rounded-md border border-input bg-background focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
-                {CATEGORY_OPTIONS.map(cat => (
-                  <option key={cat || '__none'} value={cat}>
-                    {cat ? t(`notebooks.category_${cat}`) : t('notebooks.categoryNone')}
-                  </option>
-                ))}
+                {categoryOptions.map(val => {
+                  const preset = categories.find(c => c.value === val)
+                  return (
+                    <option key={val || '__none'} value={val}>
+                      {val ? (preset ? preset[i18n.language === 'ko' ? 'ko' : 'en'] : val) : t('notebooks.categoryNone')}
+                    </option>
+                  )
+                })}
               </select>
             </div>
           </div>

@@ -28,21 +28,29 @@ from app.services.notebook_access_control import (
 router = APIRouter(prefix="/notebooks", tags=["notebooks"])
 
 
-from app.constants import NOTEBOOK_CATEGORY_LABELS, VALID_CATEGORIES
+def _get_categories() -> list[dict[str, str]]:
+    """Return notebook categories from settings cache (dynamic)."""
+    from app.api.settings import _get_store
+    from app.constants import DEFAULT_NOTEBOOK_CATEGORIES
+
+    store = _get_store()
+    cats = store.get("notebook_categories")
+    if isinstance(cats, list) and cats:
+        return cats
+    return DEFAULT_NOTEBOOK_CATEGORIES
 
 
 @router.get("/categories")
 async def list_categories():
-    """Return the preset notebook category list with labels."""
-    return [
-        {"value": value, "ko": labels["ko"], "en": labels["en"]}
-        for value, labels in NOTEBOOK_CATEGORY_LABELS.items()
-    ]
+    """Return the notebook category list (from settings)."""
+    return _get_categories()
 
 
 def _validate_category(v: str | None) -> str | None:
-    if v is not None and v not in VALID_CATEGORIES:
-        raise ValueError(f"Invalid category. Must be one of: {', '.join(sorted(VALID_CATEGORIES))}")
+    if v is not None:
+        valid = {c["value"] for c in _get_categories()}
+        if v not in valid:
+            raise ValueError(f"Invalid category. Must be one of: {', '.join(sorted(valid))}")
     return v
 
 

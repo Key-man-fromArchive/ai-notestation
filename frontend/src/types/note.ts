@@ -91,7 +91,7 @@ export interface LegacyNotebook {
 /**
  * 노트북 정보 (new entity-based)
  */
-export type NotebookCategory = 'labnote' | 'daily_log' | 'meeting' | 'sop' | 'protocol' | 'reference'
+export type NotebookCategory = string
 
 export interface Notebook {
   id: number
