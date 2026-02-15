@@ -360,55 +360,6 @@ class TestGetNote:
         assert response.status_code == 401
 
 
-# ---------------------------------------------------------------------------
-# GET /api/notebooks - Notebook list
-# ---------------------------------------------------------------------------
-
-
-class TestListNotebooks:
-    """Test GET /api/notebooks endpoint."""
-
-    @pytest.mark.asyncio
-    async def test_list_notebooks_success(self):
-        """Should return list of notebooks."""
-        app = _get_app()
-
-        mock_db = AsyncMock()
-        mock_db.execute = AsyncMock(
-            return_value=_Result(
-                [
-                    ("Personal", 1),
-                    ("Research", 2),
-                ]
-            )
-        )
-        _setup_overrides(app, mock_db=mock_db)
-
-        try:
-            transport = ASGITransport(app=app)
-            async with AsyncClient(transport=transport, base_url="http://test") as client:
-                response = await client.get("/api/notebooks")
-
-            assert response.status_code == 200
-            data = response.json()
-            assert "items" in data
-            assert len(data["items"]) == 2
-            assert data["items"][0]["name"] == "Personal"
-        finally:
-            _clear_overrides(app)
-
-    @pytest.mark.asyncio
-    async def test_list_notebooks_unauthenticated(self):
-        """Request without auth should return 401."""
-        app = _get_app()
-        _clear_overrides(app)
-        transport = ASGITransport(app=app)
-
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            response = await client.get("/api/notebooks")
-
-        assert response.status_code == 401
-
 
 # ---------------------------------------------------------------------------
 # GET /api/tags - Tag list

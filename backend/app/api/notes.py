@@ -135,18 +135,6 @@ class NoteUpdateRequest(BaseModel):
     tags: list[str] | None = None
 
 
-class NotebookItem(BaseModel):
-    """Summary representation of a notebook."""
-
-    name: str
-    note_count: int = 0
-
-
-class NotebooksListResponse(BaseModel):
-    """List of notebooks."""
-
-    items: list[NotebookItem]
-
 
 class RelatedNoteItemResponse(BaseModel):
     note_id: str
@@ -1162,35 +1150,6 @@ async def delete_attachment(
         triggered_by=get_trigger_name(current_user),
     )
 
-
-@router.get("/notebooks", response_model=NotebooksListResponse)
-async def list_notebooks(
-    current_user: dict = Depends(get_current_user),  # noqa: B008
-    db: AsyncSession = Depends(get_db),  # noqa: B008
-) -> NotebooksListResponse:
-    """Retrieve all notebooks with computed note counts.
-
-    Synology may not return accurate ``note_count`` values, so we
-    fetch a page of notes and count per ``parent_id`` ourselves.
-
-    Requires JWT authentication via Bearer token.
-
-    Returns:
-        NotebooksListResponse with notebook items and computed counts.
-    """
-    stmt = (
-        select(Note.notebook_name, func.count())
-        .where(Note.notebook_name.is_not(None))
-        .where(Note.notebook_name != "")
-        .group_by(Note.notebook_name)
-        .order_by(Note.notebook_name.asc())
-    )
-
-    result = await db.execute(stmt)
-    rows = result.all()
-
-    items = [NotebookItem(name=row[0], note_count=int(row[1] or 0)) for row in rows]
-    return NotebooksListResponse(items=items)
 
 
 @router.get("/tags")
