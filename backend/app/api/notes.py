@@ -42,7 +42,6 @@ from app.synology_gateway.notestation import NoteStationService
 from app.utils.datetime_utils import datetime_to_iso, unix_to_iso
 from app.utils.note_utils import (
     extract_data_uri_images,
-    find_missing_file_refs,
     normalize_db_tags,
     normalize_tags,
     rewrite_image_urls,
@@ -731,11 +730,13 @@ async def get_note(
     """Retrieve a single note by ID, including its full content.
 
     Requires JWT authentication via Bearer token.
+    Local notes are served entirely from the DB (no NAS call).
+    Notes not in local DB fall back to a NAS fetch via ns_service.
 
     Args:
         note_id: The unique note identifier.
         current_user: Injected authenticated user.
-        ns_service: Injected NoteStation service.
+        ns_service: Injected NoteStation service (used only for fallback).
         db: Database session for image lookups.
 
     Returns:
@@ -758,34 +759,6 @@ async def get_note(
         except Exception:
             logger.warning("Failed to fetch images for note %s", note_id)
 
-        # Fetch NAS attachment metadata for NAS image proxy.
-        # Always attempt NAS fetch so notes imported via NSX (which lack
-        # link_id / nas_ver) can self-heal on first access.
-        nas_attachments: dict[str, dict] | None = None
-        try:
-            nas_detail = await ns_service.get_note(note_id)
-            att_raw = nas_detail.get("attachment")
-            if isinstance(att_raw, dict):
-                nas_attachments = att_raw
-            # Self-heal: populate missing link_id / nas_ver from NAS
-            needs_commit = False
-            latest_ver = nas_detail.get("ver", "")
-            latest_link = nas_detail.get("link_id", "")
-            if latest_link and not db_note.link_id:
-                db_note.link_id = latest_link
-                needs_commit = True
-            if latest_ver and latest_ver != (db_note.nas_ver or ""):
-                if db_note.nas_ver:
-                    logger.info("Updating nas_ver for note %s: %s -> %s", note_id, db_note.nas_ver[:12], latest_ver[:12])
-                else:
-                    logger.info("Self-healing: setting link_id/nas_ver for note %s", note_id)
-                db_note.nas_ver = latest_ver
-                needs_commit = True
-            if needs_commit:
-                await db.commit()
-        except Exception:
-            logger.debug("Could not fetch NAS attachment metadata for note %s", note_id)
-
         raw_html = db_note.content_html or ""
 
         # Extract data URI images to local files (lazy migration).
@@ -798,39 +771,11 @@ async def get_note(
                 await db.commit()
                 logger.info("Extracted data URI images for note %s", note_id)
 
-        # Self-healing: if /api/files/ URLs reference missing files, re-pull from NAS
-        # to recover the original data URIs and re-extract.
-        missing_refs = find_missing_file_refs(raw_html)
-        if missing_refs and db_note.link_id:
-            logger.warning(
-                "Note %s has %d missing file refs, attempting NAS re-pull to recover",
-                note_id,
-                len(missing_refs),
-            )
-            try:
-                nas_note = await ns_service.get_note(note_id)
-                nas_content = nas_note.get("content", "")
-                if nas_content and "data:image/" in nas_content:
-                    raw_html = extract_data_uri_images(nas_content)
-                    db_note.content_html = raw_html
-                    await db.commit()
-                    logger.info("Recovered %d missing files via NAS re-pull for note %s", len(missing_refs), note_id)
-                elif nas_content:
-                    # NAS content may not have data URIs (images are attachments).
-                    # Re-store NAS content; rewrite_image_urls will handle attachment refs.
-                    raw_html = nas_content
-                    db_note.content_html = raw_html
-                    await db.commit()
-                    logger.info("Restored NAS content for note %s (no data URIs)", note_id)
-            except Exception:
-                logger.debug("Could not re-pull note %s from NAS for file recovery", note_id)
-
         content = rewrite_image_urls(
             raw_html,
             note_id,
             attachment_lookup=None,
             image_map=image_map,
-            nas_attachments=nas_attachments,
         )
 
         updated_at = db_note.source_updated_at or db_note.updated_at
@@ -850,6 +795,7 @@ async def get_note(
             sync_status=db_note.sync_status,
         )
 
+    # Fallback: note not in local DB — fetch directly from NAS
     try:
         note = await ns_service.get_note(note_id)
     except SynologyApiError:

@@ -306,7 +306,7 @@ class TestGetNote:
         )
 
         mock_db = AsyncMock()
-        mock_db.execute = AsyncMock(side_effect=[_Result(db_note), _Result([]), _Result([])])
+        mock_db.execute = AsyncMock(side_effect=[_Result(db_note), _Result([]), _Result([]), _Result([])])
         _setup_overrides(app, mock_db=mock_db)
 
         try:
