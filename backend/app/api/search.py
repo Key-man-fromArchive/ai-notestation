@@ -566,6 +566,8 @@ class IndexState:
     total_notes: int = 0
     indexed: int = 0
     failed: int = 0
+    current_batch: int = 0
+    total_batches: int = 0
     error_message: str | None = None
     api_key: str | None = None
     triggered_by: str | None = None
@@ -580,6 +582,8 @@ class IndexStatusResponse(BaseModel):
     indexed_notes: int
     pending_notes: int
     stale_notes: int = 0
+    current_batch: int = 0
+    total_batches: int = 0
     failed: int
     error_message: str | None = None
 
@@ -604,6 +608,8 @@ async def _run_index_background(state: IndexState, *, force: bool = False) -> No
     state.error_message = None
     state.indexed = 0
     state.failed = 0
+    state.current_batch = 0
+    state.total_batches = 0
 
     from app.services.activity_log import log_activity
 
@@ -613,6 +619,10 @@ async def _run_index_background(state: IndexState, *, force: bool = False) -> No
     try:
         async with async_session_factory() as session:
             if force:
+                # Delete ALL embeddings first so the UI shows 0 indexed
+                await session.execute(text("DELETE FROM note_embeddings"))
+                await session.commit()
+                logger.info("Force reindex: deleted all existing embeddings")
                 result = await session.execute(text("SELECT id FROM notes"))
             else:
                 result = await session.execute(
@@ -647,18 +657,23 @@ async def _run_index_background(state: IndexState, *, force: bool = False) -> No
         )
 
         batch_size = 5
+        state.total_batches = (len(note_ids) + batch_size - 1) // batch_size
         for i in range(0, len(note_ids), batch_size):
             batch = note_ids[i : i + batch_size]
+            state.current_batch = i // batch_size + 1
             try:
                 async with async_session_factory() as session:
                     indexer = NoteIndexer(session=session, embedding_service=embedding_service)
                     for nid in batch:
                         try:
-                            await indexer.reindex_note(nid)
+                            if force:
+                                await indexer.index_note(nid)
+                            else:
+                                await indexer.reindex_note(nid)
                             state.indexed += 1
                         except Exception as exc:
                             state.failed += 1
-                            logger.warning("Failed to reindex note %d: %s", nid, exc)
+                            logger.warning("Failed to index note %d: %s", nid, exc)
                     await session.commit()
                     logger.info(
                         "Index progress: %d/%d indexed, %d failed",
@@ -769,7 +784,11 @@ async def get_index_status(
     db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> IndexStatusResponse:
     """Get the current embedding indexing status."""
-    total_result = await db.execute(text("SELECT COUNT(*) FROM notes"))
+    # Exclude notes with no indexable text (empty title AND empty content)
+    total_result = await db.execute(text(
+        "SELECT COUNT(*) FROM notes"
+        " WHERE COALESCE(content_text, '') != '' OR COALESCE(title, '') != ''"
+    ))
     total_notes = total_result.scalar() or 0
 
     indexed_result = await db.execute(text("SELECT COUNT(DISTINCT note_id) FROM note_embeddings"))
@@ -796,6 +815,8 @@ async def get_index_status(
         indexed_notes=indexed_notes,
         pending_notes=pending_notes,
         stale_notes=stale_notes,
+        current_batch=_index_state.current_batch,
+        total_batches=_index_state.total_batches,
         failed=_index_state.failed,
         error_message=_index_state.error_message,
     )

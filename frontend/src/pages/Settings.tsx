@@ -650,20 +650,20 @@ function ImageSyncSection() {
           <div className="flex justify-between text-sm">
             <span>{t('settings.inProgress')}</span>
             <span className="font-medium">
-              {processedNotes.toLocaleString()} / {totalNotes.toLocaleString()} {t('common.count_notes', { count: totalNotes })}
+              {processedNotes.toLocaleString()} / {t('common.count_notes', { count: totalNotes.toLocaleString() })}
             </span>
           </div>
           <div className="flex justify-between text-sm">
             <span>{t('settings.extractedImages')}</span>
             <span className="font-medium text-green-600">
-              {imagesExtracted.toLocaleString()} {t('common.count_items', { count: imagesExtracted })}
+              {t('common.count_items', { count: imagesExtracted.toLocaleString() })}
             </span>
           </div>
           {failedNotes > 0 && (
             <div className="flex justify-between text-sm">
               <span>{t('settings.failedCount')}</span>
               <span className="font-medium text-destructive">
-                {failedNotes.toLocaleString()} {t('common.count_items', { count: failedNotes })}
+                {t('common.count_items', { count: failedNotes.toLocaleString() })}
               </span>
             </div>
           )}
@@ -993,25 +993,25 @@ function SearchIndexSection() {
       <div className="space-y-3 mb-4">
         <div className="flex justify-between text-sm">
           <span>{t('settings.totalNotes')}</span>
-          <span className="font-medium">{totalNotes.toLocaleString()} {t('common.count_items', { count: totalNotes })}</span>
+          <span className="font-medium">{t('common.count_items', { count: totalNotes.toLocaleString() })}</span>
         </div>
         <div className="flex justify-between text-sm">
           <span>{t('settings.indexed')}</span>
           <span className="font-medium text-green-600">
-            {indexedNotes.toLocaleString()} {t('common.count_items', { count: indexedNotes })} ({indexPercentage}%)
+            {t('common.count_items', { count: indexedNotes.toLocaleString() })} ({indexPercentage}%)
           </span>
         </div>
         <div className="flex justify-between text-sm">
           <span>{t('settings.pendingIndex')}</span>
           <span className="font-medium text-amber-600">
-            {pendingNotes.toLocaleString()} {t('common.count_items', { count: pendingNotes })}
+            {t('common.count_items', { count: pendingNotes.toLocaleString() })}
           </span>
         </div>
         {staleNotes > 0 && (
           <div className="flex justify-between text-sm">
             <span>{t('settings.staleIndex')}</span>
             <span className="font-medium text-orange-600">
-              {staleNotes.toLocaleString()} {t('common.count_items', { count: staleNotes })}
+              {t('common.count_items', { count: staleNotes.toLocaleString() })}
             </span>
           </div>
         )}
