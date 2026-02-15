@@ -77,8 +77,15 @@ async def get_global_graph(
     total_result = await db.execute(text("SELECT COUNT(*) FROM notes"))
     total_notes = total_result.scalar() or 0
 
-    indexed_result = await db.execute(text("SELECT COUNT(*) FROM note_avg_embeddings"))
-    indexed_notes = indexed_result.scalar() or 0
+    try:
+        indexed_result = await db.execute(text("SELECT COUNT(*) FROM note_avg_embeddings"))
+        indexed_notes = indexed_result.scalar() or 0
+    except Exception:
+        # Materialized view may not exist yet
+        await db.rollback()
+        return GlobalGraphResponse(
+            nodes=[], links=[], total_notes=total_notes, indexed_notes=0, analysis=None,
+        )
 
     # Fetch nodes: limit=0 means all indexed notes
     notes_query = (
