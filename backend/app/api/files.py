@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import logging
+import mimetypes
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
@@ -75,7 +76,10 @@ async def upload_file(
 
 
 @router.get("/files/{file_id}")
-async def get_file(file_id: str) -> FileResponse:
+async def get_file(
+    file_id: str,
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> FileResponse:
     """Serve an uploaded file by its identifier."""
     uploads_dir = Path(settings.UPLOADS_PATH)
     file_path = uploads_dir / file_id
@@ -86,7 +90,19 @@ async def get_file(file_id: str) -> FileResponse:
             detail="File not found",
         )
 
-    return FileResponse(path=file_path, filename=file_id)
+    # DB에서 원본 파일명 조회
+    result = await db.execute(
+        select(NoteAttachment).where(NoteAttachment.file_id == file_id)
+    )
+    attachment = result.scalar_one_or_none()
+    original_name = attachment.name if attachment else file_id
+
+    media_type, _ = mimetypes.guess_type(original_name)
+    return FileResponse(
+        path=file_path,
+        filename=original_name,
+        media_type=media_type or "application/octet-stream",
+    )
 
 
 @router.post("/files/{file_id}/extract")

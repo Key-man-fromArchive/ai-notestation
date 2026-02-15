@@ -964,7 +964,8 @@
     "extractionFailed": "추출 실패",
     "viewExtractedText": "추출된 텍스트 보기",
     "extractedText": "추출된 텍스트",
-    "pages": "페이지"
+    "pages": "페이지",
+    "download": "다운로드"
   },
   "ocr": {
     "extractText": "텍스트 인식(OCR)",

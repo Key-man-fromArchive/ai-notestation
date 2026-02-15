@@ -4,7 +4,7 @@
 
 import { useCallback, useMemo, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Notebook, Tag, Paperclip, Image, File, FileText, AlertCircle, Calendar, Share2, AlertTriangle, CloudOff, CloudUpload, CloudDownload, Loader2, Check, Sparkles, X, Plus, Wand2, Link2, Eye, ScanText, RotateCcw, CheckCircle2 } from 'lucide-react'
+import { ArrowLeft, Notebook, Tag, Paperclip, Image, File, FileText, AlertCircle, Calendar, Share2, AlertTriangle, CloudOff, CloudUpload, CloudDownload, Download, Loader2, Check, Sparkles, X, Plus, Wand2, Link2, Eye, ScanText, RotateCcw, CheckCircle2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { apiClient } from '@/lib/api'
 import { useNote } from '@/hooks/useNote'
@@ -75,6 +75,20 @@ export default function NoteDetail() {
     }
     return map[w] || 'max-w-5xl'
   }, [editorWidthSetting])
+
+  const handleDownloadAttachment = async (fileId: string, fileName: string) => {
+    const response = await fetch(`/api/files/${fileId}`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem('auth_token')}` },
+    })
+    if (!response.ok) return
+    const blob = await response.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = fileName
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   const handleExtractPdf = async (fileId: string) => {
     setExtractingFileId(fileId)
@@ -268,6 +282,10 @@ export default function NoteDetail() {
 
     // --- File attachments (PDF etc.) — keep original logic ---
     if (isFile) {
+      items.push({ icon: <Download className="h-4 w-4" />, label: t('files.download'), onClick: () => {
+        setContextMenu(null)
+        handleDownloadAttachment(id as string, name)
+      }})
       if (status === 'completed') {
         items.push({ icon: <Eye className="h-4 w-4" />, label: isPdf ? t('files.viewExtractedText') : t('ocr.viewExtractedText'), onClick: () => handleShowPdfText(id as string, name, pageCount) })
         if (isPdf) {
@@ -848,7 +866,13 @@ export default function NoteDetail() {
                     }) : undefined}
                   >
                     <Icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-                    <span className="text-sm text-foreground truncate">{attachment.name}</span>
+                    <button
+                      onClick={() => fileId && handleDownloadAttachment(fileId, attachment.name)}
+                      className="text-sm text-foreground truncate hover:text-primary hover:underline text-left"
+                      title={t('files.download')}
+                    >
+                      {attachment.name}
+                    </button>
                     <span className="ml-auto text-xs text-muted-foreground uppercase shrink-0">{ext}</span>
 
                     {/* Extraction status icon */}
