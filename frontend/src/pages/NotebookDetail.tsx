@@ -18,8 +18,7 @@ import {
 } from 'lucide-react'
 import { useNotebook, useUpdateNotebook, useDeleteNotebook } from '@/hooks/useNotebooks'
 import type { NotebookCategory } from '@/types/note'
-
-const CATEGORY_OPTIONS: (NotebookCategory | '')[] = ['', 'labnote', 'daily_log', 'meeting', 'sop', 'protocol', 'reference']
+import { CATEGORY_OPTIONS } from '@/lib/categories'
 import { useNotebookAccess } from '@/hooks/useNotebookAccess'
 import { ShareDialog } from '@/components/ShareDialog'
 import { useNotes } from '@/hooks/useNotes'

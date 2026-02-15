@@ -28,7 +28,16 @@ from app.services.notebook_access_control import (
 router = APIRouter(prefix="/notebooks", tags=["notebooks"])
 
 
-VALID_CATEGORIES = {"labnote", "daily_log", "meeting", "sop", "protocol", "reference"}
+from app.constants import NOTEBOOK_CATEGORY_LABELS, VALID_CATEGORIES
+
+
+@router.get("/categories")
+async def list_categories():
+    """Return the preset notebook category list with labels."""
+    return [
+        {"value": value, "ko": labels["ko"], "en": labels["en"]}
+        for value, labels in NOTEBOOK_CATEGORY_LABELS.items()
+    ]
 
 
 def _validate_category(v: str | None) -> str | None:

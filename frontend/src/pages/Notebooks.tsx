@@ -6,18 +6,8 @@ import { useNotebooks, useCreateNotebook } from '@/hooks/useNotebooks'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
 import { EmptyState } from '@/components/EmptyState'
 import { cn } from '@/lib/utils'
+import { CATEGORY_COLORS, CATEGORY_OPTIONS } from '@/lib/categories'
 import type { Notebook, NotebookCategory } from '@/types/note'
-
-const CATEGORY_COLORS: Record<string, string> = {
-  labnote: 'bg-blue-100 text-blue-700',
-  daily_log: 'bg-green-100 text-green-700',
-  meeting: 'bg-purple-100 text-purple-700',
-  sop: 'bg-orange-100 text-orange-700',
-  protocol: 'bg-red-100 text-red-700',
-  reference: 'bg-gray-100 text-gray-700',
-}
-
-const CATEGORY_OPTIONS: (NotebookCategory | '')[] = ['', 'labnote', 'daily_log', 'meeting', 'sop', 'protocol', 'reference']
 
 function NotebookCard({ notebook, onClick }: { notebook: Notebook; onClick: () => void }) {
   const { t } = useTranslation()
