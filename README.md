@@ -31,25 +31,25 @@ bash install.sh        # 대화형 설치. NAS 주소와 AI 키 입력 (Enter로
 
 ---
 
-## Key Features
+## 핵심 기능 요약
 
-🔍 **Hybrid Search Engine** — BM25 + Trigram + Semantic search fused with Reciprocal Rank Fusion. One PostgreSQL, zero extra databases.
+🔍 **하이브리드 검색 엔진** — BM25 + 트라이그램 + 시맨틱 검색을 Reciprocal Rank Fusion으로 통합. PostgreSQL 하나, 별도 DB 불필요.
 
-🤖 **Multi-Provider AI** — OpenAI, Anthropic, Google, ZhipuAI auto-detected from env. Model switching on-the-fly with streaming SSE.
+🤖 **멀티 AI 프로바이더** — OpenAI, Anthropic, Google, ZhipuAI를 환경 변수에서 자동 감지. 모델 자유 전환, SSE 스트리밍.
 
-🔬 **AI Quality Gate** — Checklist-based self-verification. Rejects and regenerates AI responses that fail quality criteria.
+🔬 **AI 품질 게이트** — 체크리스트 기반 자가 검증. 품질 기준 미달 시 자동 재생성.
 
-📷 **3-Engine Hybrid OCR** — GLM-OCR → PaddleOCR → AI Vision automatic fallback chain. Dual pipeline for batch processing thousands of images.
+📷 **3엔진 하이브리드 OCR** — GLM-OCR → PaddleOCR → AI Vision 자동 폴백 체인. 수천 장 이미지를 듀얼 파이프라인으로 배치 처리.
 
-📊 **Knowledge Graph** — Force-directed visualization of note relationships. AI clustering discovers hidden connections across your collection.
+📊 **지식 그래프** — 노트 간 관계를 포스 레이아웃으로 시각화. AI 클러스터링이 숨겨진 연결을 발견.
 
-📝 **Rich Editor** — TipTap with KaTeX math, tables, code blocks. 3-second autosave. AI auto-tagging per note or batch.
+📝 **리치 에디터** — TipTap + KaTeX 수식, 표, 코드 블록. 3초 자동 저장. AI 자동 태깅.
 
-🔗 **Synology Integration** — Bi-directional NoteStation sync. NSX import. Works without NAS too.
+🔗 **Synology 연동** — NoteStation 양방향 동기화. NSX 임포트. NAS 없이도 사용 가능.
 
-👥 **Team RBAC** — Owner → Admin → Member → Viewer roles. Invite-based onboarding, token-based public sharing with expiry.
+👥 **팀 RBAC** — Owner → Admin → Member → Viewer 역할. 이메일 초대, 토큰 기반 공개 링크 공유.
 
-🌏 **i18n** — Korean / English UI with browser language auto-detection.
+🌏 **다국어** — 한국어 / 영어 UI. 브라우저 언어 자동 감지.
 
 ---
 
