@@ -31,6 +31,28 @@ bash install.sh        # 대화형 설치. NAS 주소와 AI 키 입력 (Enter로
 
 ---
 
+## Key Features
+
+🔍 **Hybrid Search Engine** — BM25 + Trigram + Semantic search fused with Reciprocal Rank Fusion. One PostgreSQL, zero extra databases.
+
+🤖 **Multi-Provider AI** — OpenAI, Anthropic, Google, ZhipuAI auto-detected from env. Model switching on-the-fly with streaming SSE.
+
+🔬 **AI Quality Gate** — Checklist-based self-verification. Rejects and regenerates AI responses that fail quality criteria.
+
+📷 **3-Engine Hybrid OCR** — GLM-OCR → PaddleOCR → AI Vision automatic fallback chain. Dual pipeline for batch processing thousands of images.
+
+📊 **Knowledge Graph** — Force-directed visualization of note relationships. AI clustering discovers hidden connections across your collection.
+
+📝 **Rich Editor** — TipTap with KaTeX math, tables, code blocks. 3-second autosave. AI auto-tagging per note or batch.
+
+🔗 **Synology Integration** — Bi-directional NoteStation sync. NSX import. Works without NAS too.
+
+👥 **Team RBAC** — Owner → Admin → Member → Viewer roles. Invite-based onboarding, token-based public sharing with expiry.
+
+🌏 **i18n** — Korean / English UI with browser language auto-detection.
+
+---
+
 ## 이런 걸 합니다
 
 <table>
