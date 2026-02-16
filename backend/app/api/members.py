@@ -32,6 +32,11 @@ from app.services.auth_service import (
     create_refresh_token,
     get_current_user,
 )
+from app.services.notebook_access_control import (
+    get_user_notebook_accesses,
+    grant_notebook_access,
+    revoke_notebook_access,
+)
 from app.services.user_service import (
     accept_invite,
     add_member_to_org,
@@ -43,6 +48,7 @@ from app.services.user_service import (
     get_organization_by_slug,
     get_user_by_email,
     get_user_by_id,
+    remove_member_from_org,
 )
 
 logger = logging.getLogger(__name__)
@@ -169,6 +175,56 @@ class MessageResponse(BaseModel):
     """Generic message response."""
 
     message: str
+
+
+class BatchRemoveRequest(BaseModel):
+    """Batch remove members request."""
+
+    member_ids: list[int]
+
+
+class BatchRemoveResponse(BaseModel):
+    """Batch remove members response."""
+
+    removed: int
+    failed: int
+    errors: list[str]
+
+
+class NotebookAccessItem(BaseModel):
+    """Single notebook access entry."""
+
+    access_id: int
+    notebook_id: int
+    notebook_name: str
+    permission: str
+
+
+class MemberNotebookAccessResponse(BaseModel):
+    """Member's notebook access list."""
+
+    items: list[NotebookAccessItem]
+
+
+class NotebookAccessUpdateItem(BaseModel):
+    """Single notebook access update."""
+
+    notebook_id: int
+    permission: str
+
+    @field_validator("permission")
+    @classmethod
+    def validate_permission(cls, v: str) -> str:
+        valid = {"read", "write", "admin"}
+        if v not in valid:
+            raise ValueError(f"Permission must be one of: {', '.join(valid)}")
+        return v
+
+
+class BulkNotebookAccessRequest(BaseModel):
+    """Bulk update notebook access."""
+
+    accesses: list[NotebookAccessUpdateItem]
 
 
 # ---------------------------------------------------------------------------
@@ -483,3 +539,291 @@ async def update_member_role(
         accepted_at=membership.accepted_at,
         is_pending=membership.accepted_at is None,
     )
+
+
+@router.get("/{member_id}/notebook-access", response_model=MemberNotebookAccessResponse)
+async def get_member_notebook_access(
+    member_id: int,
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> MemberNotebookAccessResponse:
+    """Get notebook access list for a specific member.
+
+    Requires OWNER or ADMIN role.
+    """
+    if current_user["role"] not in {MemberRole.OWNER, MemberRole.ADMIN}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only OWNER or ADMIN can view member access",
+        )
+
+    from sqlalchemy import select
+
+    from app.models import Membership
+
+    result = await db.execute(
+        select(Membership).where(
+            Membership.id == member_id,
+            Membership.org_id == current_user["org_id"],
+        )
+    )
+    membership = result.scalar_one_or_none()
+    if not membership:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Member not found",
+        )
+
+    items = await get_user_notebook_accesses(db, membership.user_id)
+    return MemberNotebookAccessResponse(
+        items=[NotebookAccessItem(**item) for item in items]
+    )
+
+
+@router.put("/{member_id}/notebook-access", response_model=MemberNotebookAccessResponse)
+async def update_member_notebook_access(
+    member_id: int,
+    request: BulkNotebookAccessRequest,
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> MemberNotebookAccessResponse:
+    """Bulk upsert notebook access for a member.
+
+    Requires OWNER or ADMIN role.
+    """
+    if current_user["role"] not in {MemberRole.OWNER, MemberRole.ADMIN}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only OWNER or ADMIN can update member access",
+        )
+
+    from sqlalchemy import select
+
+    from app.models import Membership
+
+    result = await db.execute(
+        select(Membership).where(
+            Membership.id == member_id,
+            Membership.org_id == current_user["org_id"],
+        )
+    )
+    membership = result.scalar_one_or_none()
+    if not membership:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Member not found",
+        )
+
+    for access_item in request.accesses:
+        await grant_notebook_access(
+            db,
+            notebook_id=access_item.notebook_id,
+            user_id=membership.user_id,
+            org_id=None,
+            permission=access_item.permission,
+            granted_by=current_user["user_id"],
+        )
+
+    await db.commit()
+
+    items = await get_user_notebook_accesses(db, membership.user_id)
+    return MemberNotebookAccessResponse(
+        items=[NotebookAccessItem(**item) for item in items]
+    )
+
+
+@router.delete("/{member_id}/notebook-access/{access_id}", response_model=MessageResponse)
+async def revoke_member_notebook_access(
+    member_id: int,
+    access_id: int,
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> MessageResponse:
+    """Revoke a specific notebook access for a member.
+
+    Requires OWNER or ADMIN role.
+    """
+    if current_user["role"] not in {MemberRole.OWNER, MemberRole.ADMIN}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only OWNER or ADMIN can revoke member access",
+        )
+
+    from sqlalchemy import select
+
+    from app.models import Membership
+
+    result = await db.execute(
+        select(Membership).where(
+            Membership.id == member_id,
+            Membership.org_id == current_user["org_id"],
+        )
+    )
+    membership = result.scalar_one_or_none()
+    if not membership:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Member not found",
+        )
+
+    success = await revoke_notebook_access(db, access_id)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Access record not found",
+        )
+
+    await db.commit()
+    return MessageResponse(message="Access revoked successfully")
+
+
+@router.post("/batch-remove", response_model=BatchRemoveResponse)
+async def batch_remove_members(
+    request: BatchRemoveRequest,
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> BatchRemoveResponse:
+    """Remove multiple members from the organization.
+
+    Requires OWNER or ADMIN role.
+    Cannot remove owner or self. ADMIN cannot remove another ADMIN.
+    """
+    if current_user["role"] not in {MemberRole.OWNER, MemberRole.ADMIN}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only OWNER or ADMIN can remove members",
+        )
+
+    from sqlalchemy import select
+
+    from app.models import Membership
+
+    removed = 0
+    errors: list[str] = []
+
+    for mid in request.member_ids:
+        result = await db.execute(
+            select(Membership).where(
+                Membership.id == mid,
+                Membership.org_id == current_user["org_id"],
+            )
+        )
+        membership = result.scalar_one_or_none()
+
+        if not membership:
+            errors.append(f"Member {mid} not found")
+            continue
+
+        if membership.role == MemberRole.OWNER:
+            errors.append(f"Cannot remove owner (id={mid})")
+            continue
+
+        if membership.user_id == current_user["user_id"]:
+            errors.append(f"Cannot remove yourself (id={mid})")
+            continue
+
+        if current_user["role"] == MemberRole.ADMIN and membership.role == MemberRole.ADMIN:
+            errors.append(f"ADMIN cannot remove another ADMIN (id={mid})")
+            continue
+
+        success = await remove_member_from_org(db, mid, current_user["org_id"])
+        if success:
+            removed += 1
+        else:
+            errors.append(f"Failed to remove member {mid}")
+
+    await db.commit()
+
+    logger.info(
+        "Batch remove: removed=%d, failed=%d, by=%s",
+        removed,
+        len(errors),
+        current_user["email"],
+    )
+
+    if removed > 0:
+        await log_activity(
+            "member", "completed",
+            message=f"멤버 일괄 제거: {removed}명",
+            details={"removed": removed, "errors": errors},
+            triggered_by=get_trigger_name(current_user),
+        )
+
+    return BatchRemoveResponse(
+        removed=removed,
+        failed=len(errors),
+        errors=errors,
+    )
+
+
+@router.delete("/{member_id}", response_model=MessageResponse)
+async def delete_member(
+    member_id: int,
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> MessageResponse:
+    """Remove a member from the organization.
+
+    Requires OWNER or ADMIN role.
+    Cannot remove owner or self. ADMIN cannot remove another ADMIN.
+    """
+    if current_user["role"] not in {MemberRole.OWNER, MemberRole.ADMIN}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only OWNER or ADMIN can remove members",
+        )
+
+    from sqlalchemy import select
+
+    from app.models import Membership
+
+    result = await db.execute(
+        select(Membership).where(
+            Membership.id == member_id,
+            Membership.org_id == current_user["org_id"],
+        )
+    )
+    membership = result.scalar_one_or_none()
+
+    if not membership:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Member not found",
+        )
+
+    if membership.role == MemberRole.OWNER:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot remove owner",
+        )
+
+    if membership.user_id == current_user["user_id"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot remove yourself",
+        )
+
+    if current_user["role"] == MemberRole.ADMIN and membership.role == MemberRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="ADMIN cannot remove another ADMIN",
+        )
+
+    user = await get_user_by_id(db, membership.user_id)
+    await remove_member_from_org(db, member_id, current_user["org_id"])
+    await db.commit()
+
+    logger.info(
+        "Member removed: member_id=%d, by=%s",
+        member_id,
+        current_user["email"],
+    )
+
+    await log_activity(
+        "member", "completed",
+        message=f"멤버 제거: {user.email if user else 'unknown'}",
+        details={"member_id": member_id},
+        triggered_by=get_trigger_name(current_user),
+    )
+
+    return MessageResponse(message="Member removed successfully")

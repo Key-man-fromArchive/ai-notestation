@@ -149,6 +149,34 @@ async def can_manage_notebook_access(
     return await check_notebook_access(db, user_id, notebook_id, NotePermission.ADMIN)
 
 
+async def get_user_notebook_accesses(
+    db: AsyncSession,
+    user_id: int,
+) -> list[dict]:
+    """Get all notebook access records for a specific user, with notebook names."""
+    from app.models import Notebook
+
+    result = await db.execute(
+        select(NotebookAccess).where(NotebookAccess.user_id == user_id)
+    )
+    accesses = result.scalars().all()
+
+    items = []
+    for access in accesses:
+        nb_result = await db.execute(
+            select(Notebook.name).where(Notebook.id == access.notebook_id)
+        )
+        notebook_name = nb_result.scalar_one_or_none() or "Unknown"
+        items.append({
+            "access_id": access.id,
+            "notebook_id": access.notebook_id,
+            "notebook_name": notebook_name,
+            "permission": access.permission,
+        })
+
+    return items
+
+
 async def get_effective_note_permission(
     db: AsyncSession,
     user_id: int,

@@ -4,7 +4,7 @@ import secrets
 from datetime import UTC, datetime, timedelta
 
 import bcrypt
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import MemberRole
@@ -163,3 +163,35 @@ async def get_membership(db: AsyncSession, user_id: int, org_id: int) -> Members
         select(Membership).where(Membership.user_id == user_id).where(Membership.org_id == org_id)
     )
     return result.scalar_one_or_none()
+
+
+async def remove_member_from_org(db: AsyncSession, membership_id: int, org_id: int) -> bool:
+    """Remove a member and all their access records from the organization."""
+    from app.models import NoteAccess, NotebookAccess
+
+    result = await db.execute(
+        select(Membership).where(
+            Membership.id == membership_id,
+            Membership.org_id == org_id,
+        )
+    )
+    membership = result.scalar_one_or_none()
+    if not membership:
+        return False
+
+    user_id = membership.user_id
+
+    # Delete notebook access for this user
+    await db.execute(
+        delete(NotebookAccess).where(NotebookAccess.user_id == user_id)
+    )
+    # Delete note access for this user
+    await db.execute(
+        delete(NoteAccess).where(NoteAccess.user_id == user_id)
+    )
+    # Delete the membership
+    await db.execute(
+        delete(Membership).where(Membership.id == membership_id)
+    )
+
+    return True

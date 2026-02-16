@@ -66,6 +66,33 @@ export function useMembers() {
     },
   })
 
+  const removeMemberMutation = useMutation<
+    { message: string },
+    ApiError,
+    number
+  >({
+    mutationFn: (memberId) =>
+      apiClient.delete<{ message: string }>(`/members/${memberId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: MEMBERS_QUERY_KEY })
+    },
+  })
+
+  const batchRemoveMutation = useMutation<
+    { removed: number; failed: number; errors: string[] },
+    ApiError,
+    number[]
+  >({
+    mutationFn: (memberIds) =>
+      apiClient.post<{ removed: number; failed: number; errors: string[] }>(
+        '/members/batch-remove',
+        { member_ids: memberIds },
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: MEMBERS_QUERY_KEY })
+    },
+  })
+
   return {
     members: data?.members ?? [],
     total: data?.total ?? 0,
@@ -78,5 +105,9 @@ export function useMembers() {
     updateRole: updateRoleMutation.mutateAsync,
     isUpdatingRole: updateRoleMutation.isPending,
     updateRoleError: updateRoleMutation.error,
+    removeMember: removeMemberMutation.mutateAsync,
+    isRemoving: removeMemberMutation.isPending,
+    batchRemoveMembers: batchRemoveMutation.mutateAsync,
+    isBatchRemoving: batchRemoveMutation.isPending,
   }
 }

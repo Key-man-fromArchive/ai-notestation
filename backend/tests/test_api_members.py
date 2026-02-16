@@ -352,3 +352,223 @@ class TestUpdateRole:
             )
 
         assert response.status_code == 422
+
+
+class TestDeleteMember:
+    @pytest.mark.asyncio
+    async def test_delete_member_requires_auth(self):
+        app = _get_app()
+        transport = ASGITransport(app=app)
+
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.delete("/api/members/1")
+
+        assert response.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_delete_member_requires_owner_or_admin(self):
+        from app.services.auth_service import create_access_token
+
+        app = _get_app()
+        transport = ASGITransport(app=app)
+
+        token = create_access_token(data={
+            "sub": "viewer@example.com",
+            "user_id": 3,
+            "org_id": 1,
+            "role": MemberRole.VIEWER,
+        })
+
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.delete(
+                "/api/members/2",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_delete_member_cannot_remove_owner(self):
+        from app.services.auth_service import create_access_token
+
+        app = _get_app()
+        transport = ASGITransport(app=app)
+        mock_db = AsyncMock()
+        mock_db.commit = AsyncMock()
+
+        owner_membership = _make_membership(1, 10, 1, MemberRole.OWNER, datetime.now(UTC))
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = owner_membership
+        mock_db.execute = AsyncMock(return_value=mock_result)
+
+        token = create_access_token(data={
+            "sub": "admin@example.com",
+            "user_id": 2,
+            "org_id": 1,
+            "role": MemberRole.ADMIN,
+        })
+
+        from app.database import get_db
+        app.dependency_overrides[get_db] = lambda: mock_db
+
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.delete(
+                "/api/members/1",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+
+        app.dependency_overrides.clear()
+        assert response.status_code == 400
+        assert "Cannot remove owner" in response.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_delete_member_cannot_remove_self(self):
+        from app.services.auth_service import create_access_token
+
+        app = _get_app()
+        transport = ASGITransport(app=app)
+        mock_db = AsyncMock()
+        mock_db.commit = AsyncMock()
+
+        self_membership = _make_membership(1, 2, 1, MemberRole.ADMIN, datetime.now(UTC))
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = self_membership
+        mock_db.execute = AsyncMock(return_value=mock_result)
+
+        token = create_access_token(data={
+            "sub": "admin@example.com",
+            "user_id": 2,
+            "org_id": 1,
+            "role": MemberRole.ADMIN,
+        })
+
+        from app.database import get_db
+        app.dependency_overrides[get_db] = lambda: mock_db
+
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.delete(
+                "/api/members/1",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+
+        app.dependency_overrides.clear()
+        assert response.status_code == 400
+        assert "Cannot remove yourself" in response.json()["detail"]
+
+
+class TestBatchRemoveMembers:
+    @pytest.mark.asyncio
+    async def test_batch_remove_requires_auth(self):
+        app = _get_app()
+        transport = ASGITransport(app=app)
+
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/api/members/batch-remove",
+                json={"member_ids": [1, 2]},
+            )
+
+        assert response.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_batch_remove_requires_owner_or_admin(self):
+        from app.services.auth_service import create_access_token
+
+        app = _get_app()
+        transport = ASGITransport(app=app)
+
+        token = create_access_token(data={
+            "sub": "member@example.com",
+            "user_id": 3,
+            "org_id": 1,
+            "role": MemberRole.MEMBER,
+        })
+
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/api/members/batch-remove",
+                json={"member_ids": [1, 2]},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+
+        assert response.status_code == 403
+
+
+class TestMemberNotebookAccess:
+    @pytest.mark.asyncio
+    async def test_get_member_access_requires_auth(self):
+        app = _get_app()
+        transport = ASGITransport(app=app)
+
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get("/api/members/1/notebook-access")
+
+        assert response.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_get_member_access_requires_owner_or_admin(self):
+        from app.services.auth_service import create_access_token
+
+        app = _get_app()
+        transport = ASGITransport(app=app)
+
+        token = create_access_token(data={
+            "sub": "viewer@example.com",
+            "user_id": 3,
+            "org_id": 1,
+            "role": MemberRole.VIEWER,
+        })
+
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get(
+                "/api/members/1/notebook-access",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_update_member_access_requires_auth(self):
+        app = _get_app()
+        transport = ASGITransport(app=app)
+
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.put(
+                "/api/members/1/notebook-access",
+                json={"accesses": [{"notebook_id": 1, "permission": "read"}]},
+            )
+
+        assert response.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_revoke_member_access_requires_auth(self):
+        app = _get_app()
+        transport = ASGITransport(app=app)
+
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.delete("/api/members/1/notebook-access/1")
+
+        assert response.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_update_access_validates_permission(self):
+        from app.services.auth_service import create_access_token
+
+        app = _get_app()
+        transport = ASGITransport(app=app)
+
+        token = create_access_token(data={
+            "sub": "owner@example.com",
+            "user_id": 1,
+            "org_id": 1,
+            "role": MemberRole.OWNER,
+        })
+
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.put(
+                "/api/members/1/notebook-access",
+                json={"accesses": [{"notebook_id": 1, "permission": "invalid"}]},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+
+        assert response.status_code == 422
