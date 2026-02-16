@@ -16,6 +16,7 @@ Storage:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from typing import Any
@@ -458,3 +459,114 @@ async def test_nas_connection(
         )
     finally:
         await client.close()
+
+
+# ---------------------------------------------------------------------------
+# AI provider connection test
+# ---------------------------------------------------------------------------
+
+
+class AIProviderTestResult(BaseModel):
+    """Result for a single AI provider connection test."""
+
+    provider: str
+    success: bool
+    message: str
+
+
+class AIProviderTestResponse(BaseModel):
+    """Response for the AI provider connection test."""
+
+    results: list[AIProviderTestResult]
+
+
+# Maps setting key → (env_var, display_name)
+_AI_PROVIDERS: dict[str, tuple[str, str]] = {
+    "openai_api_key": ("OPENAI_API_KEY", "OpenAI"),
+    "anthropic_api_key": ("ANTHROPIC_API_KEY", "Anthropic"),
+    "google_api_key": ("GOOGLE_API_KEY", "Google"),
+    "zhipuai_api_key": ("ZHIPUAI_API_KEY", "ZhipuAI"),
+}
+
+
+async def _test_single_provider(
+    env_var: str, display_name: str, lang: str,
+) -> AIProviderTestResult:
+    """Test a single AI provider connection."""
+    api_key = os.environ.get(env_var, "")
+    if not api_key:
+        return AIProviderTestResult(
+            provider=display_name,
+            success=False,
+            message=msg("settings.ai_test_no_key", lang, provider=display_name),
+        )
+
+    try:
+        if env_var == "OPENAI_API_KEY":
+            from openai import AsyncOpenAI
+
+            client = AsyncOpenAI(api_key=api_key)
+            try:
+                await client.models.list()
+            finally:
+                await client.close()
+
+        elif env_var == "ANTHROPIC_API_KEY":
+            from anthropic import AsyncAnthropic
+
+            client = AsyncAnthropic(api_key=api_key)
+            try:
+                await client.messages.create(
+                    model="claude-haiku-4-5-20251001",
+                    max_tokens=1,
+                    messages=[{"role": "user", "content": "hi"}],
+                )
+            finally:
+                await client.close()
+
+        elif env_var == "GOOGLE_API_KEY":
+            from google import genai
+
+            gc = genai.Client(api_key=api_key)
+            await asyncio.to_thread(lambda: list(gc.models.list(config={"page_size": 1})))
+
+        elif env_var == "ZHIPUAI_API_KEY":
+            from zhipuai import ZhipuAI
+
+            client = ZhipuAI(api_key=api_key)
+            await asyncio.to_thread(
+                lambda: client.chat.completions.create(
+                    model="glm-4-flash",
+                    max_tokens=1,
+                    messages=[{"role": "user", "content": "hi"}],
+                ),
+            )
+
+        return AIProviderTestResult(
+            provider=display_name,
+            success=True,
+            message=msg("settings.ai_test_success", lang, provider=display_name),
+        )
+    except Exception as exc:
+        detail = str(exc)[:120]
+        return AIProviderTestResult(
+            provider=display_name,
+            success=False,
+            message=msg("settings.ai_test_failed", lang, provider=display_name, detail=detail),
+        )
+
+
+@router.post("/ai/test", response_model=AIProviderTestResponse)
+async def test_ai_connection(
+    request: Request,
+    _current_user: dict = Depends(get_current_user),  # noqa: B008
+) -> AIProviderTestResponse:
+    """Test all configured AI provider connections."""
+    lang = get_language(request)
+    results = await asyncio.gather(
+        *[
+            _test_single_provider(env_var, display_name, lang)
+            for env_var, display_name in _AI_PROVIDERS.values()
+        ],
+    )
+    return AIProviderTestResponse(results=list(results))

@@ -811,11 +811,15 @@ async def _run_image_sync_background(state: ImageSyncState) -> None:
 
         async with async_session_factory() as db:
             # Count total notes needing image sync
+            # Match notes with original ref="..." tags OR NAS proxy URLs
             count_result = await db.execute(
                 text("""
                     SELECT COUNT(DISTINCT n.synology_note_id)
                     FROM notes n
-                    WHERE n.content_html ~ '<img[^>]*ref="[^"]+"'
+                    WHERE (
+                        n.content_html ~ '<img[^>]*ref="[^"]+"'
+                        OR n.content_html LIKE '%/api/nas-images/%'
+                    )
                     AND NOT EXISTS (
                         SELECT 1 FROM note_images ni
                         WHERE ni.synology_note_id = n.synology_note_id
@@ -829,7 +833,10 @@ async def _run_image_sync_background(state: ImageSyncState) -> None:
                 text("""
                     SELECT DISTINCT n.synology_note_id
                     FROM notes n
-                    WHERE n.content_html ~ '<img[^>]*ref="[^"]+"'
+                    WHERE (
+                        n.content_html ~ '<img[^>]*ref="[^"]+"'
+                        OR n.content_html LIKE '%/api/nas-images/%'
+                    )
                     AND NOT EXISTS (
                         SELECT 1 FROM note_images ni
                         WHERE ni.synology_note_id = n.synology_note_id
@@ -922,6 +929,8 @@ async def sync_images_from_nas(
         )
 
     # Get count of notes needing sync
+    # Match notes with original ref="..." tags OR notes with NAS proxy URLs
+    # (lazy-cache rewrites ref="..." → /api/nas-images/ but doesn't extract locally)
     async with async_session_factory() as db:
         from sqlalchemy import text
 
@@ -929,7 +938,10 @@ async def sync_images_from_nas(
             text("""
                 SELECT COUNT(DISTINCT n.synology_note_id)
                 FROM notes n
-                WHERE n.content_html ~ '<img[^>]*ref="[^"]+"'
+                WHERE (
+                    n.content_html ~ '<img[^>]*ref="[^"]+"'
+                    OR n.content_html LIKE '%/api/nas-images/%'
+                )
                 AND NOT EXISTS (
                     SELECT 1 FROM note_images ni
                     WHERE ni.synology_note_id = n.synology_note_id

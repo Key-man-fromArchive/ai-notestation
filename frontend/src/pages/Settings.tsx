@@ -120,6 +120,11 @@ export default function Settings() {
       apiClient.post<{ success: boolean; message: string }>('/settings/nas/test', {}),
   })
 
+  const aiTestMutation = useMutation({
+    mutationFn: () =>
+      apiClient.post<{ results: Array<{ provider: string; success: boolean; message: string }> }>('/settings/ai/test', {}),
+  })
+
   const handleEdit = (key: string, currentValue: string) => {
     setEditingKey(key)
     const isApiKey = key.endsWith('_api_key') || key === 'nas_password'
@@ -255,6 +260,7 @@ export default function Settings() {
               editValue={editValue}
               expandedApiKeys={expandedApiKeys}
               isPending={updateMutation.isPending}
+              aiTestMutation={aiTestMutation}
               onEdit={handleEdit}
               onSave={handleSave}
               onCancel={handleCancel}
@@ -430,6 +436,9 @@ interface ApiKeysSectionProps {
   editValue: string
   expandedApiKeys: Set<string>
   isPending: boolean
+  aiTestMutation: ReturnType<
+    typeof useMutation<{ results: Array<{ provider: string; success: boolean; message: string }> }, Error, void>
+  >
   onEdit: (key: string, value: string) => void
   onSave: (key: string) => void
   onCancel: () => void
@@ -443,6 +452,7 @@ function ApiKeysSection({
   editValue,
   expandedApiKeys,
   isPending,
+  aiTestMutation,
   onEdit,
   onSave,
   onCancel,
@@ -605,6 +615,46 @@ function ApiKeysSection({
           )
         })}
       </div>
+
+      <div className="mt-4 flex flex-col gap-3">
+        <button
+          onClick={() => aiTestMutation.mutate()}
+          disabled={aiTestMutation.isPending}
+          className={cn(
+            'flex items-center gap-2 px-4 py-2 rounded-md w-fit',
+            'border border-primary/30 text-primary',
+            'hover:bg-primary/5 transition-colors',
+            'disabled:opacity-50 disabled:cursor-not-allowed',
+          )}
+        >
+          <Wifi className="h-4 w-4" aria-hidden="true" />
+          {aiTestMutation.isPending ? t('settings.aiConnectionTesting') : t('settings.aiConnectionTest')}
+        </button>
+
+        {aiTestMutation.isSuccess && (
+          <div className="space-y-1.5">
+            {aiTestMutation.data.results.map((r) => (
+              <div key={r.provider} className="flex items-center gap-2">
+                {r.success ? (
+                  <CheckCircle className="h-4 w-4 text-green-600 shrink-0" aria-hidden="true" />
+                ) : (
+                  <AlertCircle className="h-4 w-4 text-destructive shrink-0" aria-hidden="true" />
+                )}
+                <span className={cn('text-sm', r.success ? 'text-green-600' : 'text-destructive')}>
+                  {r.message}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {aiTestMutation.isError && (
+          <div className="flex items-center gap-2 text-destructive">
+            <AlertCircle className="h-4 w-4" aria-hidden="true" />
+            <span className="text-sm">{t('settings.connectionTestFailed')}</span>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -623,6 +673,7 @@ function ImageSyncSection() {
     progress,
     isSyncing,
     triggerSync,
+    triggerMessage,
   } = useImageSync()
 
   const handleTriggerSync = async () => {
@@ -648,6 +699,12 @@ function ImageSyncSection() {
         <p className="text-xs text-muted-foreground mb-3">
           {t('settings.lastImageSync')}: {new Date(lastSyncAt).toLocaleString(i18n.language === 'ko' ? 'ko-KR' : 'en-US')}
         </p>
+      )}
+
+      {triggerMessage && !isSyncing && status !== 'syncing' && (
+        <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+          <p className="text-sm text-blue-600">{triggerMessage}</p>
+        </div>
       )}
 
       {status === 'syncing' && (

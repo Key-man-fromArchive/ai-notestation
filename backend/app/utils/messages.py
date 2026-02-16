@@ -196,6 +196,18 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "ko": "NAS 연결에 실패했습니다: {detail}",
         "en": "NAS connection failed: {detail}",
     },
+    "settings.ai_test_success": {
+        "ko": "{provider} 연결 성공",
+        "en": "{provider} connected successfully",
+    },
+    "settings.ai_test_failed": {
+        "ko": "{provider} 연결 실패: {detail}",
+        "en": "{provider} connection failed: {detail}",
+    },
+    "settings.ai_test_no_key": {
+        "ko": "{provider} API 키가 설정되지 않았습니다",
+        "en": "No API key configured for {provider}",
+    },
     # Graph messages
     "graph.no_data": {
         "ko": "그래프 데이터가 없습니다",

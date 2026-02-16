@@ -12,6 +12,12 @@ interface ImageSyncStatus {
   remaining_notes: number
 }
 
+interface ImageSyncTriggerResponse {
+  status: string
+  message: string
+  total_notes: number
+}
+
 export function useImageSync() {
   const [status, setStatus] = useState<ImageSyncStatus>({
     status: 'idle',
@@ -24,6 +30,7 @@ export function useImageSync() {
     remaining_notes: 0,
   })
   const [isSyncing, setIsSyncing] = useState(false)
+  const [triggerMessage, setTriggerMessage] = useState<string | null>(null)
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -38,7 +45,13 @@ export function useImageSync() {
   const triggerSync = useCallback(async () => {
     try {
       setIsSyncing(true)
-      await apiClient.post('/nsx/sync-images', {})
+      setTriggerMessage(null)
+      const response = await apiClient.post<ImageSyncTriggerResponse>('/nsx/sync-images', {})
+      if (response.status === 'no_work' || response.status === 'already_syncing') {
+        setIsSyncing(false)
+        setTriggerMessage(response.message)
+        return
+      }
       // Start polling for status
       fetchStatus()
     } catch (err) {
@@ -77,6 +90,7 @@ export function useImageSync() {
     lastSyncAt: status.last_sync_at,
     error: status.error_message,
     remainingNotes: status.remaining_notes,
+    triggerMessage,
     progress,
     isSyncing,
     triggerSync,
