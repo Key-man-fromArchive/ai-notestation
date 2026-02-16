@@ -858,6 +858,60 @@ async def _create_db_backup_internal(triggered_by: str | None = None) -> dict:
     }
 
 
+async def _restore_db_from_server_internal(filename: str, triggered_by: str | None = None) -> dict:
+    """Run gunzip | psql from a server-side backup. Reusable by endpoint and full-restore."""
+    if not _BACKUP_FILENAME_PATTERN.match(filename):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid backup filename",
+        )
+
+    file_path = _backup_dir() / filename
+    if not file_path.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Backup file not found",
+        )
+
+    file_size = file_path.stat().st_size
+    db_params = _parse_database_url()
+
+    env = os.environ.copy()
+    env["PGPASSWORD"] = db_params["password"]
+
+    proc = await asyncio.create_subprocess_shell(
+        f"gunzip -c {file_path} | psql -h {db_params['host']}"
+        f" -p {db_params['port']} -U {db_params['user']}"
+        f" -d {db_params['dbname']}",
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        env=env,
+    )
+    _, stderr = await proc.communicate()
+
+    if proc.returncode != 0:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Restore failed: {stderr.decode().strip()}",
+        )
+
+    await log_activity(
+        "admin",
+        "completed",
+        message=f"DB 복원 완료 (서버): {filename}",
+        details={"filename": filename, "size": file_size},
+        triggered_by=triggered_by,
+    )
+
+    return {
+        "status": "ok",
+        "filename": filename,
+        "message": f"Database restored from {filename}",
+        "size": file_size,
+        "size_pretty": _human_size(file_size),
+    }
+
+
 @router.post("/db/backup")
 async def create_db_backup(
     current_user: dict = Depends(require_admin),  # noqa: B008
@@ -986,6 +1040,17 @@ async def restore_db_backup(
         "size": len(content),
         "size_pretty": _human_size(len(content)),
     }
+
+
+@router.post("/db/restore/{filename}")
+async def restore_db_from_server(
+    filename: str,
+    confirm: bool = Query(False),  # noqa: B008
+    current_user: dict = Depends(require_admin),  # noqa: B008
+) -> dict:
+    """Restore database from a server-side backup file (no upload needed)."""
+    _require_confirm(confirm)
+    return await _restore_db_from_server_internal(filename, triggered_by=get_trigger_name(current_user))
 
 
 @router.delete("/db/backup/{filename}")

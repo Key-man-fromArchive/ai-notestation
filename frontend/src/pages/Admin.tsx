@@ -377,6 +377,7 @@ function DatabaseTab() {
   // --- Full backup state ---
   const [fullMsg, setFullMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [isCreatingFull, setIsCreatingFull] = useState(false)
+  const [isRestoringFull, setIsRestoringFull] = useState(false)
 
   // --- Native backup state ---
   const { data: nativeBackups, refetch: refetchNativeBackups } = useQuery({
@@ -388,6 +389,7 @@ function DatabaseTab() {
   const [showAllNative, setShowAllNative] = useState(false)
   const [nativeImportFile, setNativeImportFile] = useState<File | null>(null)
   const [isImportingNative, setIsImportingNative] = useState(false)
+  const [isRestoringNative, setIsRestoringNative] = useState(false)
 
   // --- Settings backup state ---
   const [settingsFile, setSettingsFile] = useState<File | null>(null)
@@ -414,6 +416,9 @@ function DatabaseTab() {
   const [restoreConfirmText, setRestoreConfirmText] = useState('')
   const [showRestoreConfirm, setShowRestoreConfirm] = useState(false)
   const [showAllDb, setShowAllDb] = useState(false)
+  const [isRestoringDbFromServer, setIsRestoringDbFromServer] = useState(false)
+  const [dbRestoreServerConfirm, setDbRestoreServerConfirm] = useState<string | null>(null)
+  const [dbRestoreServerText, setDbRestoreServerText] = useState('')
 
   // --- Full backup create ---
   const handleCreateFullBackup = async () => {
@@ -493,6 +498,32 @@ function DatabaseTab() {
       setNativeMsg({ ok: true, text: t('admin.nativeBackupDeleted') })
     } catch {
       setNativeMsg({ ok: false, text: t('admin.nativeBackupDeleteFailed') })
+    }
+  }
+
+  // --- Native backup restore from server ---
+  const handleRestoreNativeFromServer = async (filename: string) => {
+    if (!confirm(t('admin.nativeRestoreConfirm'))) return
+    setIsRestoringNative(true)
+    setNativeMsg(null)
+    try {
+      const result = await apiClient.post<{ note_count: number; image_count: number; attachment_count: number }>(
+        `/backup/native/restore/${filename}`,
+        {},
+      )
+      setNativeMsg({
+        ok: true,
+        text: t('admin.nativeRestoreSuccess', {
+          note_count: result.note_count,
+          image_count: result.image_count,
+          attachment_count: result.attachment_count,
+        }),
+      })
+      queryClient.invalidateQueries({ queryKey: ['admin'] })
+    } catch (e) {
+      setNativeMsg({ ok: false, text: e instanceof Error ? e.message : t('admin.nativeRestoreFailed') })
+    } finally {
+      setIsRestoringNative(false)
     }
   }
 
@@ -669,6 +700,48 @@ function DatabaseTab() {
     }
   }
 
+  // --- DB restore from server ---
+  const handleRestoreDbFromServer = async (filename: string) => {
+    setIsRestoringDbFromServer(true)
+    setDbMsg(null)
+    try {
+      const result = await apiClient.post<{ filename: string }>(`/admin/db/restore/${filename}?confirm=true`, {})
+      setDbRestoreServerConfirm(null)
+      setDbRestoreServerText('')
+      setDbMsg({ ok: true, text: t('admin.dbRestoreFromServerSuccess', { filename: result.filename }) })
+      queryClient.invalidateQueries({ queryKey: ['admin'] })
+    } catch (e) {
+      setDbMsg({ ok: false, text: e instanceof Error ? e.message : t('admin.dbRestoreFromServerFailed') })
+    } finally {
+      setIsRestoringDbFromServer(false)
+    }
+  }
+
+  // --- Full restore ---
+  const handleFullRestore = async () => {
+    if (!confirm(t('admin.fullRestoreConfirm'))) return
+    setIsRestoringFull(true)
+    setFullMsg(null)
+    try {
+      const result = await apiClient.post<{
+        db: unknown
+        db_error: string | null
+        native: unknown
+        native_error: string | null
+      }>('/backup/full/restore', {})
+      if (result.db_error || result.native_error) {
+        setFullMsg({ ok: false, text: t('admin.fullRestorePartial') })
+      } else {
+        setFullMsg({ ok: true, text: t('admin.fullRestoreSuccess') })
+      }
+      queryClient.invalidateQueries({ queryKey: ['admin'] })
+    } catch (e) {
+      setFullMsg({ ok: false, text: e instanceof Error ? e.message : t('admin.fullRestoreFailed') })
+    } finally {
+      setIsRestoringFull(false)
+    }
+  }
+
   // --- DB restore ---
   const handleRestore = async () => {
     if (!restoreFile) return
@@ -755,22 +828,40 @@ function DatabaseTab() {
         </div>
         <div className="p-4 space-y-4">
           <p className="text-sm text-muted-foreground">{t('admin.fullBackupDesc')}</p>
-          <button
-            onClick={handleCreateFullBackup}
-            disabled={isCreatingFull}
-            className={cn(
-              'flex items-center gap-2 px-4 py-2 rounded-md text-sm',
-              'bg-primary text-primary-foreground hover:bg-primary/90 transition-colors',
-              'disabled:opacity-50 disabled:cursor-not-allowed',
-            )}
-          >
-            {isCreatingFull ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Package className="h-4 w-4" />
-            )}
-            {isCreatingFull ? t('admin.fullBackupCreating') : t('admin.fullBackupCreate')}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={handleCreateFullBackup}
+              disabled={isCreatingFull || isRestoringFull}
+              className={cn(
+                'flex items-center gap-2 px-4 py-2 rounded-md text-sm',
+                'bg-primary text-primary-foreground hover:bg-primary/90 transition-colors',
+                'disabled:opacity-50 disabled:cursor-not-allowed',
+              )}
+            >
+              {isCreatingFull ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Package className="h-4 w-4" />
+              )}
+              {isCreatingFull ? t('admin.fullBackupCreating') : t('admin.fullBackupCreate')}
+            </button>
+            <button
+              onClick={handleFullRestore}
+              disabled={isRestoringFull || isCreatingFull}
+              className={cn(
+                'flex items-center gap-2 px-4 py-2 rounded-md text-sm',
+                'bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors',
+                'disabled:opacity-50 disabled:cursor-not-allowed',
+              )}
+            >
+              {isRestoringFull ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RotateCcw className="h-4 w-4" />
+              )}
+              {isRestoringFull ? t('admin.fullRestoring') : t('admin.fullRestore')}
+            </button>
+          </div>
           {fullMsg && (
             <div
               className={cn(
@@ -840,6 +931,14 @@ function DatabaseTab() {
                       </div>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        onClick={() => handleRestoreNativeFromServer(b.filename)}
+                        disabled={isRestoringNative}
+                        className="p-1.5 rounded hover:bg-primary/10 text-primary transition-colors disabled:opacity-50"
+                        title={t('admin.dbRestoreFromServer')}
+                      >
+                        {isRestoringNative ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+                      </button>
                       <button
                         onClick={() => handleDownloadNativeBackup(b.filename)}
                         className="p-1.5 rounded hover:bg-muted transition-colors"
@@ -991,32 +1090,83 @@ function DatabaseTab() {
               </div>
               <div className="divide-y divide-border">
                 {(showAllDb ? backups.backups : backups.backups.slice(0, 5)).map((b) => (
-                  <div key={b.filename} className="flex items-center justify-between px-3 py-2 hover:bg-muted/20">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <FileArchive className="h-4 w-4 text-muted-foreground shrink-0" />
-                      <div className="min-w-0">
-                        <p className="text-sm font-mono truncate">{b.filename}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {b.size_pretty} &middot; {new Date(b.created_at).toLocaleString()}
-                        </p>
+                  <div key={b.filename}>
+                    <div className="flex items-center justify-between px-3 py-2 hover:bg-muted/20">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <FileArchive className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <div className="min-w-0">
+                          <p className="text-sm font-mono truncate">{b.filename}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {b.size_pretty} &middot; {new Date(b.created_at).toLocaleString()}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          onClick={() => {
+                            setDbRestoreServerConfirm(dbRestoreServerConfirm === b.filename ? null : b.filename)
+                            setDbRestoreServerText('')
+                          }}
+                          disabled={isRestoringDbFromServer}
+                          className="p-1.5 rounded hover:bg-primary/10 text-primary transition-colors disabled:opacity-50"
+                          title={t('admin.dbRestoreFromServer')}
+                        >
+                          {isRestoringDbFromServer && dbRestoreServerConfirm === b.filename ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <RotateCcw className="h-4 w-4" />
+                          )}
+                        </button>
+                        <button
+                          onClick={() => handleDownloadBackup(b.filename)}
+                          className="p-1.5 rounded hover:bg-muted transition-colors"
+                          title="Download"
+                        >
+                          <Download className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteBackup(b.filename)}
+                          className="p-1.5 rounded hover:bg-destructive/10 text-destructive transition-colors"
+                          title="Delete"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
                       </div>
                     </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        onClick={() => handleDownloadBackup(b.filename)}
-                        className="p-1.5 rounded hover:bg-muted transition-colors"
-                        title="Download"
-                      >
-                        <Download className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteBackup(b.filename)}
-                        className="p-1.5 rounded hover:bg-destructive/10 text-destructive transition-colors"
-                        title="Delete"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
+                    {dbRestoreServerConfirm === b.filename && (
+                      <div className="px-3 pb-3 space-y-2">
+                        <div className="p-3 border border-destructive/30 bg-destructive/5 rounded-md space-y-2">
+                          <p className="text-sm text-muted-foreground">{t('admin.dbRestoreFromServerConfirm')}</p>
+                          <input
+                            type="text"
+                            value={dbRestoreServerText}
+                            onChange={(e) => setDbRestoreServerText(e.target.value)}
+                            placeholder={t('admin.dbRestoreConfirmPlaceholder')}
+                            className="w-full px-3 py-1.5 border border-input rounded-md text-sm bg-background"
+                          />
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => { setDbRestoreServerConfirm(null); setDbRestoreServerText('') }}
+                              className="px-3 py-1.5 rounded-md text-sm border border-input hover:bg-muted transition-colors"
+                            >
+                              {t('common.cancel')}
+                            </button>
+                            <button
+                              onClick={() => handleRestoreDbFromServer(b.filename)}
+                              disabled={dbRestoreServerText !== t('admin.dbRestoreConfirmPlaceholder') || isRestoringDbFromServer}
+                              className={cn(
+                                'flex items-center gap-2 px-3 py-1.5 rounded-md text-sm',
+                                'bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors',
+                                'disabled:opacity-50 disabled:cursor-not-allowed',
+                              )}
+                            >
+                              {isRestoringDbFromServer ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3" />}
+                              {isRestoringDbFromServer ? t('admin.dbRestoring') : t('admin.dbRestore')}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

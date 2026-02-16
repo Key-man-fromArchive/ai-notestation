@@ -801,7 +801,21 @@
     "evaluationRun": "평가 실행",
     "progress": "진행률",
     "evaluationHistory": "평가 이력",
-    "noEvaluationRuns": "아직 평가 이력이 없습니다"
+    "noEvaluationRuns": "아직 평가 이력이 없습니다",
+    "nativeRestoreConfirm": "이 백업에서 노트를 복원하시겠습니까? 기존 노트가 업데이트됩니다.",
+    "nativeRestoreSuccess": "네이티브 백업 복원: {{note_count}}개 노트, {{image_count}}개 이미지, {{attachment_count}}개 첨부파일",
+    "nativeRestoreFailed": "네이티브 복원 실패",
+    "nativeRestoring": "복원 중...",
+    "dbRestoreFromServerConfirm": "이 백업에서 데이터베이스를 복원하시겠습니까? 현재 데이터가 덮어씌워집니다.",
+    "dbRestoreFromServer": "복원",
+    "dbRestoreFromServerSuccess": "데이터베이스 복원 완료: {{filename}}",
+    "dbRestoreFromServerFailed": "데이터베이스 복원 실패",
+    "fullRestore": "전체 복원",
+    "fullRestoring": "복원 중...",
+    "fullRestoreConfirm": "최신 백업에서 모든 데이터를 복원하시겠습니까? 데이터베이스와 노트가 모두 덮어씌워집니다. 이 작업은 되돌릴 수 없습니다.",
+    "fullRestoreSuccess": "전체 복원을 완료했습니다",
+    "fullRestorePartial": "일부 복원에 실패했습니다",
+    "fullRestoreFailed": "전체 복원 실패"
   },
   "operations": {
     "title": "운영 현황",

@@ -801,7 +801,21 @@
     "evaluationRun": "Evaluation Run",
     "progress": "Progress",
     "evaluationHistory": "Evaluation History",
-    "noEvaluationRuns": "No evaluation runs yet"
+    "noEvaluationRuns": "No evaluation runs yet",
+    "nativeRestoreConfirm": "Restore notes from this backup? Existing notes will be updated.",
+    "nativeRestoreSuccess": "Native backup restored: {{note_count}} notes, {{image_count}} images, {{attachment_count}} attachments",
+    "nativeRestoreFailed": "Native restore failed",
+    "nativeRestoring": "Restoring...",
+    "dbRestoreFromServerConfirm": "Restore database from this backup? Current data will be overwritten.",
+    "dbRestoreFromServer": "Restore",
+    "dbRestoreFromServerSuccess": "Database restored from {{filename}}",
+    "dbRestoreFromServerFailed": "Database restore failed",
+    "fullRestore": "Full Restore",
+    "fullRestoring": "Restoring...",
+    "fullRestoreConfirm": "Restore everything from the latest backups? Both database and notes will be overwritten. This cannot be undone.",
+    "fullRestoreSuccess": "Full restore completed successfully",
+    "fullRestorePartial": "Some restores failed",
+    "fullRestoreFailed": "Full restore failed"
   },
   "operations": {
     "title": "Operations",

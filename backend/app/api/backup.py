@@ -12,12 +12,12 @@ import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.admin import _create_db_backup_internal, _human_size, require_admin
+from app.api.admin import _create_db_backup_internal, _human_size, _restore_db_from_server_internal, require_admin
 from app.api.settings import _load_from_db, _save_to_db, sync_api_keys_to_env
 from app.config import get_settings
 from app.database import async_session_factory, get_db
@@ -489,6 +489,199 @@ async def delete_native_backup(
     }
 
 
+@router.post("/backup/native/restore/{filename}", status_code=status.HTTP_200_OK)
+async def restore_native_from_server(
+    filename: str,
+    current_user: dict = Depends(require_admin),  # noqa: B008
+) -> dict:
+    """Restore notes, images, and attachments from a server-side native backup (no upload needed)."""
+    if not _NATIVE_BACKUP_FILENAME_PATTERN.match(filename):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid native backup filename",
+        )
+
+    file_path = _native_backup_dir() / filename
+    if not file_path.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Native backup file not found",
+        )
+
+    notes_payload: list[dict] = []
+    images_payload: list[dict] = []
+    attachments_payload: list[dict] = []
+
+    with zipfile.ZipFile(file_path, "r") as archive:
+        if "manifest.json" not in archive.namelist():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid backup: manifest.json missing",
+            )
+
+        if "notes.json" in archive.namelist():
+            notes_payload = json.loads(archive.read("notes.json").decode("utf-8"))
+        if "note_images.json" in archive.namelist():
+            images_payload = json.loads(archive.read("note_images.json").decode("utf-8"))
+        if "note_attachments.json" in archive.namelist():
+            attachments_payload = json.loads(archive.read("note_attachments.json").decode("utf-8"))
+
+        async with async_session_factory() as session:
+            note_map: dict[str, Note] = {}
+            if notes_payload:
+                note_ids = [n.get("note_id") for n in notes_payload if n.get("note_id")]
+                existing_result = await session.execute(select(Note).where(Note.synology_note_id.in_(note_ids)))
+                existing = {note.synology_note_id: note for note in existing_result.scalars().all()}
+
+                for payload in notes_payload:
+                    note_id = payload.get("note_id")
+                    if not note_id:
+                        continue
+
+                    content_html = payload.get("content_html") or ""
+                    content_text = payload.get("content_text") or NoteStationService.extract_text(content_html)
+                    note = existing.get(note_id)
+
+                    if note:
+                        note.title = payload.get("title", "")
+                        note.content_html = content_html
+                        note.content_json = payload.get("content_json")
+                        note.content_text = content_text
+                        note.notebook_name = payload.get("notebook")
+                        note.tags = payload.get("tags")
+                        note.is_todo = bool(payload.get("is_todo"))
+                        note.is_shortcut = bool(payload.get("is_shortcut"))
+                        note.source_created_at = datetime_from_iso(payload.get("source_created_at"))
+                        note.source_updated_at = datetime_from_iso(payload.get("source_updated_at"))
+                        note.synced_at = datetime_from_iso(payload.get("synced_at"))
+                    else:
+                        note = Note(
+                            synology_note_id=note_id,
+                            title=payload.get("title", ""),
+                            content_html=content_html,
+                            content_json=payload.get("content_json"),
+                            content_text=content_text,
+                            notebook_name=payload.get("notebook"),
+                            tags=payload.get("tags"),
+                            is_todo=bool(payload.get("is_todo")),
+                            is_shortcut=bool(payload.get("is_shortcut")),
+                            source_created_at=datetime_from_iso(payload.get("source_created_at")),
+                            source_updated_at=datetime_from_iso(payload.get("source_updated_at")),
+                            synced_at=datetime_from_iso(payload.get("synced_at")),
+                        )
+                        session.add(note)
+                    note_map[note_id] = note
+
+            await session.flush()
+
+            images_dir = Path(settings.NSX_IMAGES_PATH)
+            uploads_dir = Path(settings.UPLOADS_PATH)
+            images_dir.mkdir(parents=True, exist_ok=True)
+            uploads_dir.mkdir(parents=True, exist_ok=True)
+
+            for img in images_payload:
+                note_id = img.get("note_id")
+                ref = img.get("ref")
+                if not note_id or not ref:
+                    continue
+
+                image_rel = img.get("file_path") or f"images/{note_id}/{ref}"
+                if image_rel not in archive.namelist():
+                    continue
+
+                target_dir = images_dir / note_id
+                target_dir.mkdir(parents=True, exist_ok=True)
+                target_path = target_dir / ref
+
+                with archive.open(image_rel) as src, open(target_path, "wb") as dst:
+                    shutil.copyfileobj(src, dst)
+
+                md5 = img.get("md5") or _compute_md5(target_path)
+                existing_result = await session.execute(
+                    select(NoteImage).where(NoteImage.synology_note_id == note_id).where(NoteImage.ref == ref)
+                )
+                existing_img = existing_result.scalar_one_or_none()
+                if existing_img:
+                    existing_img.md5 = md5
+                    existing_img.name = img.get("name")
+                    existing_img.file_path = str(target_path)
+                    existing_img.mime_type = img.get("mime_type") or existing_img.mime_type
+                    existing_img.width = img.get("width")
+                    existing_img.height = img.get("height")
+                else:
+                    session.add(
+                        NoteImage(
+                            synology_note_id=note_id,
+                            ref=ref,
+                            name=img.get("name") or ref,
+                            md5=md5,
+                            file_path=str(target_path),
+                            mime_type=img.get("mime_type") or "application/octet-stream",
+                            width=img.get("width"),
+                            height=img.get("height"),
+                        )
+                    )
+
+            for att in attachments_payload:
+                note_id = att.get("note_id")
+                file_id = att.get("file_id")
+                if not note_id or not file_id:
+                    continue
+                note = note_map.get(note_id)
+                if not note:
+                    continue
+
+                att_rel = att.get("file_path") or f"attachments/{file_id}"
+                if att_rel in archive.namelist():
+                    target_path = uploads_dir / file_id
+                    with archive.open(att_rel) as src, open(target_path, "wb") as dst:
+                        shutil.copyfileobj(src, dst)
+
+                existing_result = await session.execute(
+                    select(NoteAttachment)
+                    .where(NoteAttachment.note_id == note.id)
+                    .where(NoteAttachment.file_id == file_id)
+                )
+                existing_att = existing_result.scalar_one_or_none()
+                if existing_att:
+                    existing_att.name = att.get("name") or existing_att.name
+                    existing_att.mime_type = att.get("mime_type")
+                    existing_att.size = att.get("size")
+                else:
+                    session.add(
+                        NoteAttachment(
+                            note_id=note.id,
+                            file_id=file_id,
+                            name=att.get("name") or file_id,
+                            mime_type=att.get("mime_type"),
+                            size=att.get("size"),
+                        )
+                    )
+
+            await session.commit()
+
+    await log_activity(
+        "admin",
+        "completed",
+        message=f"네이티브 백업 복원 (서버): {filename}",
+        details={
+            "filename": filename,
+            "note_count": len(notes_payload),
+            "image_count": len(images_payload),
+            "attachment_count": len(attachments_payload),
+        },
+        triggered_by=get_trigger_name(current_user),
+    )
+
+    return {
+        "status": "restored",
+        "filename": filename,
+        "note_count": len(notes_payload),
+        "image_count": len(images_payload),
+        "attachment_count": len(attachments_payload),
+    }
+
+
 # ---------------------------------------------------------------------------
 # Full backup (DB + native) endpoint
 # ---------------------------------------------------------------------------
@@ -518,6 +711,228 @@ async def create_full_backup(
         nonlocal native_result, native_error
         try:
             native_result = await _create_native_backup_internal(db, triggered_by=triggered_by)
+        except Exception as exc:
+            native_error = str(exc)
+
+    await asyncio.gather(_run_db(), _run_native())
+
+    return {
+        "db": db_result,
+        "db_error": db_error,
+        "native": native_result,
+        "native_error": native_error,
+    }
+
+
+@router.post("/backup/full/restore")
+async def restore_full_backup(
+    db_filename: str | None = Query(None),  # noqa: B008
+    native_filename: str | None = Query(None),  # noqa: B008
+    current_user: dict = Depends(require_admin),  # noqa: B008
+) -> dict:
+    """Restore both a DB backup and a native backup. Uses latest if filenames not specified."""
+    triggered_by = get_trigger_name(current_user)
+
+    # Resolve filenames to latest if not specified
+    if not db_filename:
+        from app.api.admin import _backup_dir as _db_backup_dir
+
+        db_files = sorted(_db_backup_dir().glob("db_backup_*.sql.gz"), reverse=True)
+        if db_files:
+            db_filename = db_files[0].name
+
+    if not native_filename:
+        native_files = sorted(_native_backup_dir().glob("ainx_backup_*.zip"), reverse=True)
+        if native_files:
+            native_filename = native_files[0].name
+
+    db_result: dict | None = None
+    native_result: dict | None = None
+    db_error: str | None = None
+    native_error: str | None = None
+
+    async def _run_db():
+        nonlocal db_result, db_error
+        if not db_filename:
+            db_error = "No DB backup found"
+            return
+        try:
+            db_result = await _restore_db_from_server_internal(db_filename, triggered_by=triggered_by)
+        except Exception as exc:
+            db_error = str(exc)
+
+    async def _run_native():
+        nonlocal native_result, native_error
+        if not native_filename:
+            native_error = "No native backup found"
+            return
+        try:
+            # Call restore_native_from_server logic inline
+            file_path = _native_backup_dir() / native_filename
+            if not file_path.exists():
+                native_error = "Native backup file not found"
+                return
+
+            notes_payload: list[dict] = []
+            images_payload: list[dict] = []
+            attachments_payload: list[dict] = []
+
+            with zipfile.ZipFile(file_path, "r") as archive:
+                if "manifest.json" not in archive.namelist():
+                    native_error = "Invalid backup: manifest.json missing"
+                    return
+
+                if "notes.json" in archive.namelist():
+                    notes_payload = json.loads(archive.read("notes.json").decode("utf-8"))
+                if "note_images.json" in archive.namelist():
+                    images_payload = json.loads(archive.read("note_images.json").decode("utf-8"))
+                if "note_attachments.json" in archive.namelist():
+                    attachments_payload = json.loads(archive.read("note_attachments.json").decode("utf-8"))
+
+                async with async_session_factory() as session:
+                    note_map: dict[str, Note] = {}
+                    if notes_payload:
+                        note_ids = [n.get("note_id") for n in notes_payload if n.get("note_id")]
+                        existing_result = await session.execute(
+                            select(Note).where(Note.synology_note_id.in_(note_ids))
+                        )
+                        existing = {n.synology_note_id: n for n in existing_result.scalars().all()}
+
+                        for payload in notes_payload:
+                            nid = payload.get("note_id")
+                            if not nid:
+                                continue
+                            content_html = payload.get("content_html") or ""
+                            content_text = payload.get("content_text") or NoteStationService.extract_text(
+                                content_html
+                            )
+                            note = existing.get(nid)
+                            if note:
+                                note.title = payload.get("title", "")
+                                note.content_html = content_html
+                                note.content_json = payload.get("content_json")
+                                note.content_text = content_text
+                                note.notebook_name = payload.get("notebook")
+                                note.tags = payload.get("tags")
+                                note.is_todo = bool(payload.get("is_todo"))
+                                note.is_shortcut = bool(payload.get("is_shortcut"))
+                                note.source_created_at = datetime_from_iso(payload.get("source_created_at"))
+                                note.source_updated_at = datetime_from_iso(payload.get("source_updated_at"))
+                                note.synced_at = datetime_from_iso(payload.get("synced_at"))
+                            else:
+                                note = Note(
+                                    synology_note_id=nid,
+                                    title=payload.get("title", ""),
+                                    content_html=content_html,
+                                    content_json=payload.get("content_json"),
+                                    content_text=content_text,
+                                    notebook_name=payload.get("notebook"),
+                                    tags=payload.get("tags"),
+                                    is_todo=bool(payload.get("is_todo")),
+                                    is_shortcut=bool(payload.get("is_shortcut")),
+                                    source_created_at=datetime_from_iso(payload.get("source_created_at")),
+                                    source_updated_at=datetime_from_iso(payload.get("source_updated_at")),
+                                    synced_at=datetime_from_iso(payload.get("synced_at")),
+                                )
+                                session.add(note)
+                            note_map[nid] = note
+
+                    await session.flush()
+
+                    images_dir = Path(settings.NSX_IMAGES_PATH)
+                    uploads_dir = Path(settings.UPLOADS_PATH)
+                    images_dir.mkdir(parents=True, exist_ok=True)
+                    uploads_dir.mkdir(parents=True, exist_ok=True)
+
+                    for img in images_payload:
+                        nid = img.get("note_id")
+                        ref = img.get("ref")
+                        if not nid or not ref:
+                            continue
+                        image_rel = img.get("file_path") or f"images/{nid}/{ref}"
+                        if image_rel not in archive.namelist():
+                            continue
+                        target_dir = images_dir / nid
+                        target_dir.mkdir(parents=True, exist_ok=True)
+                        target_path = target_dir / ref
+                        with archive.open(image_rel) as src, open(target_path, "wb") as dst:
+                            shutil.copyfileobj(src, dst)
+                        md5 = img.get("md5") or _compute_md5(target_path)
+                        er = await session.execute(
+                            select(NoteImage).where(NoteImage.synology_note_id == nid).where(NoteImage.ref == ref)
+                        )
+                        ei = er.scalar_one_or_none()
+                        if ei:
+                            ei.md5 = md5
+                            ei.name = img.get("name")
+                            ei.file_path = str(target_path)
+                            ei.mime_type = img.get("mime_type") or ei.mime_type
+                            ei.width = img.get("width")
+                            ei.height = img.get("height")
+                        else:
+                            session.add(
+                                NoteImage(
+                                    synology_note_id=nid,
+                                    ref=ref,
+                                    name=img.get("name") or ref,
+                                    md5=md5,
+                                    file_path=str(target_path),
+                                    mime_type=img.get("mime_type") or "application/octet-stream",
+                                    width=img.get("width"),
+                                    height=img.get("height"),
+                                )
+                            )
+
+                    for att in attachments_payload:
+                        nid = att.get("note_id")
+                        fid = att.get("file_id")
+                        if not nid or not fid:
+                            continue
+                        note = note_map.get(nid)
+                        if not note:
+                            continue
+                        att_rel = att.get("file_path") or f"attachments/{fid}"
+                        if att_rel in archive.namelist():
+                            tp = uploads_dir / fid
+                            with archive.open(att_rel) as src, open(tp, "wb") as dst:
+                                shutil.copyfileobj(src, dst)
+                        er = await session.execute(
+                            select(NoteAttachment)
+                            .where(NoteAttachment.note_id == note.id)
+                            .where(NoteAttachment.file_id == fid)
+                        )
+                        ea = er.scalar_one_or_none()
+                        if ea:
+                            ea.name = att.get("name") or ea.name
+                            ea.mime_type = att.get("mime_type")
+                            ea.size = att.get("size")
+                        else:
+                            session.add(
+                                NoteAttachment(
+                                    note_id=note.id,
+                                    file_id=fid,
+                                    name=att.get("name") or fid,
+                                    mime_type=att.get("mime_type"),
+                                    size=att.get("size"),
+                                )
+                            )
+
+                    await session.commit()
+
+            native_result = {
+                "filename": native_filename,
+                "note_count": len(notes_payload),
+                "image_count": len(images_payload),
+                "attachment_count": len(attachments_payload),
+            }
+
+            await log_activity(
+                "admin",
+                "completed",
+                message=f"네이티브 백업 복원 (전체 복원): {native_filename}",
+                details=native_result,
+                triggered_by=triggered_by,
+            )
         except Exception as exc:
             native_error = str(exc)
 
