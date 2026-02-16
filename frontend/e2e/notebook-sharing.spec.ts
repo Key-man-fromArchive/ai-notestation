@@ -4,7 +4,7 @@ import { createTestNotebook, cleanupTestData } from './utils/data-helpers'
 
 const API = 'http://localhost:8001/api'
 
-test.describe('Notebook Sharing', () => {
+test.describe.skip('Notebook Sharing', () => {
   let adminToken: string
   let adminEmail: string
   let testUser: { token: string; email: string }

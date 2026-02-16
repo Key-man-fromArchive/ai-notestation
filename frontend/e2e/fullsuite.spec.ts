@@ -142,16 +142,16 @@ test.describe('AI Workbench', () => {
 
   test('feature tabs are visible', async ({ page }) => {
     await page.goto('/ai')
-    await expect(page.getByRole('tab', { name: /인사이트 생성/i })).toBeVisible()
-    await expect(page.getByRole('tab', { name: /검색 질문하기/i })).toBeVisible()
-    await expect(page.getByRole('tab', { name: /작성 지원/i })).toBeVisible()
-    await expect(page.getByRole('tab', { name: /맞춤법 검사/i })).toBeVisible()
-    await expect(page.getByRole('tab', { name: /템플릿 생성/i })).toBeVisible()
+    await expect(page.getByRole('tab', { name: /인사이트/i })).toBeVisible()
+    await expect(page.getByRole('tab', { name: /AI에게 질문/i })).toBeVisible()
+    await expect(page.getByRole('tab', { name: /글쓰기/i })).toBeVisible()
+    await expect(page.getByRole('tab', { name: /맞춤법/i })).toBeVisible()
+    await expect(page.getByRole('tab', { name: /템플릿/i })).toBeVisible()
   })
 
   test('clicking feature tab switches selection', async ({ page }) => {
     await page.goto('/ai')
-    const writingTab = page.getByRole('tab', { name: /작성 지원/i })
+    const writingTab = page.getByRole('tab', { name: /글쓰기/i })
     await writingTab.click()
     await expect(writingTab).toHaveAttribute('aria-selected', 'true')
   })

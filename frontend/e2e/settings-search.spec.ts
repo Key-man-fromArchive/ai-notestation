@@ -3,25 +3,25 @@ import { test, expect } from '@playwright/test'
 test.describe('Settings - Search Engine Tab', () => {
   test('Search indexing section visible', async ({ page }) => {
     await page.goto('/settings')
-    await page.getByRole('button', { name: '검색엔진' }).click()
+    await page.locator('button').filter({ hasText: '검색엔진' }).click()
     await page.waitForTimeout(300)
 
     // Check for "검색 인덱싱" heading with Database icon
     await expect(page.getByText('검색 인덱싱')).toBeVisible()
-    await expect(page.getByText('노트를 검색 인덱스에 추가합니다')).toBeVisible()
+    await expect(page.getByText(/Semantic Search.*임베딩/i)).toBeVisible()
   })
 
   test('Stats show indexing info', async ({ page }) => {
     await page.goto('/settings')
-    await page.getByRole('button', { name: '검색엔진' }).click()
+    await page.locator('button').filter({ hasText: '검색엔진' }).click()
     await page.waitForTimeout(300)
 
-    // Check for stats: "총 노트", "인덱싱됨", "대기 중"
-    await expect(page.getByText(/총 노트/i)).toBeVisible()
+    // Check for stats: "총 노트" should always be visible
+    await expect(page.getByText(/전체 노트/i)).toBeVisible()
 
-    // Either "인덱싱됨" or "대기 중" should be visible
-    const indexed = page.getByText(/인덱싱됨/i)
-    const pending = page.getByText(/대기 중/i)
+    // Either "인덱싱 완료" or "인덱싱 대기" should be visible
+    const indexed = page.getByText(/인덱싱 완료/i)
+    const pending = page.getByText(/인덱싱 대기/i)
     const statsVisible = await indexed.isVisible().catch(() => false) ||
                          await pending.isVisible().catch(() => false)
     expect(statsVisible).toBe(true)
@@ -29,7 +29,7 @@ test.describe('Settings - Search Engine Tab', () => {
 
   test('Indexing button visible', async ({ page }) => {
     await page.goto('/settings')
-    await page.getByRole('button', { name: '검색엔진' }).click()
+    await page.locator('button').filter({ hasText: '검색엔진' }).click()
     await page.waitForTimeout(300)
 
     // Check for "인덱싱 시작" button
@@ -39,7 +39,7 @@ test.describe('Settings - Search Engine Tab', () => {
 
   test('Force re-index button visible', async ({ page }) => {
     await page.goto('/settings')
-    await page.getByRole('button', { name: '검색엔진' }).click()
+    await page.locator('button').filter({ hasText: '검색엔진' }).click()
     await page.waitForTimeout(300)
 
     // Check for "강제 재인덱싱" or "강제 리임베딩" button
@@ -51,7 +51,7 @@ test.describe('Settings - Search Engine Tab', () => {
 test.describe('Settings - Data Analysis Tab', () => {
   test('Image sync section visible', async ({ page }) => {
     await page.goto('/settings')
-    await page.getByRole('button', { name: '데이터분석' }).click()
+    await page.locator('button').filter({ hasText: '데이터분석' }).click()
     await page.waitForTimeout(300)
 
     // Check for "이미지 동기화" section and button
@@ -62,30 +62,31 @@ test.describe('Settings - Data Analysis Tab', () => {
 
   test('Batch analysis section visible', async ({ page }) => {
     await page.goto('/settings')
-    await page.getByRole('button', { name: '데이터분석' }).click()
+    await page.locator('button').filter({ hasText: '데이터분석' }).click()
     await page.waitForTimeout(300)
 
-    // Check for "배치 분석" section with stats grid
-    await expect(page.getByText(/배치 분석/i)).toBeVisible()
+    // Check for "이미지 일괄 분석" section heading
+    await expect(page.getByText('이미지 일괄 분석')).toBeVisible()
 
-    // Check for stats: "총 이미지", "OCR 완료", "Vision 완료"
+    // Check for stats grid (text might be in dashboard translations)
+    // Looking for the actual text used: "총 이미지", "OCR done", "Vision done"
     const totalImages = page.getByText(/총 이미지/i)
-    const ocrComplete = page.getByText(/OCR 완료/i)
-    const visionComplete = page.getByText(/Vision 완료/i)
+    const ocrDone = page.getByText(/OCR.*완료/i)
+    const visionDone = page.getByText(/Vision.*완료/i)
 
     const statsVisible = await totalImages.isVisible().catch(() => false) ||
-                         await ocrComplete.isVisible().catch(() => false) ||
-                         await visionComplete.isVisible().catch(() => false)
+                         await ocrDone.isVisible().catch(() => false) ||
+                         await visionDone.isVisible().catch(() => false)
     expect(statsVisible).toBe(true)
 
-    // Check for "배치 분석 시작" button
-    const batchButton = page.getByRole('button', { name: /배치 분석 시작/i })
+    // Check for "일괄 분석 시작" button
+    const batchButton = page.getByRole('button', { name: /일괄 분석 시작/i })
     await expect(batchButton).toBeVisible()
   })
 
   test('OCR engine section visible', async ({ page }) => {
     await page.goto('/settings')
-    await page.getByRole('button', { name: '데이터분석' }).click()
+    await page.locator('button').filter({ hasText: '데이터분석' }).click()
     await page.waitForTimeout(300)
 
     // Check for "OCR 엔진" section with select dropdown
@@ -102,7 +103,7 @@ test.describe('Settings - Data Analysis Tab', () => {
 
   test('Vision model section visible', async ({ page }) => {
     await page.goto('/settings')
-    await page.getByRole('button', { name: '데이터분석' }).click()
+    await page.locator('button').filter({ hasText: '데이터분석' }).click()
     await page.waitForTimeout(300)
 
     // Check for "비전 모델" section with select dropdown
