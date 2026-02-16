@@ -61,6 +61,7 @@ export default defineConfig({
       timeout: 120000,
       testMatch: [
         /image-analysis\.spec\.ts/,
+        /image-sync\.spec\.ts/,
         /evaluation-runs\.spec\.ts/,
         /ocr\.spec\.ts/,
         /operations\.spec\.ts/,
