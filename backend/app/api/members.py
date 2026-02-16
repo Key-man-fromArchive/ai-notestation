@@ -191,6 +191,37 @@ class BatchRemoveResponse(BaseModel):
     errors: list[str]
 
 
+class BatchRoleRequest(BaseModel):
+    """Batch role change request."""
+
+    member_ids: list[int]
+    role: str
+
+    @field_validator("role")
+    @classmethod
+    def validate_role(cls, v: str) -> str:
+        valid_roles = {MemberRole.ADMIN, MemberRole.MEMBER, MemberRole.VIEWER}
+        if v not in valid_roles:
+            raise ValueError(f"Role must be one of: {', '.join(valid_roles)}")
+        return v
+
+
+class BatchRoleResponse(BaseModel):
+    """Batch role change response."""
+
+    updated: int
+    failed: int
+    errors: list[str]
+
+
+class MemberGroupItem(BaseModel):
+    """Group info for a member."""
+
+    group_id: int
+    group_name: str
+    color: str
+
+
 class NotebookAccessItem(BaseModel):
     """Single notebook access entry."""
 
@@ -756,6 +787,75 @@ async def batch_remove_members(
     )
 
 
+@router.post("/batch-role", response_model=BatchRoleResponse)
+async def batch_change_role(
+    request: BatchRoleRequest,
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> BatchRoleResponse:
+    """Change role for multiple members at once.
+
+    Requires OWNER or ADMIN role.
+    Cannot change OWNER role. ADMIN cannot promote to OWNER.
+    """
+    if current_user["role"] not in {MemberRole.OWNER, MemberRole.ADMIN}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only OWNER or ADMIN can change roles",
+        )
+
+    from sqlalchemy import select
+
+    from app.models import Membership
+
+    updated = 0
+    errors: list[str] = []
+
+    for mid in request.member_ids:
+        result = await db.execute(
+            select(Membership).where(
+                Membership.id == mid,
+                Membership.org_id == current_user["org_id"],
+            )
+        )
+        membership = result.scalar_one_or_none()
+
+        if not membership:
+            errors.append(f"Member {mid} not found")
+            continue
+
+        if membership.role == MemberRole.OWNER:
+            errors.append(f"Cannot change owner role (id={mid})")
+            continue
+
+        if membership.user_id == current_user["user_id"]:
+            errors.append(f"Cannot change own role (id={mid})")
+            continue
+
+        if request.role == MemberRole.OWNER:
+            errors.append(f"Cannot promote to OWNER via batch (id={mid})")
+            continue
+
+        if current_user["role"] == MemberRole.ADMIN and membership.role == MemberRole.ADMIN:
+            errors.append(f"ADMIN cannot change another ADMIN's role (id={mid})")
+            continue
+
+        membership.role = request.role
+        updated += 1
+
+    await db.commit()
+
+    if updated > 0:
+        await log_activity(
+            "member", "completed",
+            message=f"역할 일괄 변경: {updated}명 → {request.role}",
+            details={"updated": updated, "errors": errors},
+            triggered_by=get_trigger_name(current_user),
+        )
+
+    return BatchRoleResponse(updated=updated, failed=len(errors), errors=errors)
+
+
 @router.delete("/{member_id}", response_model=MessageResponse)
 async def delete_member(
     member_id: int,
@@ -827,3 +927,50 @@ async def delete_member(
     )
 
     return MessageResponse(message="Member removed successfully")
+
+
+@router.get("/{member_id}/groups", response_model=list[MemberGroupItem])
+async def get_member_groups(
+    member_id: int,
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> list[MemberGroupItem]:
+    """Get groups that a member belongs to."""
+    from sqlalchemy import select
+
+    from app.models import MemberGroup, MemberGroupMembership, Membership
+
+    # Verify member exists in same org
+    result = await db.execute(
+        select(Membership).where(
+            Membership.id == member_id,
+            Membership.org_id == current_user["org_id"],
+        )
+    )
+    membership = result.scalar_one_or_none()
+    if not membership:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Member not found",
+        )
+
+    # Get groups via MemberGroupMembership
+    result = await db.execute(
+        select(MemberGroup).where(
+            MemberGroup.id.in_(
+                select(MemberGroupMembership.group_id).where(
+                    MemberGroupMembership.membership_id == member_id
+                )
+            )
+        )
+    )
+    groups = result.scalars().all()
+
+    return [
+        MemberGroupItem(
+            group_id=g.id,
+            group_name=g.name,
+            color=g.color,
+        )
+        for g in groups
+    ]

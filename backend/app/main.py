@@ -95,6 +95,7 @@ from app.api.capture import router as capture_router
 from app.api.metrics import router as metrics_router
 from app.api.feedback import router as feedback_router
 from app.api.evaluation import router as evaluation_router
+from app.api.groups import router as groups_router
 
 app.include_router(nsx_router, prefix="/api")
 app.include_router(backup_router, prefix="/api")
@@ -113,6 +114,7 @@ app.include_router(capture_router, prefix="/api")
 app.include_router(metrics_router, prefix="/api")
 app.include_router(feedback_router, prefix="/api")
 app.include_router(evaluation_router, prefix="/api")
+app.include_router(groups_router, prefix="/api")
 
 
 @app.get("/api/health", tags=["health"])

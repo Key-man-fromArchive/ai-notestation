@@ -93,6 +93,21 @@ export function useMembers() {
     },
   })
 
+  const batchRoleMutation = useMutation<
+    { updated: number; failed: number; errors: string[] },
+    ApiError,
+    { memberIds: number[]; role: string }
+  >({
+    mutationFn: ({ memberIds, role }) =>
+      apiClient.post<{ updated: number; failed: number; errors: string[] }>(
+        '/members/batch-role',
+        { member_ids: memberIds, role },
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: MEMBERS_QUERY_KEY })
+    },
+  })
+
   return {
     members: data?.members ?? [],
     total: data?.total ?? 0,
@@ -109,5 +124,7 @@ export function useMembers() {
     isRemoving: removeMemberMutation.isPending,
     batchRemoveMembers: batchRemoveMutation.mutateAsync,
     isBatchRemoving: batchRemoveMutation.isPending,
+    batchUpdateRole: batchRoleMutation.mutateAsync,
+    isBatchUpdatingRole: batchRoleMutation.isPending,
   }
 }

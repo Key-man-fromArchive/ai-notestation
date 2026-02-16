@@ -604,7 +604,9 @@
     "permissionAdmin": "Admin",
     "accessRevoked": "Access revoked",
     "accessUpdated": "Access updated",
-    "selectAll": "Select all"
+    "selectAll": "Select all",
+    "batchRoleChange": "Change Role",
+    "batchRoleSuccess": "Successfully changed role for {{count}} members"
   },
   "admin": {
     "title": "Admin",
@@ -1111,5 +1113,33 @@
     "tryAgain": "Try again",
     "pageNotFound": "Page not found",
     "goHome": "Go home"
+  },
+  "groups": {
+    "title": "Groups",
+    "createGroup": "Create Group",
+    "editGroup": "Edit Group",
+    "deleteGroup": "Delete Group",
+    "deleteConfirm": "Are you sure you want to delete this group? Members will not be removed from the organization.",
+    "name": "Group Name",
+    "namePlaceholder": "e.g., Research Team",
+    "description": "Description",
+    "descriptionPlaceholder": "Brief description of this group",
+    "color": "Color",
+    "memberCount": "{{count}} members",
+    "noGroups": "No groups yet. Create one to organize your members.",
+    "manageMembers": "Manage Members",
+    "manageAccess": "Manage Access",
+    "addMembers": "Add Members",
+    "removeFromGroup": "Remove from Group",
+    "assignToGroup": "Assign to Group",
+    "assign": "Assign",
+    "assigned": "Successfully assigned to group",
+    "removed": "Removed from group",
+    "noGroupMembers": "No members in this group yet.",
+    "selectMembers": "Select members to add",
+    "groupCreated": "Group created successfully",
+    "groupUpdated": "Group updated successfully",
+    "groupDeleted": "Group deleted successfully",
+    "noAccess": "No notebook access configured for this group."
   }
 }

@@ -572,3 +572,354 @@ class TestMemberNotebookAccess:
             )
 
         assert response.status_code == 422
+
+
+class TestBatchChangeRole:
+    """Test POST /members/batch-role - Batch role change"""
+
+    @pytest.mark.asyncio
+    async def test_batch_role_requires_auth(self):
+        app = _get_app()
+        transport = ASGITransport(app=app)
+
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/api/members/batch-role",
+                json={"member_ids": [1, 2], "role": MemberRole.ADMIN},
+            )
+
+        assert response.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_batch_role_requires_owner_or_admin(self):
+        from app.services.auth_service import create_access_token
+
+        app = _get_app()
+        transport = ASGITransport(app=app)
+
+        token = create_access_token(data={
+            "sub": "member@example.com",
+            "user_id": 3,
+            "org_id": 1,
+            "role": MemberRole.MEMBER,
+        })
+
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/api/members/batch-role",
+                json={"member_ids": [1, 2], "role": MemberRole.ADMIN},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_batch_role_validates_role(self):
+        from app.services.auth_service import create_access_token
+
+        app = _get_app()
+        transport = ASGITransport(app=app)
+
+        token = create_access_token(data={
+            "sub": "owner@example.com",
+            "user_id": 1,
+            "org_id": 1,
+            "role": MemberRole.OWNER,
+        })
+
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/api/members/batch-role",
+                json={"member_ids": [2, 3], "role": "invalid_role"},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+
+        assert response.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_batch_role_cannot_promote_to_owner(self):
+        from app.api.members import batch_change_role
+
+        mock_db = AsyncMock()
+        mock_db.commit = AsyncMock()
+
+        current_user = {
+            "user_id": 1,
+            "org_id": 1,
+            "email": "owner@example.com",
+            "role": MemberRole.OWNER,
+        }
+
+        member = _make_membership(2, 2, 1, MemberRole.MEMBER, datetime.now(UTC))
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = member
+        mock_db.execute = AsyncMock(return_value=mock_result)
+
+        with patch("app.api.members.log_activity", new_callable=AsyncMock):
+            response = await batch_change_role(
+                request=MagicMock(member_ids=[2], role=MemberRole.OWNER),
+                current_user=current_user,
+                db=mock_db,
+            )
+
+        assert response.updated == 0
+        assert len(response.errors) > 0
+        assert "Cannot promote to OWNER via batch" in response.errors[0]
+
+    @pytest.mark.asyncio
+    async def test_batch_role_cannot_change_owner_role(self):
+        from app.api.members import batch_change_role
+
+        mock_db = AsyncMock()
+        mock_db.commit = AsyncMock()
+
+        current_user = {
+            "user_id": 1,
+            "org_id": 1,
+            "email": "owner@example.com",
+            "role": MemberRole.OWNER,
+        }
+
+        owner_member = _make_membership(1, 10, 1, MemberRole.OWNER, datetime.now(UTC))
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = owner_member
+        mock_db.execute = AsyncMock(return_value=mock_result)
+
+        with patch("app.api.members.log_activity", new_callable=AsyncMock):
+            response = await batch_change_role(
+                request=MagicMock(member_ids=[1], role=MemberRole.ADMIN),
+                current_user=current_user,
+                db=mock_db,
+            )
+
+        assert response.updated == 0
+        assert len(response.errors) > 0
+        assert "Cannot change owner role" in response.errors[0]
+
+    @pytest.mark.asyncio
+    async def test_batch_role_cannot_change_own_role(self):
+        from app.api.members import batch_change_role
+
+        mock_db = AsyncMock()
+        mock_db.commit = AsyncMock()
+
+        current_user = {
+            "user_id": 2,
+            "org_id": 1,
+            "email": "admin@example.com",
+            "role": MemberRole.ADMIN,
+        }
+
+        self_member = _make_membership(2, 2, 1, MemberRole.ADMIN, datetime.now(UTC))
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = self_member
+        mock_db.execute = AsyncMock(return_value=mock_result)
+
+        with patch("app.api.members.log_activity", new_callable=AsyncMock):
+            response = await batch_change_role(
+                request=MagicMock(member_ids=[2], role=MemberRole.MEMBER),
+                current_user=current_user,
+                db=mock_db,
+            )
+
+        assert response.updated == 0
+        assert len(response.errors) > 0
+        assert "Cannot change own role" in response.errors[0]
+
+    @pytest.mark.asyncio
+    async def test_batch_role_success(self):
+        from app.api.members import batch_change_role
+
+        mock_db = AsyncMock()
+        mock_db.commit = AsyncMock()
+
+        current_user = {
+            "user_id": 1,
+            "org_id": 1,
+            "email": "owner@example.com",
+            "role": MemberRole.OWNER,
+        }
+
+        member1 = _make_membership(2, 2, 1, MemberRole.MEMBER, datetime.now(UTC))
+        member2 = _make_membership(3, 3, 1, MemberRole.VIEWER, datetime.now(UTC))
+
+        call_count = [0]
+        def side_effect(*args, **kwargs):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                return MagicMock(scalar_one_or_none=MagicMock(return_value=member1))
+            else:
+                return MagicMock(scalar_one_or_none=MagicMock(return_value=member2))
+
+        mock_db.execute = AsyncMock(side_effect=side_effect)
+
+        with patch("app.api.members.log_activity", new_callable=AsyncMock):
+            response = await batch_change_role(
+                request=MagicMock(member_ids=[2, 3], role=MemberRole.ADMIN),
+                current_user=current_user,
+                db=mock_db,
+            )
+
+        assert response.updated == 2
+        assert response.failed == 0
+        assert response.errors == []
+
+
+class TestMemberGroups:
+    """Test GET /members/{id}/groups - Member groups endpoint"""
+
+    @pytest.mark.asyncio
+    async def test_get_member_groups_requires_auth(self):
+        app = _get_app()
+        transport = ASGITransport(app=app)
+
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get("/api/members/1/groups")
+
+        assert response.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_get_member_groups_success(self):
+        from app.api.members import get_member_groups
+
+        mock_db = AsyncMock()
+        current_user = {
+            "user_id": 1,
+            "org_id": 1,
+            "email": "owner@example.com",
+            "role": MemberRole.OWNER,
+        }
+
+        # Mock membership exists
+        membership = _make_membership(2, 2, 1, MemberRole.MEMBER, datetime.now(UTC))
+        membership_result = MagicMock()
+        membership_result.scalar_one_or_none.return_value = membership
+
+        # Mock groups
+        group1 = MagicMock()
+        group1.id = 1
+        group1.name = "Team A"
+        group1.color = "#FF0000"
+
+        group2 = MagicMock()
+        group2.id = 2
+        group2.name = "Team B"
+        group2.color = "#00FF00"
+
+        groups_result = MagicMock()
+        groups_result.scalars.return_value.all.return_value = [group1, group2]
+
+        call_count = [0]
+        def side_effect(*args, **kwargs):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                return membership_result
+            else:
+                return groups_result
+
+        mock_db.execute = AsyncMock(side_effect=side_effect)
+
+        response = await get_member_groups(
+            member_id=2,
+            current_user=current_user,
+            db=mock_db,
+        )
+
+        assert len(response) == 2
+        assert response[0].group_name == "Team A"
+        assert response[1].group_name == "Team B"
+        assert response[0].color == "#FF0000"
+
+    @pytest.mark.asyncio
+    async def test_get_member_groups_member_not_found(self):
+        from app.api.members import get_member_groups
+        from fastapi import HTTPException
+
+        mock_db = AsyncMock()
+        current_user = {
+            "user_id": 1,
+            "org_id": 1,
+            "email": "owner@example.com",
+            "role": MemberRole.OWNER,
+        }
+
+        membership_result = MagicMock()
+        membership_result.scalar_one_or_none.return_value = None
+        mock_db.execute = AsyncMock(return_value=membership_result)
+
+        try:
+            await get_member_groups(
+                member_id=999,
+                current_user=current_user,
+                db=mock_db,
+            )
+            assert False, "Should have raised HTTPException"
+        except HTTPException as e:
+            assert e.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_get_member_groups_returns_empty_when_no_groups(self):
+        from app.api.members import get_member_groups
+
+        mock_db = AsyncMock()
+        current_user = {
+            "user_id": 1,
+            "org_id": 1,
+            "email": "owner@example.com",
+            "role": MemberRole.OWNER,
+        }
+
+        # Mock membership exists
+        membership = _make_membership(2, 2, 1, MemberRole.MEMBER, datetime.now(UTC))
+        membership_result = MagicMock()
+        membership_result.scalar_one_or_none.return_value = membership
+
+        # Mock no groups
+        groups_result = MagicMock()
+        groups_result.scalars.return_value.all.return_value = []
+
+        call_count = [0]
+        def side_effect(*args, **kwargs):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                return membership_result
+            else:
+                return groups_result
+
+        mock_db.execute = AsyncMock(side_effect=side_effect)
+
+        response = await get_member_groups(
+            member_id=2,
+            current_user=current_user,
+            db=mock_db,
+        )
+
+        assert response == []
+
+    @pytest.mark.asyncio
+    async def test_get_member_groups_from_different_org(self):
+        from app.api.members import get_member_groups
+        from fastapi import HTTPException
+
+        mock_db = AsyncMock()
+        current_user = {
+            "user_id": 1,
+            "org_id": 1,
+            "email": "owner@example.com",
+            "role": MemberRole.OWNER,
+        }
+
+        # When querying with org_id=1 filter, should return None since member is in org_id=2
+        membership_result = MagicMock()
+        membership_result.scalar_one_or_none.return_value = None  # Not found in org 1
+        mock_db.execute = AsyncMock(return_value=membership_result)
+
+        try:
+            await get_member_groups(
+                member_id=2,
+                current_user=current_user,
+                db=mock_db,
+            )
+            assert False, "Should have raised HTTPException"
+        except HTTPException as e:
+            assert e.status_code == 404

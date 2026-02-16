@@ -604,7 +604,9 @@
     "permissionAdmin": "관리",
     "accessRevoked": "접근 권한이 해제되었습니다",
     "accessUpdated": "접근 권한이 업데이트되었습니다",
-    "selectAll": "전체 선택"
+    "selectAll": "전체 선택",
+    "batchRoleChange": "역할 변경",
+    "batchRoleSuccess": "{{count}}명의 역할이 변경되었습니다"
   },
   "admin": {
     "title": "관리자",
@@ -1111,5 +1113,33 @@
     "tryAgain": "Try again",
     "pageNotFound": "페이지를 찾을 수 없습니다",
     "goHome": "홈으로 돌아가기"
+  },
+  "groups": {
+    "title": "그룹",
+    "createGroup": "그룹 생성",
+    "editGroup": "그룹 편집",
+    "deleteGroup": "그룹 삭제",
+    "deleteConfirm": "이 그룹을 삭제하시겠습니까? 멤버는 조직에서 제거되지 않습니다.",
+    "name": "그룹 이름",
+    "namePlaceholder": "예: 연구팀",
+    "description": "설명",
+    "descriptionPlaceholder": "그룹에 대한 간단한 설명",
+    "color": "색상",
+    "memberCount": "{{count}}명",
+    "noGroups": "아직 그룹이 없습니다. 멤버를 구성하려면 그룹을 만드세요.",
+    "manageMembers": "멤버 관리",
+    "manageAccess": "접근 관리",
+    "addMembers": "멤버 추가",
+    "removeFromGroup": "그룹에서 제거",
+    "assignToGroup": "그룹에 할당",
+    "assign": "할당",
+    "assigned": "그룹에 성공적으로 할당됨",
+    "removed": "그룹에서 제거됨",
+    "noGroupMembers": "이 그룹에 멤버가 없습니다.",
+    "selectMembers": "추가할 멤버를 선택하세요",
+    "groupCreated": "그룹이 생성되었습니다",
+    "groupUpdated": "그룹이 수정되었습니다",
+    "groupDeleted": "그룹이 삭제되었습니다",
+    "noAccess": "이 그룹에 설정된 노트북 접근이 없습니다."
   }
 }

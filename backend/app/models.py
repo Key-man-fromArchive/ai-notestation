@@ -318,6 +318,67 @@ class NotebookAccess(Base):
     )
 
 
+class MemberGroup(Base):
+    """Group of organization members for bulk permission management."""
+
+    __tablename__ = "member_groups"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    org_id: Mapped[int] = mapped_column(Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    description: Mapped[str] = mapped_column(Text, default="", server_default="")
+    color: Mapped[str] = mapped_column(String(20), default="#6B7280", server_default="#6B7280")
+    created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint("org_id", "name", name="uq_member_group_org_name"),
+        Index("idx_member_group_org_id", "org_id"),
+    )
+
+
+class MemberGroupMembership(Base):
+    """Mapping of organization members to groups."""
+
+    __tablename__ = "member_group_memberships"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    group_id: Mapped[int] = mapped_column(Integer, ForeignKey("member_groups.id", ondelete="CASCADE"), nullable=False)
+    membership_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("memberships.id", ondelete="CASCADE"), nullable=False
+    )
+    added_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("group_id", "membership_id", name="uq_group_membership"),
+        Index("idx_group_membership_group_id", "group_id"),
+        Index("idx_group_membership_membership_id", "membership_id"),
+    )
+
+
+class GroupNotebookAccess(Base):
+    """Bulk notebook access control via member groups."""
+
+    __tablename__ = "group_notebook_access"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    group_id: Mapped[int] = mapped_column(Integer, ForeignKey("member_groups.id", ondelete="CASCADE"), nullable=False)
+    notebook_id: Mapped[int] = mapped_column(Integer, ForeignKey("notebooks.id", ondelete="CASCADE"), nullable=False)
+    permission: Mapped[str] = mapped_column(String(20), default="read", nullable=False)
+    granted_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("group_id", "notebook_id", name="uq_group_notebook_access"),
+        Index("idx_group_notebook_access_group_id", "group_id"),
+        Index("idx_group_notebook_access_notebook_id", "notebook_id"),
+    )
+
+
 class ShareLink(Base):
     """Shareable links for notes or notebooks with access control."""
 

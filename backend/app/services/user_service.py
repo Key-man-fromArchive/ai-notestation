@@ -167,7 +167,7 @@ async def get_membership(db: AsyncSession, user_id: int, org_id: int) -> Members
 
 async def remove_member_from_org(db: AsyncSession, membership_id: int, org_id: int) -> bool:
     """Remove a member and all their access records from the organization."""
-    from app.models import NoteAccess, NotebookAccess
+    from app.models import MemberGroupMembership, NoteAccess, NotebookAccess
 
     result = await db.execute(
         select(Membership).where(
@@ -188,6 +188,10 @@ async def remove_member_from_org(db: AsyncSession, membership_id: int, org_id: i
     # Delete note access for this user
     await db.execute(
         delete(NoteAccess).where(NoteAccess.user_id == user_id)
+    )
+    # Delete group memberships for this member
+    await db.execute(
+        delete(MemberGroupMembership).where(MemberGroupMembership.membership_id == membership_id)
     )
     # Delete the membership
     await db.execute(

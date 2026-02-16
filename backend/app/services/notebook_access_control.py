@@ -7,7 +7,7 @@ from sqlalchemy import delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import NotePermission
-from app.models import Membership, NoteAccess, NotebookAccess
+from app.models import GroupNotebookAccess, MemberGroupMembership, Membership, NoteAccess, NotebookAccess
 
 PERMISSION_HIERARCHY: dict[str, int] = {
     NotePermission.READ: 1,
@@ -34,26 +34,90 @@ async def get_user_org_ids(db: AsyncSession, user_id: int) -> list[int]:
     return [row[0] for row in result.all()]
 
 
+async def get_user_group_notebook_permissions(
+    db: AsyncSession, user_id: int, org_ids: list[int]
+) -> dict[int, str]:
+    """Get notebook permissions from all groups the user belongs to.
+
+    JOIN: Membership -> MemberGroupMembership -> GroupNotebookAccess
+    Returns {notebook_id: highest_permission} across all groups.
+    """
+    # Find all memberships for this user in the given orgs
+    membership_result = await db.execute(
+        select(Membership.id).where(
+            Membership.user_id == user_id,
+            Membership.accepted_at.isnot(None),
+            Membership.org_id.in_(org_ids) if org_ids else Membership.org_id.is_(None),
+        )
+    )
+    membership_ids = [row[0] for row in membership_result.all()]
+
+    if not membership_ids:
+        return {}
+
+    # Find all group notebook accesses via group memberships
+    result = await db.execute(
+        select(GroupNotebookAccess.notebook_id, GroupNotebookAccess.permission).where(
+            GroupNotebookAccess.group_id.in_(
+                select(MemberGroupMembership.group_id).where(
+                    MemberGroupMembership.membership_id.in_(membership_ids)
+                )
+            )
+        )
+    )
+
+    # Build dict with highest permission per notebook
+    permissions: dict[int, str] = {}
+    for notebook_id, permission in result.all():
+        existing = permissions.get(notebook_id)
+        if existing is None or PERMISSION_HIERARCHY.get(permission, 0) > PERMISSION_HIERARCHY.get(existing, 0):
+            permissions[notebook_id] = permission
+
+    return permissions
+
+
 async def check_notebook_access(
     db: AsyncSession,
     user_id: int,
     notebook_id: int,
     required_permission: str = NotePermission.READ,
 ) -> bool:
-    """Check if user has required permission on notebook."""
+    """Check if user has required permission on notebook.
+
+    Resolution: Individual user access > Group access > Org access.
+    """
     org_ids = await get_user_org_ids(db, user_id)
 
-    conditions = [NotebookAccess.notebook_id == notebook_id]
-    access_conditions = [NotebookAccess.user_id == user_id]
+    # 1. Check individual user access first
+    result = await db.execute(
+        select(NotebookAccess).where(
+            NotebookAccess.notebook_id == notebook_id,
+            NotebookAccess.user_id == user_id,
+        )
+    )
+    user_access = result.scalars().all()
+    if user_access:
+        return any(permission_satisfies(a.permission, required_permission) for a in user_access)
+
+    # 2. Check group access
+    group_perms = await get_user_group_notebook_permissions(db, user_id, org_ids)
+    group_perm = group_perms.get(notebook_id)
+    if group_perm is not None:
+        return permission_satisfies(group_perm, required_permission)
+
+    # 3. Check org access
     if org_ids:
-        access_conditions.append(NotebookAccess.org_id.in_(org_ids))
+        result = await db.execute(
+            select(NotebookAccess).where(
+                NotebookAccess.notebook_id == notebook_id,
+                NotebookAccess.org_id.in_(org_ids),
+            )
+        )
+        org_access = result.scalars().all()
+        if org_access:
+            return any(permission_satisfies(a.permission, required_permission) for a in org_access)
 
-    conditions.append(or_(*access_conditions))
-
-    result = await db.execute(select(NotebookAccess).where(*conditions))
-    access_records = result.scalars().all()
-
-    return any(permission_satisfies(access.permission, required_permission) for access in access_records)
+    return False
 
 
 async def get_accessible_notebooks(
@@ -61,22 +125,41 @@ async def get_accessible_notebooks(
     user_id: int,
     min_permission: str = NotePermission.READ,
 ) -> list[int]:
-    """Get list of notebook IDs user can access with minimum permission level."""
+    """Get list of notebook IDs user can access with minimum permission level.
+
+    Merges individual, group, and org access. Individual overrides group overrides org.
+    """
     org_ids = await get_user_org_ids(db, user_id)
 
-    access_conditions = [NotebookAccess.user_id == user_id]
+    # Collect all notebook permissions: {notebook_id: permission}
+    notebook_permissions: dict[int, str] = {}
+
+    # 3. Org access (lowest priority, add first)
     if org_ids:
-        access_conditions.append(NotebookAccess.org_id.in_(org_ids))
+        result = await db.execute(
+            select(NotebookAccess).where(
+                NotebookAccess.org_id.in_(org_ids),
+            )
+        )
+        for access in result.scalars().all():
+            notebook_permissions[access.notebook_id] = access.permission
 
-    result = await db.execute(select(NotebookAccess).where(or_(*access_conditions)))
-    access_records = result.scalars().all()
+    # 2. Group access (overrides org)
+    group_perms = await get_user_group_notebook_permissions(db, user_id, org_ids)
+    notebook_permissions.update(group_perms)
 
-    notebook_ids = set()
-    for access in access_records:
-        if permission_satisfies(access.permission, min_permission):
-            notebook_ids.add(access.notebook_id)
+    # 1. Individual access (highest priority, overrides all)
+    result = await db.execute(
+        select(NotebookAccess).where(NotebookAccess.user_id == user_id)
+    )
+    for access in result.scalars().all():
+        notebook_permissions[access.notebook_id] = access.permission
 
-    return list(notebook_ids)
+    # Filter by min_permission
+    return [
+        nb_id for nb_id, perm in notebook_permissions.items()
+        if permission_satisfies(perm, min_permission)
+    ]
 
 
 async def grant_notebook_access(
@@ -225,25 +308,48 @@ async def get_effective_note_permission(
     if notebook_id is None:
         return None
 
-    # Check notebook access
-    notebook_conditions = [NotebookAccess.notebook_id == notebook_id]
-    notebook_access_conditions = [NotebookAccess.user_id == user_id]
-    if org_ids:
-        notebook_access_conditions.append(NotebookAccess.org_id.in_(org_ids))
-    notebook_conditions.append(or_(*notebook_access_conditions))
+    # Check individual notebook access first
+    result = await db.execute(
+        select(NotebookAccess).where(
+            NotebookAccess.notebook_id == notebook_id,
+            NotebookAccess.user_id == user_id,
+        )
+    )
+    user_notebook_access = result.scalars().all()
 
-    result = await db.execute(select(NotebookAccess).where(*notebook_conditions))
-    notebook_access_records = result.scalars().all()
-
-    # Return highest notebook permission found
-    if notebook_access_records:
+    if user_notebook_access:
         highest_permission = None
         highest_level = 0
-        for access in notebook_access_records:
+        for access in user_notebook_access:
             level = PERMISSION_HIERARCHY.get(access.permission, 0)
             if level > highest_level:
                 highest_level = level
                 highest_permission = access.permission
         return highest_permission
+
+    # Check group notebook access
+    group_perms = await get_user_group_notebook_permissions(db, user_id, org_ids)
+    group_perm = group_perms.get(notebook_id)
+    if group_perm is not None:
+        return group_perm
+
+    # Check org notebook access
+    if org_ids:
+        result = await db.execute(
+            select(NotebookAccess).where(
+                NotebookAccess.notebook_id == notebook_id,
+                NotebookAccess.org_id.in_(org_ids),
+            )
+        )
+        org_notebook_access = result.scalars().all()
+        if org_notebook_access:
+            highest_permission = None
+            highest_level = 0
+            for access in org_notebook_access:
+                level = PERMISSION_HIERARCHY.get(access.permission, 0)
+                if level > highest_level:
+                    highest_level = level
+                    highest_permission = access.permission
+            return highest_permission
 
     return None
