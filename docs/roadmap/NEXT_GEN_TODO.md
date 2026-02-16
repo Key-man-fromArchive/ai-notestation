@@ -2,7 +2,7 @@
 
 > [NEXT_GENERATION_ROADMAP.md](../../NEXT_GENERATION_ROADMAP.md) 실행 TODO
 >
-> 현재 v2.1.0 | 최종 갱신: 2026-02-14
+> 현재 v2.0.0 | 최종 갱신: 2026-02-16
 >
 > 표기: `[ ]` 미착수 | `[~]` 진행 중 | `[x]` 완료
 
@@ -13,9 +13,9 @@
 | 버전 | 코드명 | 태스크 | 예상 일수 | 상태 |
 |------|--------|--------|-----------|------|
 | **v3.0.0** | Foundation UX | 5 | 11~14일 | 🔲 |
-| **v3.1.0** | Editor + Category | 6 | 21~28일 | 🔲 |
-| **v3.2.0** | Zotero + External Capture | 5 | 26~36일 | 🔲 |
-| **v4.0.0** | Research Platform | 8 | 46~64일 | 🔲 |
+| **v3.1.0** | Editor + Category | 6 | 21~28일 | ⚡ 3-6 카테고리 완료 |
+| **v3.2.0** | Zotero + External Capture | 5 | 26~36일 | ⚡ 4-5 캡처 완료 |
+| **v4.0.0** | Research Platform | 8 | 46~64일 | ⚡ 5-8 평가 완료 |
 | **v4.1.0** | Analytics, Mobile, Scale | 9+ | 61~90일 | 🔲 |
 
 ---
@@ -222,32 +222,28 @@
 
 ---
 
-### 3-6. 노트북 카테고리 시스템 — Tier 1 `★★★` (4~5일)
+### 3-6. 노트북 카테고리 시스템 — Tier 1 `★★★` (4~5일) ✅ v2.0.0 선행 구현
+
+> ✅ 원래 v3.1.0 계획이었으나 v2.0.0에서 선행 구현 완료
 
 **백엔드**:
-- [ ] Migration `023_add_notebook_category.py`
-  - [ ] `notebooks.category` 컬럼 (VARCHAR(50), DEFAULT 'FREE_NOTE')
-  - [ ] CHECK 제약조건 (Tier 1: RESEARCH_NOTE, PAPER_REVIEW, MEETING_NOTE, FREE_NOTE)
-  - [ ] `idx_notebooks_category` 인덱스
-  - [ ] `category_configs` 테이블 + Tier 1 시드 데이터 4종
-  - [ ] `feature_gates` 테이블 + 초기 기능 매트릭스 시드
-  - [ ] 기존 notebooks → `FREE_NOTE` 기본값 마이그레이션
-- [ ] `models.py` — `Notebook` 모델에 `category` 필드 추가
-- [ ] `services/category_service.py` — 카테고리 메타데이터 조회, 기능 매핑
-- [ ] `services/feature_gate.py` — Plan+Category 동시 검증 Gatekeeper
-- [ ] `api/notebooks.py` — 카테고리 CRUD 확장, 카테고리별 필터
+- [x] Migration `022_add_notebook_synology_id_and_category.py` — `notebooks.category` 컬럼 추가
+- [x] `constants.py` — 12종 카테고리 프리셋 (연구 6 + 라이프스타일 6, AI 프롬프트/힌트/부스트 포함)
+- [x] `api/notebooks.py` — 카테고리 CRUD + GET /notebooks/categories
+- [x] `api/settings.py` — 카테고리 동적 설정 저장/조회
+- [x] `api/ai.py` — `_get_category_prompt()` 카테고리 인식 AI (insight, search_qa, cluster_insight)
+- [ ] `services/feature_gate.py` — Plan+Category 동시 검증 Gatekeeper (미구현, v3.1.0으로 이월)
 
 **프론트엔드**:
-- [ ] `components/CategoryPicker.tsx` — 노트북 생성/수정 시 카테고리 선택 (아이콘+설명)
-- [ ] `hooks/useFeatureGate.ts` — Plan+Category 검증 훅
-- [ ] `components/NoteList.tsx` — 카테고리별 필터/아이콘 표시
-- [ ] `pages/NoteDetail.tsx` — 카테고리별 에디터 도구 바 분기 (연구 블록 준비)
+- [x] `lib/categories.ts` — CategoryPreset + useCategories() 훅
+- [x] `CategorySettingsSection.tsx` — Settings 카테고리 탭 CRUD UI
+- [x] Notebooks 페이지 — 카테고리 선택 + 색상 표시
+- [ ] `hooks/useFeatureGate.ts` — Plan+Category 검증 훅 (미구현, v3.1.0으로 이월)
 
 **테스트**:
-- [ ] 노트북 생성 시 카테고리 선택 + DB 반영
-- [ ] 카테고리별 노트북 필터링
-- [ ] 기존 노트북 → FREE_NOTE 마이그레이션 정상 동작
-- [ ] Feature Gate 검증 (허용/거부/업그레이드 유도)
+- [x] 노트북 생성/수정 시 카테고리 선택 + DB 반영
+- [x] 카테고리별 AI 프롬프트 자동 주입 동작 확인
+- [ ] Feature Gate 검증 (허용/거부/업그레이드 유도) — 미구현
 
 ---
 
@@ -353,28 +349,23 @@
 
 ---
 
-### 4-5. 외부 콘텐츠 캡처 (Phase 4-3) `★★★` (5~7일)
+### 4-5. 외부 콘텐츠 캡처 (Phase 4-3) `★★★` (5~7일) ✅ v1.4.0 선행 구현
+
+> ✅ 원래 v3.2.0 계획이었으나 v1.4.0에서 선행 구현 완료
 
 **백엔드**:
-- [ ] `services/content_capture_service.py`
-  - [ ] URL → readability 추출 (제목, 본문, 이미지)
-  - [ ] OG 메타데이터 파싱 (og:title, og:description, og:image)
-- [ ] `services/academic_metadata.py`
-  - [ ] arXiv API → 서지정보
-  - [ ] PubMed API → 서지정보
-  - [ ] DOI → CrossRef/DataCite 메타데이터
-- [ ] `api/capture.py`
-  - [ ] `POST /api/capture/url` — URL → 노트 생성
-  - [ ] `POST /api/capture/doi` — DOI → 서지정보 + 노트 생성
+- [x] URL 북마크 → readability-lxml + html2text 자동 추출
+- [x] arXiv Atom API 메타데이터 파싱
+- [x] PubMed NCBI E-utilities 메타데이터 파싱
+- [x] `POST /api/capture/url`, `POST /api/capture/arxiv`, `POST /api/capture/pubmed`
 
 **프론트엔드**:
-- [ ] `components/CaptureInput.tsx` — URL/DOI 입력 → 미리보기 → 노트 생성
-- [ ] `pages/Dashboard.tsx` — "빠른 캡처" 위젯
+- [x] Notes 페이지 "외부 캡처" 버튼 → 3탭 모달 (URL/arXiv/PubMed)
+- [x] 캡처 결과 → Note 즉시 생성 + 메타데이터 content_json 저장
 
-**테스트**:
-- [ ] URL 입력 → 콘텐츠 추출 → 노트 생성
-- [ ] arXiv URL → 서지정보 자동 파싱
-- [ ] DOI 입력 → CrossRef 메타데이터
+**미구현 (남은 항목)**:
+- [ ] DOI → CrossRef/DataCite 메타데이터 (향후 확장)
+- [ ] Dashboard "빠른 캡처" 위젯
 
 ---
 
@@ -583,41 +574,36 @@
 
 ---
 
-### 5-8. 평가 인프라 (Phase 5-1, 5-2, 5-3) `★★★★★` (10~14일)
+### 5-8. 평가 인프라 (Phase 5-1, 5-2, 5-3) `★★★★★` (10~14일) ✅ v2.0.0 선행 구현
+
+> ✅ 원래 v4.0.0 계획이었으나 v2.0.0에서 선행 구현 완료
 
 **백엔드**:
-- [ ] Migration `027_add_evaluation.py`
-  - [ ] `evaluation_sessions` 테이블
-  - [ ] `search_events` 테이블
-  - [ ] `user_feedback` 테이블
+- [x] Migration `024_add_evaluation_tables.py`
+  - [x] `evaluation_runs` 테이블 (status, task_type, models, progress, results)
+  - [x] `search_events` 테이블 (query, search_type, result_count, duration_ms, clicked_note_id)
+  - [x] `search_feedback` 테이블 (relevant boolean, dedup 제약조건)
+  - [x] `ai_feedback` 테이블 (rating 1-5, feature, comment, model_used)
 
-**5-8a. A/B 평가 프레임워크 (Phase 5-1)**:
-- [ ] `services/evaluation_service.py`
-  - [ ] SyntheticTestGenerator (FictionalHot 패턴 — 합성 데이터로 암기 바이어스 제거)
-  - [ ] AutoScorer (검색, QA, 요약 자동 채점)
-  - [ ] EvaluationFramework (모델/프로바이더 간 비교 실행)
-- [ ] `api/evaluation.py` — 실행/결과/목록 엔드포인트
-- [ ] Frontend: Admin 평가 대시보드 (비교 차트)
+**5-8a. A/B 평가 프레임워크 (Phase 5-1)** ✅:
+- [x] `services/evaluation/framework.py` — EvaluationFramework 오케스트레이터 (백그라운드 진행률)
+- [x] `services/evaluation/test_generator.py` — SyntheticTestGenerator
+- [x] `services/evaluation/scorer.py` — AutoScorer (다중 모델 비교)
+- [x] `services/evaluation/report.py` — ReportGenerator
+- [x] `api/evaluation.py` — POST 실행, GET 목록/상세
+- [x] Frontend: Admin Evaluation 탭 (모델 비교 차트)
 
-**5-8b. 검색 품질 메트릭 (Phase 5-2)**:
-- [ ] `services/quality_metrics.py`
-  - [ ] SearchMetrics 수집기 (Correctness vs Utility 분리)
-  - [ ] 검색 이벤트 로깅 (쿼리, 결과 수, 클릭, 시간)
-- [ ] `api/evaluation.py` — `GET /api/admin/metrics/search`
-- [ ] Frontend: Admin 검색 품질 탭 (시계열 차트, 0-result 쿼리)
+**5-8b. 검색 품질 메트릭 (Phase 5-2)** ✅:
+- [x] `services/search_metrics.py` — fire-and-forget 이벤트 기록 + 대시보드 집계
+- [x] `api/metrics.py` — GET /admin/metrics/search
+- [x] Frontend: Admin Metrics 탭 (일별 검색량, 평균 소요 시간, 0-result 비율, 클릭률)
 
-**5-8c. 사용자 피드백 루프 (Phase 5-3)**:
-- [ ] `services/feedback_service.py`
-  - [ ] 피드백 수집 (검색/AI 엄지 up/down + 코멘트)
-  - [ ] 피드백 기반 파라미터 최적화 추천
-- [ ] `api/evaluation.py` — `POST /api/feedback/search`, `POST /api/feedback/ai`
-- [ ] Frontend: 검색 결과 / AI 응답에 👍👎 버튼
-- [ ] Frontend: Admin 피드백 요약 뷰
-
-**테스트**:
-- [ ] 합성 테스트 데이터 생성 + 자동 채점
-- [ ] 검색 이벤트 로깅 + 메트릭 집계
-- [ ] 피드백 수집 + Admin 대시보드 표시
+**5-8c. 사용자 피드백 루프 (Phase 5-3)** ✅:
+- [x] `services/feedback_service.py` — 피드백 수집 + 기간별 집계 (7/30/90일)
+- [x] `api/feedback.py` — POST /feedback/search, POST /feedback/ai, GET /admin/feedback/summary
+- [x] Frontend: 검색 결과 👍👎 + AI 응답 ★1-5
+- [x] Frontend: Admin Feedback 탭 (긍정률, 추이 차트)
+- [ ] 피드백 기반 파라미터 자동 최적화 추천 (향후 확장)
 
 ---
 
@@ -720,6 +706,7 @@
 
 ### 과금 시스템
 
+- [x] v2.0.0: 카테고리 시스템 선행 구현 (과금 연동 없이 기능 기반만)
 - [ ] v3.1.0: `feature_gates` 테이블 + Gatekeeper 미들웨어 + `useFeatureGate` 훅 (인프라만)
 - [ ] v3.2.0: Zotero "Pro 전용" 배지 표시 (실제 과금 없음, Early Adopter)
 - [ ] v4.0.0: Stripe 연동 + 결제 페이지 + 기존 사용자 6개월 Grace Period
@@ -727,40 +714,43 @@
 
 ### DB 마이그레이션 총 목록
 
-| # | 파일명 | 버전 | 내용 |
-|---|--------|------|------|
-| 022 | `022_add_note_links.py` | v3.1.0 | note_links 테이블 |
-| 023 | `023_add_notebook_category.py` | v3.1.0 | notebooks.category + category_configs + feature_gates |
-| 024 | `024_add_zotero_tables.py` | v3.2.0 | zotero_items + zotero_sync_state |
-| 025 | `025_add_research_blocks.py` | v4.0.0 | research_blocks |
-| 026 | `026_add_protocols.py` | v4.0.0 | protocols + protocol_versions |
-| 027 | `027_add_evaluation.py` | v4.0.0 | evaluation_sessions + search_events + user_feedback |
-| 028 | `028_add_tier2_categories.py` | v4.1.0 | Tier 2 시드 데이터 |
+| # | 파일명 | 버전 | 내용 | 상태 |
+|---|--------|------|------|------|
+| 022 | `022_add_notebook_synology_id_and_category.py` | v2.0.0 | notebooks.category + synology_id | ✅ |
+| 023 | `023_repair_notebook_data.py` | v2.0.0 | 노트북 데이터 정합성 복구 | ✅ |
+| 024 | `024_add_evaluation_tables.py` | v2.0.0 | evaluation_runs + search_events + search_feedback + ai_feedback | ✅ |
+| 025 | `025_add_member_groups.py` | v2.0.0 | member_groups + member_group_memberships + group_notebook_access | ✅ |
+| 026 | `026_add_note_links.py` | v3.1.0 | note_links 테이블 | 🔲 |
+| 027 | `027_add_zotero_tables.py` | v3.2.0 | zotero_items + zotero_sync_state | 🔲 |
+| 028 | `028_add_research_blocks.py` | v4.0.0 | research_blocks | 🔲 |
+| 029 | `029_add_protocols.py` | v4.0.0 | protocols + protocol_versions | 🔲 |
+| 030 | `030_add_tier2_categories.py` | v4.1.0 | Tier 2 시드 데이터 | 🔲 |
 
 ### 신규 백엔드 서비스/API
 
-| 파일 | 버전 | 설명 |
-|------|------|------|
-| `services/category_service.py` | v3.1.0 | 카테고리 메타데이터 |
-| `services/feature_gate.py` | v3.1.0 | Plan+Category Gatekeeper |
-| `api/note_links.py` | v3.1.0 | 노트 링크 + 백링크 API |
-| `services/zotero_sync_service.py` | v3.2.0 | Zotero 동기화 클라이언트 |
-| `api/zotero.py` | v3.2.0 | Zotero 검색/매핑/하이라이트 API |
-| `services/content_capture_service.py` | v3.2.0 | URL/DOI 캡처 |
-| `services/academic_metadata.py` | v3.2.0 | arXiv/PubMed 메타데이터 |
-| `api/capture.py` | v3.2.0 | 캡처 엔드포인트 |
-| `services/research_block_service.py` | v4.0.0 | 연구 블록 로직 |
-| `api/research_blocks.py` | v4.0.0 | 연구 블록 CRUD |
-| `services/protocol_service.py` | v4.0.0 | 프로토콜 버전/포크 |
-| `api/protocols.py` | v4.0.0 | 프로토콜 CRUD |
-| `services/evaluation_service.py` | v4.0.0 | A/B 평가 |
-| `services/quality_metrics.py` | v4.0.0 | 검색 메트릭 |
-| `services/feedback_service.py` | v4.0.0 | 피드백 수집 |
-| `api/evaluation.py` | v4.0.0 | 평가/메트릭/피드백 API |
-| `services/collaboration_service.py` | v4.1.0 | 실시간 협업 WebSocket |
-| `services/paper_draft_service.py` | v4.1.0 | 논문 초안 생성 |
-| `services/maturity_service.py` | v4.1.0 | 노트 성숙도 |
-| `api/team_insights.py` | v4.1.0 | 팀 인사이트 API |
+| 파일 | 버전 | 설명 | 상태 |
+|------|------|------|------|
+| `constants.py` (카테고리 프리셋) | v2.0.0 | 12종 카테고리 + AI 인지 필드 | ✅ |
+| `services/search_metrics.py` | v2.0.0 | 검색 이벤트 로깅 + 대시보드 집계 | ✅ |
+| `services/feedback_service.py` | v2.0.0 | 피드백 수집 + 기간별 집계 | ✅ |
+| `services/evaluation/` | v2.0.0 | A/B 평가 프레임워크 (4모듈) | ✅ |
+| `api/evaluation.py` | v2.0.0 | 평가 실행/목록/상세 API | ✅ |
+| `api/feedback.py` | v2.0.0 | 피드백 수집 API | ✅ |
+| `api/metrics.py` | v2.0.0 | 검색 메트릭 API | ✅ |
+| `services/group_service.py` | v2.0.0 | 멤버 그룹 관리 (13개 함수) | ✅ |
+| `api/groups.py` | v2.0.0 | 그룹 CRUD + 멤버십 + 접근 제어 (11개 엔드포인트) | ✅ |
+| `services/feature_gate.py` | v3.1.0 | Plan+Category Gatekeeper | 🔲 |
+| `api/note_links.py` | v3.1.0 | 노트 링크 + 백링크 API | 🔲 |
+| `services/zotero_sync_service.py` | v3.2.0 | Zotero 동기화 클라이언트 | 🔲 |
+| `api/zotero.py` | v3.2.0 | Zotero 검색/매핑/하이라이트 API | 🔲 |
+| `services/research_block_service.py` | v4.0.0 | 연구 블록 로직 | 🔲 |
+| `api/research_blocks.py` | v4.0.0 | 연구 블록 CRUD | 🔲 |
+| `services/protocol_service.py` | v4.0.0 | 프로토콜 버전/포크 | 🔲 |
+| `api/protocols.py` | v4.0.0 | 프로토콜 CRUD | 🔲 |
+| `services/collaboration_service.py` | v4.1.0 | 실시간 협업 WebSocket | 🔲 |
+| `services/paper_draft_service.py` | v4.1.0 | 논문 초안 생성 | 🔲 |
+| `services/maturity_service.py` | v4.1.0 | 노트 성숙도 | 🔲 |
+| `api/team_insights.py` | v4.1.0 | 팀 인사이트 API | 🔲 |
 
 ---
 

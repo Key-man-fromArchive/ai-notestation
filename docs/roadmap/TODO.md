@@ -1,16 +1,16 @@
 # LabNote AI — Master TODO
 
-> 리서치 기반 로드맵 종합 TODO | 현재 v1.3.1 | 최종 갱신: 2026-02-14
+> 리서치 기반 로드맵 종합 TODO | 현재 v2.0.0 | 최종 갱신: 2026-02-16
 
 ## Overview
 
 | Phase | 버전 | 테마 | 태스크 | 예상 기간 | 상세 |
 |-------|------|------|--------|-----------|------|
-| 1 | v1.3.0 | 검색 고도화 | 3 | ~9일 | [phase1](phase1-search-enhancement.md) |
-| 2 | v1.4.0 | AI 품질 게이트 | 3 | ~8일 | [phase2](phase2-ai-quality-gate.md) |
-| 3 | v1.5.0 | 콘텐츠 인텔리전스 | 3 | ~7일 | [phase3](phase3-content-intelligence.md) |
-| 4 | v2.0.0 | 멀티모달 확장 | 3 | ~10일 | [phase4](phase4-multimodal.md) |
-| 5 | v2.1.0 | 평가 인프라 | 3 | ~11일 | [phase5](phase5-evaluation-infra.md) |
+| 1 | v1.1.0 | 검색 고도화 | 3 | ~9일 | ✅ [phase1](phase1-search-enhancement.md) |
+| 2 | v1.2.0 | AI 품질 게이트 | 3 | ~8일 | ✅ [phase2](phase2-ai-quality-gate.md) |
+| 3 | v1.3.1 | 콘텐츠 인텔리전스 | 3 | ~7일 | ✅ [phase3](phase3-content-intelligence.md) |
+| 4 | v1.6.0 | 멀티모달 확장 | 4 | ~10일 | ✅ [phase4](phase4-multimodal.md) |
+| 5 | v2.0.0 | 평가 인프라 | 3 | ~11일 | ✅ [phase5](phase5-evaluation-infra.md) |
 
 ---
 
@@ -127,38 +127,39 @@
 - [x] Frontend: 배치 처리 UI + 실패 상세 팝업 + Dashboard OCR/Vision 분리 현황 카드
 - [x] Frontend: Settings OCR 엔진 선택, Vision 모델 선택, 배치 제어 UI
 
-### 4-3. 외부 콘텐츠 캡처 `★★★ 난이도`
-- [ ] Backend: ContentCaptureService (URL → 마크다운)
-- [ ] Backend: arXiv, PubMed 메타데이터 파서
-- [ ] Backend: POST /capture/url, /capture/arxiv, /capture/pubmed
-- [ ] Frontend: "URL에서 노트 만들기" UI
+### 4-3. 외부 콘텐츠 캡처 `★★★ 난이도` ✅ 완료 (v1.4.0)
+- [x] Backend: ContentCaptureService (URL → readability-lxml + html2text)
+- [x] Backend: arXiv Atom API, PubMed NCBI E-utilities 메타데이터 파서
+- [x] Backend: POST /capture/url, /capture/arxiv, /capture/pubmed
+- [x] Frontend: Notes 페이지 "외부 캡처" 버튼 → 3탭 모달 (URL/arXiv/PubMed)
 
 ---
 
-## Phase 5 — 평가 인프라 (v2.1.0)
+## Phase 5 — 평가 인프라 (v2.0.0)
 
-### 5-1. A/B 평가 프레임워크 `★★★★★ 난이도`
-- [ ] Backend: services/evaluation/ 디렉토리 구조
-- [ ] Backend: SyntheticTestGenerator (FictionalHot 패턴)
-- [ ] Backend: AutoScorer (검색, QA, 요약)
-- [ ] Backend: EvaluationFramework (모델 비교 실행)
-- [ ] Backend: API 엔드포인트 (실행, 결과, 목록)
-- [ ] Frontend: Admin 평가 대시보드 (비교 차트)
+### 5-1. A/B 평가 프레임워크 `★★★★★ 난이도` ✅ 완료
+- [x] Backend: services/evaluation/ 디렉토리 (framework, test_generator, scorer, report)
+- [x] Backend: SyntheticTestGenerator (FictionalHot 패턴)
+- [x] Backend: AutoScorer (검색, QA, 요약 자동 채점)
+- [x] Backend: EvaluationFramework (모델 비교 실행 + 백그라운드 진행률)
+- [x] Backend: api/evaluation.py — 실행/목록/상세 엔드포인트
+- [x] Frontend: Admin 평가 대시보드 (비교 차트)
+- [x] DB: evaluation_runs 테이블 (마이그레이션 024)
 
-### 5-2. 검색 품질 메트릭 `★★★ 난이도`
-- [ ] Backend: SearchMetrics 수집기
-- [ ] Backend: SearchEvent DB 테이블 + 마이그레이션
-- [ ] Backend: GET /admin/metrics/search
-- [ ] Frontend: Admin 검색 품질 탭 (차트, 0-result 쿼리)
+### 5-2. 검색 품질 메트릭 `★★★ 난이도` ✅ 완료
+- [x] Backend: services/search_metrics.py — fire-and-forget 이벤트 기록
+- [x] Backend: search_events DB 테이블 (마이그레이션 024)
+- [x] Backend: GET /admin/metrics/search 대시보드 데이터 API
+- [x] Frontend: Admin Metrics 탭 (일별 검색량, 평균 소요 시간, 0-result 비율, 클릭률)
 
-### 5-3. 사용자 피드백 루프 `★★★ 난이도`
-- [ ] Backend: FeedbackService
-- [ ] Backend: SearchFeedback, AIFeedback DB 테이블
-- [ ] Backend: POST /feedback/search, POST /feedback/ai
-- [ ] Backend: 피드백 기반 파라미터 최적화 추천
-- [ ] Frontend: NoteCard 엄지 up/down
-- [ ] Frontend: AIChat 별점 + 코멘트
-- [ ] Frontend: Admin 피드백 요약 뷰
+### 5-3. 사용자 피드백 루프 `★★★ 난이도` ✅ 완료
+- [x] Backend: services/feedback_service.py — 피드백 집계 + 긍정률/추이
+- [x] Backend: search_feedback, ai_feedback DB 테이블 (마이그레이션 024)
+- [x] Backend: POST /feedback/search, POST /feedback/ai
+- [x] Backend: GET /admin/feedback/summary — 기간별 요약 데이터
+- [x] Frontend: 검색 결과 👍👎 피드백
+- [x] Frontend: AI 응답 ★1-5 별점 + 코멘트
+- [x] Frontend: Admin Feedback 탭 (7일/30일/90일 요약)
 
 ---
 
