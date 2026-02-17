@@ -169,8 +169,14 @@ export default function Notes() {
   // 모든 노트 평탄화
   const allNotes = data?.pages.flatMap((page) => page.items) ?? []
 
-  // 총 노트 수 (첫 페이지의 total)
+  // 현재 필터의 총 노트 수
   const totalNotes = data?.pages[0]?.total ?? 0
+
+  // 전체 노트 수 (노트북 카운트 합산 — 항상 전체 수 표시)
+  const allNotesCount = useMemo(() => {
+    if (!notebooksData?.items) return totalNotes
+    return notebooksData.items.reduce((sum, nb) => sum + nb.note_count, 0)
+  }, [notebooksData, totalNotes])
 
   // 클라이언트 사이드 필터링
   const filteredNotes = useMemo(() => {
@@ -296,7 +302,7 @@ export default function Notes() {
                 ? 'bg-primary/20 text-primary'
                 : 'bg-muted text-muted-foreground'
             )}>
-              {totalNotes}
+              {allNotesCount}
             </span>
           </button>
 

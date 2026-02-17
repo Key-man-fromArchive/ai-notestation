@@ -36,28 +36,24 @@ export function NoteList({
     gap: 8,
   })
 
-  // 무한 스크롤: 마지막 아이템에 가까워지면 다음 페이지 로드
+  // 무한 스크롤: 마지막 보이는 아이템 인덱스를 추적하여 다음 페이지 로드
+  const items = virtualizer.getVirtualItems()
+  const lastVisibleIndex = items[items.length - 1]?.index ?? -1
+
   useEffect(() => {
-    const virtualItems = virtualizer.getVirtualItems()
-    if (!virtualItems.length) return
-
-    const lastItem = virtualItems[virtualItems.length - 1]
-    if (!lastItem) return
-
-    // 마지막에서 5개 이내면 다음 페이지 로드
     if (
-      lastItem.index >= notes.length - 5 &&
+      lastVisibleIndex >= notes.length - 5 &&
       hasNextPage &&
       !isFetchingNextPage
     ) {
       fetchNextPage()
     }
   }, [
+    lastVisibleIndex,
     hasNextPage,
     isFetchingNextPage,
     fetchNextPage,
     notes.length,
-    virtualizer,
   ])
 
   return (
