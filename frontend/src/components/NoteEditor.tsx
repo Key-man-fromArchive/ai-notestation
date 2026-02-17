@@ -387,7 +387,7 @@ export const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(function
         if (file.type.startsWith('image/')) {
           editor.chain().focus().setImage({ src: uploaded.url, alt: uploaded.name }).run()
         } else {
-          editor.chain().focus().insertContent(`<a href="${uploaded.url}">${uploaded.name}</a> `).run()
+          editor.chain().focus().insertContent(`<a href="${uploaded.url}">첨부[${uploaded.name}]</a> `).run()
         }
       }
     } finally {
