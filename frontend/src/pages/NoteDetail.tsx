@@ -55,6 +55,7 @@ export default function NoteDetail() {
     visionStatus?: string | null
     name: string
     isPdf: boolean
+    isHwp?: boolean
     pageCount?: number | null
     nasImage?: { noteId: string; attKey: string; filename: string }
   } | null>(null)
@@ -268,7 +269,7 @@ export default function NoteDetail() {
 
   const handleAttachmentContextMenu = (
     e: React.MouseEvent,
-    opts: { type: 'attachment' | 'image'; id: string | number; status: string | null; visionStatus?: string | null; name: string; isPdf: boolean; pageCount?: number | null }
+    opts: { type: 'attachment' | 'image'; id: string | number; status: string | null; visionStatus?: string | null; name: string; isPdf: boolean; isHwp?: boolean; pageCount?: number | null }
   ) => {
     e.preventDefault()
     setContextMenu({ x: e.clientX, y: e.clientY, ...opts })
@@ -276,30 +277,31 @@ export default function NoteDetail() {
 
   const getContextMenuItems = (): ContextMenuItem[] => {
     if (!contextMenu) return []
-    const { type, id, status, visionStatus, name, isPdf, pageCount } = contextMenu
+    const { type, id, status, visionStatus, name, isPdf, isHwp, pageCount } = contextMenu
     const isFile = type === 'attachment'
+    const isDocument = isPdf || isHwp
     const items: ContextMenuItem[] = []
 
-    // --- File attachments (PDF etc.) — keep original logic ---
+    // --- File attachments (PDF, HWP, image) — keep original logic ---
     if (isFile) {
       items.push({ icon: <Download className="h-4 w-4" />, label: t('files.download'), onClick: () => {
         setContextMenu(null)
         handleDownloadAttachment(id as string, name)
       }})
       if (status === 'completed') {
-        items.push({ icon: <Eye className="h-4 w-4" />, label: isPdf ? t('files.viewExtractedText') : t('ocr.viewExtractedText'), onClick: () => handleShowPdfText(id as string, name, pageCount) })
-        if (isPdf) {
+        items.push({ icon: <Eye className="h-4 w-4" />, label: isDocument ? t('files.viewExtractedText') : t('ocr.viewExtractedText'), onClick: () => handleShowPdfText(id as string, name, pageCount) })
+        if (isDocument) {
           items.push({ icon: <FileText className="h-4 w-4" />, label: t('summary.insertSummary'), onClick: () => {
             setContextMenu(null)
             setSummaryModal({ fileId: id as string, fileName: name })
           }})
         }
       } else if (status === 'pending' || extractingFileId === id) {
-        items.push({ icon: <ScanText className="h-4 w-4" />, label: isPdf ? t('files.extracting') : t('ocr.extracting'), disabled: true, loading: true, onClick: () => {} })
+        items.push({ icon: <ScanText className="h-4 w-4" />, label: isDocument ? t('files.extracting') : t('ocr.extracting'), disabled: true, loading: true, onClick: () => {} })
       } else if (status === 'failed') {
         items.push({ icon: <RotateCcw className="h-4 w-4" />, label: t('common.retry'), onClick: () => handleExtractPdf(id as string) })
       } else {
-        items.push({ icon: <ScanText className="h-4 w-4" />, label: isPdf ? t('files.extractText') : t('ocr.extractText'), onClick: () => handleExtractPdf(id as string) })
+        items.push({ icon: <ScanText className="h-4 w-4" />, label: isDocument ? t('files.extractText') : t('ocr.extractText'), onClick: () => handleExtractPdf(id as string) })
       }
       return items
     }
@@ -852,17 +854,18 @@ export default function NoteDetail() {
               {note.attachments?.map((attachment, index) => {
                 const ext = attachment.name.split('.').pop()?.toLowerCase() ?? ''
                 const isPdf = ext === 'pdf'
+                const isHwp = ext === 'hwp' || ext === 'hwpx'
                 const isImage = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'].includes(ext)
-                const Icon = isPdf ? FileText : isImage ? Image : File
+                const Icon = isPdf || isHwp ? FileText : isImage ? Image : File
                 const fileId = attachment.file_id ?? attachment.url.split('/').pop()
-                const canExtract = isPdf || isImage
+                const canExtract = isPdf || isImage || isHwp
                 const status = attachment.extraction_status ?? (extractingFileId === fileId ? 'pending' : null)
                 return (
                   <div
                     key={index}
                     className={`flex items-center gap-3 rounded-lg border border-border bg-muted/30 px-3 py-2.5${canExtract ? ' cursor-context-menu' : ''}`}
                     onContextMenu={canExtract && fileId ? (e) => handleAttachmentContextMenu(e, {
-                      type: 'attachment', id: fileId, status, name: attachment.name, isPdf, pageCount: attachment.page_count,
+                      type: 'attachment', id: fileId, status, name: attachment.name, isPdf, isHwp, pageCount: attachment.page_count,
                     }) : undefined}
                   >
                     <Icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
@@ -877,13 +880,13 @@ export default function NoteDetail() {
 
                     {/* Extraction status icon */}
                     {canExtract && status === 'completed' && (
-                      <span title={isPdf ? t('files.viewExtractedText') : t('ocr.viewExtractedText')}><CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-green-600" /></span>
+                      <span title={(isPdf || isHwp) ? t('files.viewExtractedText') : t('ocr.viewExtractedText')}><CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-green-600" /></span>
                     )}
                     {canExtract && status === 'pending' && (
-                      <span title={isPdf ? t('files.extracting') : t('ocr.extracting')}><Loader2 className="h-3.5 w-3.5 shrink-0 text-amber-600 animate-spin" /></span>
+                      <span title={(isPdf || isHwp) ? t('files.extracting') : t('ocr.extracting')}><Loader2 className="h-3.5 w-3.5 shrink-0 text-amber-600 animate-spin" /></span>
                     )}
                     {canExtract && status === 'failed' && (
-                      <span title={isPdf ? t('files.extractionFailed') : t('ocr.extractionFailed')}><AlertCircle className="h-3.5 w-3.5 shrink-0 text-destructive" /></span>
+                      <span title={(isPdf || isHwp) ? t('files.extractionFailed') : t('ocr.extractionFailed')}><AlertCircle className="h-3.5 w-3.5 shrink-0 text-destructive" /></span>
                     )}
 
                     <button

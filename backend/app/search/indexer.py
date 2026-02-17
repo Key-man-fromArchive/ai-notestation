@@ -17,6 +17,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass, field
+from pathlib import PurePosixPath
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -236,7 +237,9 @@ class NoteIndexer:
         parts = []
         for text, name in rows:
             if text and text.strip():
-                parts.append(f"[PDF: {name}]\n{text.strip()}")
+                suffix = PurePosixPath(name).suffix.lower() if name else ""
+                label = "HWP" if suffix in (".hwp", ".hwpx") else "PDF" if suffix == ".pdf" else "FILE"
+                parts.append(f"[{label}: {name}]\n{text.strip()}")
 
         return "\n\n---\n\n".join(parts)
 

@@ -42,6 +42,7 @@ dependencies = [
     "html2text>=2024.2.26",
     "paddlepaddle>=3.2.1",
     "paddleocr[doc-parser]>=3.4.0",
+    "hwp-hwpx-parser>=1.0.0",
 ]
 
 [project.optional-dependencies]

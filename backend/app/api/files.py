@@ -26,6 +26,7 @@ router = APIRouter(tags=["files"])
 settings = get_settings()
 
 _IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"}
+_HWP_EXTENSIONS = {".hwp", ".hwpx"}
 
 
 @router.post("/files", status_code=status.HTTP_201_CREATED)
@@ -61,7 +62,8 @@ async def upload_file(
         ) from exc
 
     await log_activity(
-        "note", "completed",
+        "note",
+        "completed",
         message=f"파일 업로드: {file.filename}",
         details={"file_id": file_id},
         triggered_by=get_trigger_name(current_user),
@@ -91,9 +93,7 @@ async def get_file(
         )
 
     # DB에서 원본 파일명 조회
-    result = await db.execute(
-        select(NoteAttachment).where(NoteAttachment.file_id == file_id)
-    )
+    result = await db.execute(select(NoteAttachment).where(NoteAttachment.file_id == file_id))
     attachment = result.scalar_one_or_none()
     original_name = attachment.name if attachment else file_id
 
@@ -121,9 +121,10 @@ async def extract_file_text(
 
     is_pdf = file_id.lower().endswith(".pdf")
     is_image = any(file_id.lower().endswith(ext) for ext in _IMAGE_EXTENSIONS)
+    is_hwp = any(file_id.lower().endswith(ext) for ext in _HWP_EXTENSIONS)
 
-    if not is_pdf and not is_image:
-        raise HTTPException(status_code=400, detail="Only PDF and image files can be extracted")
+    if not is_pdf and not is_image and not is_hwp:
+        raise HTTPException(status_code=400, detail="Only PDF, image, and HWP/HWPX files can be extracted")
 
     stmt = select(NoteAttachment).where(NoteAttachment.file_id == file_id)
     result = await db.execute(stmt)
@@ -139,6 +140,8 @@ async def extract_file_text(
 
     if is_pdf:
         background_tasks.add_task(_run_pdf_extraction, file_id, str(file_path))
+    elif is_hwp:
+        background_tasks.add_task(_run_hwp_extraction, file_id, str(file_path))
     else:
         background_tasks.add_task(_run_ocr_extraction, file_id, str(file_path))
 
@@ -297,6 +300,35 @@ async def _run_pdf_extraction(file_id: str, file_path: str) -> None:
             await db.commit()
 
 
+async def _run_hwp_extraction(file_id: str, file_path: str) -> None:
+    """Background task: extract HWP/HWPX text and reindex the note."""
+    from app.database import async_session_factory
+    from app.services.hwp_extractor import HwpExtractor
+
+    async with async_session_factory() as db:
+        stmt = select(NoteAttachment).where(NoteAttachment.file_id == file_id)
+        result = await db.execute(stmt)
+        attachment = result.scalar_one_or_none()
+        if not attachment:
+            return
+
+        try:
+            extractor = HwpExtractor()
+            extraction = await extractor.extract(file_path)
+
+            attachment.extracted_text = extraction.text
+            attachment.extraction_status = "completed"
+            attachment.page_count = extraction.page_count
+            await db.commit()
+
+            await _reindex_note(attachment.note_id, db)
+
+        except Exception:
+            logger.exception("HWP extraction failed for %s", file_id)
+            attachment.extraction_status = "failed"
+            await db.commit()
+
+
 async def _run_ocr_extraction(file_id: str, file_path: str) -> None:
     """Background task: OCR an image attachment and reindex the note."""
     from app.database import async_session_factory
@@ -347,9 +379,7 @@ async def _run_image_ocr(image_id: int) -> None:
             await db.commit()
 
             # Find the note by synology_note_id to reindex
-            note_stmt = select(Note.id).where(
-                Note.synology_note_id == image.synology_note_id
-            )
+            note_stmt = select(Note.id).where(Note.synology_note_id == image.synology_note_id)
             note_result = await db.execute(note_stmt)
             note_id = note_result.scalar_one_or_none()
             if note_id:
@@ -367,6 +397,7 @@ _VISION_PROMPT = (
     "If this is a scientific image (gel, blot, microscopy, etc.), "
     "describe the experimental content."
 )
+
 
 def _get_vision_model() -> str:
     """Read vision_model from the settings cache."""
@@ -419,9 +450,7 @@ async def _run_image_vision(image_id: int) -> None:
             await db.commit()
 
             # Find the note by synology_note_id to reindex
-            note_stmt = select(Note.id).where(
-                Note.synology_note_id == image.synology_note_id
-            )
+            note_stmt = select(Note.id).where(Note.synology_note_id == image.synology_note_id)
             note_result = await db.execute(note_stmt)
             note_id = note_result.scalar_one_or_none()
             if note_id:
