@@ -88,7 +88,7 @@ class CaptureService:
             raise ValueError(f"Invalid arXiv ID format: {arxiv_id}")
 
         api_url = f"https://export.arxiv.org/api/query?id_list={arxiv_id}"
-        async with httpx.AsyncClient(timeout=self._TIMEOUT) as client:
+        async with httpx.AsyncClient(timeout=self._TIMEOUT, follow_redirects=True) as client:
             resp = await client.get(api_url, headers=self._HEADERS)
             resp.raise_for_status()
 
@@ -178,7 +178,7 @@ class CaptureService:
         if not pmid.isdigit():
             raise ValueError(f"Invalid PubMed ID (must be numeric): {pmid}")
 
-        async with httpx.AsyncClient(timeout=self._TIMEOUT) as client:
+        async with httpx.AsyncClient(timeout=self._TIMEOUT, follow_redirects=True) as client:
             # Step 1: Fetch PubMed metadata + abstract
             api_url = f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id={pmid}&retmode=xml"
             resp = await client.get(api_url, headers=self._HEADERS)
@@ -240,10 +240,10 @@ class CaptureService:
             fulltext_source = ""
             oa_pdf_url = ""
 
-            # 2a: PMID → PMCID conversion
+            # 2a: PMID → PMCID conversion (new PMC API endpoint, 2025+)
             try:
                 conv_url = (
-                    f"https://www.ncbi.nlm.nih.gov/pmc/utils/idconv/v1.0/"
+                    f"https://pmc.ncbi.nlm.nih.gov/tools/idconv/api/v1/articles/"
                     f"?ids={pmid}&format=json&tool=LabNoteAI&email=noreply@labnote.ai"
                 )
                 conv_resp = await client.get(conv_url, headers=self._HEADERS)
@@ -252,8 +252,9 @@ class CaptureService:
                     records = conv_data.get("records", [])
                     if records and records[0].get("pmcid"):
                         pmcid = records[0]["pmcid"]
+                        logger.info("PMID %s → %s", pmid, pmcid)
             except Exception:
-                logger.debug("PMC ID conversion failed for PMID %s", pmid)
+                logger.warning("PMC ID conversion failed for PMID %s", pmid)
 
             # 2b: Fetch PMC full-text XML if PMCID exists
             if pmcid:
@@ -262,13 +263,18 @@ class CaptureService:
                         f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
                         f"?db=pmc&id={pmcid}&retmode=xml"
                     )
-                    pmc_resp = await client.get(pmc_url, headers=self._HEADERS)
+                    pmc_resp = await client.get(pmc_url, headers=self._HEADERS, timeout=30.0)
                     if pmc_resp.status_code == 200:
                         fulltext_html = _extract_pmc_fulltext(pmc_resp.text)
                         if fulltext_html:
                             fulltext_source = "pmc"
-                except Exception:
-                    logger.debug("PMC full-text fetch failed for %s", pmcid)
+                            logger.info("PMC full-text extracted for %s (%d chars)", pmcid, len(fulltext_html))
+                        else:
+                            logger.warning("PMC XML returned but no body sections found for %s", pmcid)
+                    else:
+                        logger.warning("PMC efetch returned %d for %s", pmc_resp.status_code, pmcid)
+                except Exception as exc:
+                    logger.warning("PMC full-text fetch failed for %s: %s", pmcid, exc)
 
             # 2c: Unpaywall OA lookup if no full-text yet and DOI exists
             if not fulltext_html and doi:
