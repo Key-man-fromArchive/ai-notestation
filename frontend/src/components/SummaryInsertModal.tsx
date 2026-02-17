@@ -4,6 +4,7 @@ import { X, Loader2, FileText } from 'lucide-react'
 import { useAIStream } from '@/hooks/useAIStream'
 import { MarkdownRenderer } from '@/components/MarkdownRenderer'
 import { apiClient } from '@/lib/api'
+import { markdownToHtml } from '@/lib/markdown'
 
 interface SummaryInsertModalProps {
   isOpen: boolean
@@ -65,7 +66,8 @@ export function SummaryInsertModal({ isOpen, onClose, fileId, fileName, noteId, 
     if (!content || isInserting) return
     setIsInserting(true)
     try {
-      const merged = `${noteContent}\n\n---\n\n## ${t('summary.heading')}\n\n${content}`
+      const contentHtml = markdownToHtml(content)
+      const merged = `${noteContent}<hr><h2>${t('summary.heading')}</h2>${contentHtml}`
       await apiClient.put(`/notes/${noteId}`, { content: merged })
       window.location.reload()
     } catch {

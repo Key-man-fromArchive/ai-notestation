@@ -6,6 +6,7 @@ import { LoadingSpinner } from './LoadingSpinner'
 import { ModelSelector } from './ModelSelector'
 import { cn } from '@/lib/utils'
 import { apiClient } from '@/lib/api'
+import { markdownToHtml } from '@/lib/markdown'
 import {
   Sparkles,
   Lightbulb,
@@ -120,7 +121,8 @@ export function NoteAIPanel({ noteId, noteContent, noteTitle }: NoteAIPanelProps
   const handleInsert = async () => {
     if (!content || isSaving) return
     setIsSaving(true)
-    const merged = `${noteContent}\n\n---\n\n## ${t('ai.aiSummary')}\n\n${content}`
+    const contentHtml = markdownToHtml(content)
+    const merged = `${noteContent}<hr><h2>${t('ai.aiSummary')}</h2>${contentHtml}`
     await apiClient.put(`/notes/${noteId}`, { content: merged })
     window.location.reload()
   }
