@@ -1,6 +1,7 @@
 // @TASK P5-T5.2 - 노트 카드 컴포넌트
 // @SPEC docs/plans/2026-01-29-labnote-ai-design.md#노트-목록
 
+import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { FileText, Tag, FolderOpen, Calendar } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -21,22 +22,26 @@ function DateThumbnail({ date, thumbnailUrl }: { date: Date; thumbnailUrl?: stri
   const year = date.getFullYear()
   const month = date.toLocaleDateString('ko-KR', { month: 'short' })
   const day = date.getDate()
+  const [imgFailed, setImgFailed] = useState(false)
+
+  const hasImage = !!thumbnailUrl && !imgFailed
 
   return (
     <div
       className={cn(
         'relative flex-shrink-0 w-14 h-14 rounded-md overflow-hidden',
         'flex flex-col items-center justify-center',
-        !thumbnailUrl && 'bg-muted'
+        !hasImage && 'bg-muted'
       )}
     >
-      {thumbnailUrl && (
+      {hasImage && (
         <>
           <img
             src={thumbnailUrl}
             alt=""
             className="absolute inset-0 w-full h-full object-cover"
             loading="lazy"
+            onError={() => setImgFailed(true)}
           />
           <div className="absolute inset-0 bg-white/20" />
         </>
@@ -44,7 +49,7 @@ function DateThumbnail({ date, thumbnailUrl }: { date: Date; thumbnailUrl?: stri
       <span
         className={cn(
           'relative text-[9px] leading-tight font-medium',
-          thumbnailUrl ? 'text-white drop-shadow-sm' : 'text-muted-foreground'
+          hasImage ? 'text-white drop-shadow-sm' : 'text-muted-foreground'
         )}
       >
         {year}
@@ -52,7 +57,7 @@ function DateThumbnail({ date, thumbnailUrl }: { date: Date; thumbnailUrl?: stri
       <span
         className={cn(
           'relative text-[11px] leading-tight font-semibold',
-          thumbnailUrl ? 'text-white drop-shadow-sm' : 'text-muted-foreground'
+          hasImage ? 'text-white drop-shadow-sm' : 'text-muted-foreground'
         )}
       >
         {month}
@@ -60,7 +65,7 @@ function DateThumbnail({ date, thumbnailUrl }: { date: Date; thumbnailUrl?: stri
       <span
         className={cn(
           'relative text-lg leading-tight font-bold',
-          thumbnailUrl ? 'text-white drop-shadow-md' : 'text-foreground'
+          hasImage ? 'text-white drop-shadow-md' : 'text-foreground'
         )}
       >
         {day}

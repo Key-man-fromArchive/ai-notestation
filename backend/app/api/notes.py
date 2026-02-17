@@ -363,6 +363,27 @@ async def list_notes(
     notes = notes_result.scalars().all()
     items = [_model_to_item(note) for note in notes]
 
+    # Fallback: for notes without thumbnail_url, check note_images table
+    no_thumb_ids = [item.note_id for item in items if not item.thumbnail_url]
+    if no_thumb_ids:
+        from urllib.parse import quote
+
+        img_stmt = (
+            select(NoteImage.synology_note_id, NoteImage.ref)
+            .where(
+                NoteImage.synology_note_id.in_(no_thumb_ids),
+                NoteImage.name != "transparent.gif",
+            )
+            .distinct(NoteImage.synology_note_id)
+            .order_by(NoteImage.synology_note_id, NoteImage.id)
+        )
+        img_result = await db.execute(img_stmt)
+        img_map = {row[0]: row[1] for row in img_result}
+        for item in items:
+            if not item.thumbnail_url and item.note_id in img_map:
+                ref = quote(img_map[item.note_id], safe="")
+                item.thumbnail_url = f"/api/images/{item.note_id}/{ref}"
+
     return NoteListResponse(
         items=items,
         offset=offset,
