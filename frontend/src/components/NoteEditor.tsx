@@ -42,6 +42,7 @@ import {
   Palette,
   Check,
   AlertCircle,
+  Upload,
 } from 'lucide-react'
 
 interface NoteEditorProps {
@@ -156,8 +157,11 @@ export function NoteEditor({ noteId, initialContent, onAutoSave }: NoteEditorPro
   const [wordCount, setWordCount] = useState(0)
   const [charCount, setCharCount] = useState(0)
   const [, setRenderKey] = useState(0)
+  const [isDragOver, setIsDragOver] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const editorRef = useRef<ReturnType<typeof useEditor>>(null)
+  const handleDropFilesRef = useRef<(files: File[], view: unknown, event: DragEvent | null) => void>()
 
   const token = apiClient.getToken()
 
@@ -192,6 +196,22 @@ export function NoteEditor({ noteId, initialContent, onAutoSave }: NoteEditorPro
     editorProps: {
       attributes: {
         class: 'outline-none min-h-[50vh] px-6 py-4',
+      },
+      handleDrop: (view, event, _slice, moved) => {
+        if (moved || !event.dataTransfer?.files.length) return false
+        event.preventDefault()
+        handleDropFilesRef.current?.(Array.from(event.dataTransfer.files), view, event)
+        return true
+      },
+      handlePaste: (_view, event) => {
+        const files = event.clipboardData?.files
+        if (!files?.length) return false
+        // Only handle if at least one image file is present
+        const fileArr = Array.from(files)
+        if (!fileArr.some(f => f.type.startsWith('image/'))) return false
+        event.preventDefault()
+        handleDropFilesRef.current?.(fileArr, null, null)
+        return true
       },
     },
   })
@@ -320,17 +340,46 @@ export function NoteEditor({ noteId, initialContent, onAutoSave }: NoteEditorPro
     return response.json() as Promise<{ url: string; name: string }>
   }
 
-  const handleInsertFile = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file || !editor) return
+  const handleDropFiles = async (files: File[], view: unknown, event: DragEvent | null) => {
+    if (!editor || !files.length) return
+    setIsUploading(true)
 
-    const uploaded = await handleUpload(file)
-    if (file.type.startsWith('image/')) {
-      editor.chain().focus().setImage({ src: uploaded.url, alt: uploaded.name }).run()
-    } else {
-      editor.chain().focus().insertContent(`<a href="${uploaded.url}">${uploaded.name}</a>`).run()
+    // For drop events, move cursor to drop position first
+    if (event && view) {
+      const editorView = view as { posAtCoords: (coords: { left: number; top: number }) => { pos: number } | null }
+      const coords = editorView.posAtCoords({ left: event.clientX, top: event.clientY })
+      if (coords) {
+        editor.chain().focus().setTextSelection(coords.pos).run()
+      }
     }
 
+    try {
+      // Upload all files in parallel
+      const results = await Promise.allSettled(
+        files.map(async (file) => ({ file, uploaded: await handleUpload(file) }))
+      )
+
+      for (const result of results) {
+        if (result.status !== 'fulfilled') continue
+        const { file, uploaded } = result.value
+        if (file.type.startsWith('image/')) {
+          editor.chain().focus().setImage({ src: uploaded.url, alt: uploaded.name }).run()
+        } else {
+          editor.chain().focus().insertContent(`<a href="${uploaded.url}">${uploaded.name}</a> `).run()
+        }
+      }
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
+  handleDropFilesRef.current = handleDropFiles
+
+  const handleInsertFile = async (event: ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files
+    if (!files?.length || !editor) return
+
+    await handleDropFiles(Array.from(files), null, null)
     event.target.value = ''
   }
 
@@ -477,6 +526,7 @@ export function NoteEditor({ noteId, initialContent, onAutoSave }: NoteEditorPro
           <input
             ref={fileInputRef}
             type="file"
+            multiple
             className="hidden"
             onChange={handleInsertFile}
           />
@@ -509,29 +559,58 @@ export function NoteEditor({ noteId, initialContent, onAutoSave }: NoteEditorPro
         </label>
       </div>
 
-      {/* Editor content area */}
-      <EditorContent
-        editor={editor}
-        className={cn(
-          'prose max-w-none flex-1',
-          'prose-headings:font-semibold prose-headings:text-foreground',
-          'prose-p:text-foreground prose-p:leading-7',
-          'prose-a:text-primary hover:prose-a:text-primary/80',
-          'prose-strong:text-foreground',
-          'prose-code:text-foreground prose-code:bg-muted prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm',
-          'prose-pre:bg-muted prose-pre:border prose-pre:border-border',
-          'prose-blockquote:border-l-primary prose-blockquote:text-muted-foreground',
-          'prose-table:text-foreground',
-          'prose-ul:text-foreground prose-ol:text-foreground',
-          'prose-li:text-foreground prose-li:marker:text-muted-foreground',
-          'prose-img:rounded-lg prose-img:border prose-img:border-border',
-          '[&_.tiptap_p.is-editor-empty:first-child::before]:text-muted-foreground/50',
-          '[&_.tiptap_p.is-editor-empty:first-child::before]:content-[attr(data-placeholder)]',
-          '[&_.tiptap_p.is-editor-empty:first-child::before]:float-left',
-          '[&_.tiptap_p.is-editor-empty:first-child::before]:h-0',
-          '[&_.tiptap_p.is-editor-empty:first-child::before]:pointer-events-none',
+      {/* Editor content area with drag-and-drop overlay */}
+      <div
+        className="relative flex-1"
+        onDragOver={(e) => {
+          if (e.dataTransfer.types.includes('Files')) {
+            e.preventDefault()
+            setIsDragOver(true)
+          }
+        }}
+        onDragLeave={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+            setIsDragOver(false)
+          }
+        }}
+        onDrop={() => setIsDragOver(false)}
+      >
+        {isDragOver && (
+          <div className="absolute inset-0 z-20 flex items-center justify-center rounded-b-lg border-2 border-dashed border-primary bg-primary/5 pointer-events-none">
+            <div className="flex flex-col items-center gap-2 text-primary">
+              <Upload className="h-8 w-8" />
+              <span className="text-sm font-medium">{t('notes.dropToUpload', 'Drop file to upload')}</span>
+            </div>
+          </div>
         )}
-      />
+        {isUploading && (
+          <div className="absolute inset-0 z-20 flex items-center justify-center rounded-b-lg bg-background/50 pointer-events-none">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        )}
+        <EditorContent
+          editor={editor}
+          className={cn(
+            'prose max-w-none',
+            'prose-headings:font-semibold prose-headings:text-foreground',
+            'prose-p:text-foreground prose-p:leading-7',
+            'prose-a:text-primary hover:prose-a:text-primary/80',
+            'prose-strong:text-foreground',
+            'prose-code:text-foreground prose-code:bg-muted prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm',
+            'prose-pre:bg-muted prose-pre:border prose-pre:border-border',
+            'prose-blockquote:border-l-primary prose-blockquote:text-muted-foreground',
+            'prose-table:text-foreground',
+            'prose-ul:text-foreground prose-ol:text-foreground',
+            'prose-li:text-foreground prose-li:marker:text-muted-foreground',
+            'prose-img:rounded-lg prose-img:border prose-img:border-border',
+            '[&_.tiptap_p.is-editor-empty:first-child::before]:text-muted-foreground/50',
+            '[&_.tiptap_p.is-editor-empty:first-child::before]:content-[attr(data-placeholder)]',
+            '[&_.tiptap_p.is-editor-empty:first-child::before]:float-left',
+            '[&_.tiptap_p.is-editor-empty:first-child::before]:h-0',
+            '[&_.tiptap_p.is-editor-empty:first-child::before]:pointer-events-none',
+          )}
+        />
+      </div>
 
       {/* Footer with word count and save status */}
       <div className="flex items-center justify-between px-4 py-2 border-t border-border/50">
