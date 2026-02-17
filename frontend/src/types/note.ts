@@ -12,6 +12,7 @@ export interface NoteListItem {
   updated_at: string | null
   tags: string[]
   sync_status?: string
+  thumbnail_url?: string | null
 }
 
 /**

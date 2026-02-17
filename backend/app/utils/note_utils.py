@@ -433,3 +433,25 @@ def find_missing_file_refs(html: str) -> list[str]:
         if not file_path.exists():
             missing.append(file_id)
     return missing
+
+
+def extract_first_image_url(html: str | None) -> str | None:
+    """Extract the first displayable image URL from note HTML content.
+
+    Looks for <img> tags with src starting with /api/images/, /api/nas-images/,
+    or /api/files/. Ignores placeholders and external URLs.
+
+    Returns:
+        The first matching image src URL, or None.
+    """
+    if not html:
+        return None
+
+    for match in _IMG_TAG_RE.finditer(html):
+        src_m = _SRC_ATTR_RE.search(match.group(1))
+        if not src_m:
+            continue
+        src = src_m.group(1)
+        if src.startswith(("/api/images/", "/api/nas-images/", "/api/files/")):
+            return src
+    return None

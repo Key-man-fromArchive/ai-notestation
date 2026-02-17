@@ -42,6 +42,7 @@ from app.synology_gateway.notestation import NoteStationService
 from app.utils.datetime_utils import datetime_to_iso, unix_to_iso
 from app.utils.note_utils import (
     extract_data_uri_images,
+    extract_first_image_url,
     normalize_db_tags,
     normalize_tags,
     rewrite_image_urls,
@@ -70,6 +71,7 @@ class NoteItem(BaseModel):
     created_at: str | None = None
     updated_at: str | None = None
     sync_status: str | None = None
+    thumbnail_url: str | None = None
 
 
 class NoteListResponse(BaseModel):
@@ -192,6 +194,7 @@ def _model_to_item(note: Note) -> NoteItem:
         created_at=datetime_to_iso(created_at),
         updated_at=datetime_to_iso(updated_at),
         sync_status=note.sync_status,
+        thumbnail_url=extract_first_image_url(note.content_html),
     )
 
 
