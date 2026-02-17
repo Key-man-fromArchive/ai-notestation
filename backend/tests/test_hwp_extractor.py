@@ -1,8 +1,8 @@
-"""Tests for HWP/HWPX text extraction."""
+"""Tests for HWP/HWPX text extraction (OpenHWP-based)."""
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+import zipfile
 
 import pytest
 
@@ -23,45 +23,44 @@ def test_result_model_hwpx_format():
     assert result.metadata["format"] == "hwpx"
 
 
-# --- HwpExtractor.extract() tests ---
+# --- HWPX extraction tests (pure Python, no binary needed) ---
 
 
 @pytest.mark.asyncio
-async def test_extract_hwp_success(tmp_path):
-    """HWP file extraction returns body text."""
-    hwp_file = tmp_path / "test.hwp"
-    hwp_file.write_bytes(b"dummy")
+async def test_extract_hwpx_prvtext(tmp_path):
+    """HWPX extraction reads PrvText.txt from ZIP."""
+    hwpx_file = tmp_path / "test.hwpx"
+    with zipfile.ZipFile(hwpx_file, "w") as zf:
+        zf.writestr("Preview/PrvText.txt", "연구 개요\n과제명\n바이오 디지털 트윈")
+        zf.writestr("Contents/section0.xml", "<dummy/>")
 
-    mock_reader = MagicMock()
-    mock_reader.text = "본문 텍스트입니다."
-    mock_reader.get_tables_as_markdown.return_value = ""
+    extractor = HwpExtractor()
+    result = await extractor.extract(str(hwpx_file))
 
-    with patch("hwp_hwpx_parser.Reader", return_value=mock_reader):
-        extractor = HwpExtractor()
-        result = await extractor.extract(str(hwp_file))
-
-    assert result.text == "본문 텍스트입니다."
-    assert result.page_count == 1
-    assert result.metadata["format"] == "hwp"
-
-
-@pytest.mark.asyncio
-async def test_extract_hwpx_with_tables(tmp_path):
-    """HWPX file extraction includes tables."""
-    hwpx_file = tmp_path / "report.hwpx"
-    hwpx_file.write_bytes(b"dummy")
-
-    mock_reader = MagicMock()
-    mock_reader.text = "본문"
-    mock_reader.get_tables_as_markdown.return_value = "| col1 | col2 |\n|---|---|\n| a | b |"
-
-    with patch("hwp_hwpx_parser.Reader", return_value=mock_reader):
-        extractor = HwpExtractor()
-        result = await extractor.extract(str(hwpx_file))
-
-    assert "본문" in result.text
-    assert "| col1 | col2 |" in result.text
+    assert "연구 개요" in result.text
+    assert "바이오 디지털 트윈" in result.text
     assert result.metadata["format"] == "hwpx"
+
+
+@pytest.mark.asyncio
+async def test_extract_hwpx_fallback_xml(tmp_path):
+    """HWPX extraction falls back to section XML when no PrvText.txt."""
+    section_xml = """<?xml version="1.0" encoding="UTF-8"?>
+    <hs:sec xmlns:hp="http://www.hancom.co.kr/hwpml/2011/paragraph"
+            xmlns:hs="http://www.hancom.co.kr/hwpml/2011/section">
+      <hp:p><hp:run><hp:t>첫 번째 문단</hp:t></hp:run></hp:p>
+      <hp:p><hp:run><hp:t>두 번째 문단</hp:t></hp:run></hp:p>
+    </hs:sec>"""
+
+    hwpx_file = tmp_path / "no_preview.hwpx"
+    with zipfile.ZipFile(hwpx_file, "w") as zf:
+        zf.writestr("Contents/section0.xml", section_xml)
+
+    extractor = HwpExtractor()
+    result = await extractor.extract(str(hwpx_file))
+
+    assert "첫 번째 문단" in result.text
+    assert "두 번째 문단" in result.text
 
 
 # --- Error cases ---
@@ -76,31 +75,26 @@ async def test_extract_file_not_found():
 
 
 @pytest.mark.asyncio
-async def test_extract_empty_document(tmp_path):
-    """ValueError for empty documents."""
-    hwp_file = tmp_path / "empty.hwp"
-    hwp_file.write_bytes(b"dummy")
+async def test_extract_hwpx_empty(tmp_path):
+    """ValueError for HWPX with no text."""
+    hwpx_file = tmp_path / "empty.hwpx"
+    with zipfile.ZipFile(hwpx_file, "w") as zf:
+        zf.writestr("Contents/section0.xml", "<dummy/>")
 
-    mock_reader = MagicMock()
-    mock_reader.text = ""
-    mock_reader.get_tables_as_markdown.return_value = ""
-
-    with patch("hwp_hwpx_parser.Reader", return_value=mock_reader):
-        extractor = HwpExtractor()
-        with pytest.raises(ValueError, match="no extractable text"):
-            await extractor.extract(str(hwp_file))
+    extractor = HwpExtractor()
+    with pytest.raises(ValueError, match="no extractable text"):
+        await extractor.extract(str(hwpx_file))
 
 
 @pytest.mark.asyncio
-async def test_extract_parse_failure(tmp_path):
-    """ValueError when parser fails to open file."""
-    hwp_file = tmp_path / "corrupt.hwp"
-    hwp_file.write_bytes(b"corrupt")
+async def test_extract_unsupported_extension(tmp_path):
+    """ValueError for unsupported extensions."""
+    txt_file = tmp_path / "test.txt"
+    txt_file.write_text("hello")
 
-    with patch("hwp_hwpx_parser.Reader", side_effect=Exception("bad format")):
-        extractor = HwpExtractor()
-        with pytest.raises(ValueError, match="Failed to open HWP/HWPX"):
-            await extractor.extract(str(hwp_file))
+    extractor = HwpExtractor()
+    with pytest.raises(ValueError, match="Unsupported format"):
+        await extractor.extract(str(txt_file))
 
 
 # --- API routing test ---
@@ -113,9 +107,3 @@ async def test_hwp_extension_accepted_by_routing():
 
     assert ".hwp" in _HWP_EXTENSIONS
     assert ".hwpx" in _HWP_EXTENSIONS
-
-    # Verify routing logic: HWP file IDs should not be rejected
-    for ext in (".hwp", ".hwpx"):
-        file_id = f"abc123{ext}"
-        is_hwp = any(file_id.lower().endswith(e) for e in _HWP_EXTENSIONS)
-        assert is_hwp, f"{ext} should be recognized as HWP"
