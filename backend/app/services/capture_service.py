@@ -170,97 +170,165 @@ class CaptureService:
         )
 
     # ------------------------------------------------------------------
-    # PubMed capture
+    # PubMed capture (with PMC full-text + Unpaywall OA chain)
     # ------------------------------------------------------------------
     async def capture_pubmed(self, pmid: str) -> CaptureResult:
-        """Fetch PubMed article metadata via NCBI E-utilities."""
+        """Fetch PubMed article with full-text chain: PMID → PMC → Unpaywall."""
         pmid = pmid.strip()
         if not pmid.isdigit():
             raise ValueError(f"Invalid PubMed ID (must be numeric): {pmid}")
 
-        api_url = f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id={pmid}&retmode=xml"
         async with httpx.AsyncClient(timeout=self._TIMEOUT) as client:
+            # Step 1: Fetch PubMed metadata + abstract
+            api_url = f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id={pmid}&retmode=xml"
             resp = await client.get(api_url, headers=self._HEADERS)
             resp.raise_for_status()
 
-        root = ET.fromstring(resp.text)  # noqa: S314
-        article = root.find(".//Article")
-        if article is None:
-            raise ValueError(f"PubMed article not found: {pmid}")
+            root = ET.fromstring(resp.text)  # noqa: S314
+            article = root.find(".//Article")
+            if article is None:
+                raise ValueError(f"PubMed article not found: {pmid}")
 
-        title = _clean_ws(article.findtext("ArticleTitle", default=f"PMID:{pmid}"))
+            title = _clean_ws(article.findtext("ArticleTitle", default=f"PMID:{pmid}"))
 
-        # Abstract (may have multiple AbstractText sections)
-        abstract_parts = []
-        for at in article.findall(".//AbstractText"):
-            label = at.get("Label", "")
-            text = _elem_text(at)
-            if label:
-                abstract_parts.append(f"**{label}**: {text}")
-            else:
-                abstract_parts.append(text)
-        abstract = "\n\n".join(abstract_parts)
+            # Abstract
+            abstract_parts = []
+            for at in article.findall(".//AbstractText"):
+                label = at.get("Label", "")
+                text = _elem_text(at)
+                if label:
+                    abstract_parts.append(f"**{label}**: {text}")
+                else:
+                    abstract_parts.append(text)
+            abstract = "\n\n".join(abstract_parts)
 
-        # Authors
-        authors = []
-        for author in article.findall(".//Author"):
-            last = author.findtext("LastName", default="")
-            fore = author.findtext("ForeName", default="")
-            if last:
-                authors.append(f"{last} {fore}".strip())
+            # Authors
+            authors = []
+            for author in article.findall(".//Author"):
+                last = author.findtext("LastName", default="")
+                fore = author.findtext("ForeName", default="")
+                if last:
+                    authors.append(f"{last} {fore}".strip())
 
-        # Journal
-        journal_el = article.find("Journal")
-        journal_title = journal_el.findtext("Title", default="") if journal_el is not None else ""
-        journal_abbrev = journal_el.findtext("ISOAbbreviation", default="") if journal_el is not None else ""
+            # Journal
+            journal_el = article.find("Journal")
+            journal_title = journal_el.findtext("Title", default="") if journal_el is not None else ""
+            journal_abbrev = journal_el.findtext("ISOAbbreviation", default="") if journal_el is not None else ""
 
-        # Publication date
-        pub_date_el = root.find(".//PubDate")
-        pub_year = pub_date_el.findtext("Year", default="") if pub_date_el is not None else ""
-        pub_month = pub_date_el.findtext("Month", default="") if pub_date_el is not None else ""
-        pub_date = f"{pub_year} {pub_month}".strip()
+            # Publication date
+            pub_date_el = root.find(".//PubDate")
+            pub_year = pub_date_el.findtext("Year", default="") if pub_date_el is not None else ""
+            pub_month = pub_date_el.findtext("Month", default="") if pub_date_el is not None else ""
+            pub_date = f"{pub_year} {pub_month}".strip()
 
-        # DOI
-        doi = ""
-        for eid in root.findall(".//ArticleId"):
-            if eid.get("IdType") == "doi":
-                doi = (eid.text or "").strip()
+            # DOI
+            doi = ""
+            for eid in root.findall(".//ArticleId"):
+                if eid.get("IdType") == "doi":
+                    doi = (eid.text or "").strip()
 
-        # MeSH terms
-        mesh_terms = [
-            mh.findtext("DescriptorName", default="")
-            for mh in root.findall(".//MeshHeading")
-            if mh.findtext("DescriptorName")
-        ]
+            # MeSH terms
+            mesh_terms = [
+                mh.findtext("DescriptorName", default="")
+                for mh in root.findall(".//MeshHeading")
+                if mh.findtext("DescriptorName")
+            ]
+
+            # Step 2: Try PMC full-text chain
+            pmcid = ""
+            fulltext_html = ""
+            fulltext_source = ""
+            oa_pdf_url = ""
+
+            # 2a: PMID → PMCID conversion
+            try:
+                conv_url = (
+                    f"https://www.ncbi.nlm.nih.gov/pmc/utils/idconv/v1.0/"
+                    f"?ids={pmid}&format=json&tool=LabNoteAI&email=noreply@labnote.ai"
+                )
+                conv_resp = await client.get(conv_url, headers=self._HEADERS)
+                if conv_resp.status_code == 200:
+                    conv_data = conv_resp.json()
+                    records = conv_data.get("records", [])
+                    if records and records[0].get("pmcid"):
+                        pmcid = records[0]["pmcid"]
+            except Exception:
+                logger.debug("PMC ID conversion failed for PMID %s", pmid)
+
+            # 2b: Fetch PMC full-text XML if PMCID exists
+            if pmcid:
+                try:
+                    pmc_url = (
+                        f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
+                        f"?db=pmc&id={pmcid}&retmode=xml"
+                    )
+                    pmc_resp = await client.get(pmc_url, headers=self._HEADERS)
+                    if pmc_resp.status_code == 200:
+                        fulltext_html = _extract_pmc_fulltext(pmc_resp.text)
+                        if fulltext_html:
+                            fulltext_source = "pmc"
+                except Exception:
+                    logger.debug("PMC full-text fetch failed for %s", pmcid)
+
+            # 2c: Unpaywall OA lookup if no full-text yet and DOI exists
+            if not fulltext_html and doi:
+                try:
+                    unpaywall_url = f"https://api.unpaywall.org/v2/{doi}?email=noreply@labnote.ai"
+                    oa_resp = await client.get(unpaywall_url, headers=self._HEADERS)
+                    if oa_resp.status_code == 200:
+                        oa_data = oa_resp.json()
+                        best_loc = oa_data.get("best_oa_location") or {}
+                        oa_pdf_url = best_loc.get("url_for_pdf", "") or best_loc.get("url", "")
+                except Exception:
+                    logger.debug("Unpaywall lookup failed for DOI %s", doi)
 
         pubmed_url = f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/"
         authors_str = ", ".join(authors) if authors else "Unknown"
 
-        # Build note HTML
+        # Build note HTML — header section
         content_html = (
             f"<h1>{_esc(title)}</h1>"
             f"<p><strong>Authors:</strong> {_esc(authors_str)}</p>"
             f"<p><strong>Journal:</strong> {_esc(journal_title or journal_abbrev)}</p>"
             f"<p><strong>Published:</strong> {_esc(pub_date)}</p>"
             f'<p><strong>PubMed:</strong> <a href="{_esc(pubmed_url)}">{_esc(pmid)}</a>'
-            f"{f' | <a href="https://doi.org/{_esc(doi)}">DOI: {_esc(doi)}</a>' if doi else ''}"
-            f"</p>"
         )
+        if pmcid:
+            pmc_link = f"https://www.ncbi.nlm.nih.gov/pmc/articles/{pmcid}/"
+            content_html += f' | <a href="{_esc(pmc_link)}">PMC: {_esc(pmcid)}</a>'
+        if doi:
+            content_html += f' | <a href="https://doi.org/{_esc(doi)}">DOI: {_esc(doi)}</a>'
+        if oa_pdf_url:
+            content_html += f' | <a href="{_esc(oa_pdf_url)}">Open Access PDF</a>'
+        content_html += "</p>"
+
         if mesh_terms:
             content_html += f"<p><strong>MeSH:</strong> {_esc(', '.join(mesh_terms[:10]))}</p>"
+
+        # Body: full-text if available, otherwise abstract
         content_html += "<hr/>"
-        if abstract:
+        if fulltext_html:
+            content_html += fulltext_html
+        elif abstract:
             content_html += f"<h2>Abstract</h2><p>{abstract}</p>"
         else:
             content_html += "<p><em>No abstract available.</em></p>"
 
+        # Plain text version
+        if fulltext_html:
+            content_text_body = _h2t.handle(fulltext_html).strip()
+        else:
+            content_text_body = f"Abstract:\n{abstract or '(no abstract)'}"
+
         content_text = (
             f"{title}\n\nAuthors: {authors_str}\n"
             f"Journal: {journal_title or journal_abbrev}\nPublished: {pub_date}\n"
-            f"PMID: {pmid}\n\nAbstract:\n{abstract or '(no abstract)'}"
+            f"PMID: {pmid}"
+            f"{f'  PMCID: {pmcid}' if pmcid else ''}\n\n"
+            f"{content_text_body}"
         )
 
-        metadata = {
+        metadata: dict = {
             "capture_source": "pubmed",
             "pmid": pmid,
             "authors": authors,
@@ -268,16 +336,26 @@ class CaptureService:
             "pub_date": pub_date,
             "pubmed_url": pubmed_url,
         }
+        if pmcid:
+            metadata["pmcid"] = pmcid
         if doi:
             metadata["doi"] = doi
         if mesh_terms:
             metadata["mesh_terms"] = mesh_terms
+        if fulltext_source:
+            metadata["fulltext_source"] = fulltext_source
+        if oa_pdf_url:
+            metadata["oa_pdf_url"] = oa_pdf_url
+
+        tags = ["captured", "pubmed"]
+        if fulltext_source:
+            tags.append("fulltext")
 
         return CaptureResult(
             title=title,
             content_html=content_html,
             content_text=content_text,
-            tags=["captured", "pubmed"],
+            tags=tags,
             metadata=metadata,
         )
 
@@ -300,6 +378,52 @@ def _clean_ws(text: str) -> str:
 def _elem_text(elem: ET.Element) -> str:
     """Extract full text content from an XML element, including tail text of children."""
     return "".join(elem.itertext()).strip()
+
+
+def _extract_pmc_fulltext(xml_text: str) -> str:
+    """Extract structured full-text HTML from PMC XML (JATS format).
+
+    Extracts body sections (Introduction, Methods, Results, Discussion, etc.)
+    and converts them to clean HTML suitable for a research note.
+    """
+    try:
+        root = ET.fromstring(xml_text)  # noqa: S314
+    except ET.ParseError:
+        return ""
+
+    body = root.find(".//body")
+    if body is None:
+        return ""
+
+    parts: list[str] = []
+    for sec in body.findall("sec"):
+        sec_title = sec.findtext("title", default="")
+        if sec_title:
+            parts.append(f"<h2>{_esc(sec_title)}</h2>")
+
+        for p in sec.findall("p"):
+            text = _elem_text(p)
+            if text:
+                parts.append(f"<p>{_esc(text)}</p>")
+
+        # Handle nested subsections (one level deep)
+        for subsec in sec.findall("sec"):
+            sub_title = subsec.findtext("title", default="")
+            if sub_title:
+                parts.append(f"<h3>{_esc(sub_title)}</h3>")
+            for p in subsec.findall("p"):
+                text = _elem_text(p)
+                if text:
+                    parts.append(f"<p>{_esc(text)}</p>")
+
+    # If no structured sections, try paragraphs directly under body
+    if not parts:
+        for p in body.findall("p"):
+            text = _elem_text(p)
+            if text:
+                parts.append(f"<p>{_esc(text)}</p>")
+
+    return "\n".join(parts)
 
 
 def _extract_og_meta(html: str) -> dict:

@@ -1123,7 +1123,11 @@
     "errorInvalidUrl": "유효한 URL을 입력하세요",
     "errorInvalidArxiv": "유효한 arXiv ID를 입력하세요 (예: 2401.12345)",
     "errorInvalidPmid": "유효한 PubMed ID를 입력하세요 (숫자)",
-    "errorFetchFailed": "외부 서비스 연결에 실패했습니다"
+    "errorFetchFailed": "외부 서비스 연결에 실패했습니다",
+    "insertButton": "참고문헌 삽입",
+    "insertTitle": "참고문헌 삽입",
+    "insertAction": "삽입",
+    "pubmedHint": "PMC 전문이 있으면 자동으로 전문을 가져옵니다"
   },
   "feedback": {
     "relevant": "관련있음",

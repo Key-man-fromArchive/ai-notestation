@@ -52,3 +52,21 @@ export function useCapturePubmed() {
     },
   })
 }
+
+interface InsertCaptureRequest {
+  url?: string
+  arxiv_id?: string
+  pmid?: string
+}
+
+export function useInsertCapture(noteId: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation<Note, ApiError, InsertCaptureRequest>({
+    mutationFn: request => apiClient.post<Note>(`/capture/insert/${noteId}`, request),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['note', noteId] })
+      queryClient.invalidateQueries({ queryKey: ['notes'] })
+    },
+  })
+}

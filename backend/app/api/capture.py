@@ -6,8 +6,9 @@ import logging
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Path, status
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.notes import NoteDetailResponse
@@ -47,6 +48,13 @@ class PubmedCaptureRequest(BaseModel):
     pmid: str
     notebook: str | None = None
     tags: list[str] | None = None
+
+
+class InsertCaptureRequest(BaseModel):
+    """Request to insert captured content into an existing note."""
+    url: str | None = None
+    arxiv_id: str | None = None
+    pmid: str | None = None
 
 
 # ------------------------------------------------------------------
@@ -165,3 +173,92 @@ async def capture_pubmed(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Failed to fetch PubMed: {e}") from e
 
     return await _save_captured_note(result, payload.notebook, payload.tags, current_user, db)
+
+
+# ------------------------------------------------------------------
+# Insert capture into existing note
+# ------------------------------------------------------------------
+
+
+async def _append_to_note(
+    note_id: str,
+    result: CaptureResult,
+    current_user: dict,
+    db: AsyncSession,
+) -> NoteDetailResponse:
+    """Append captured content to an existing note."""
+    stmt = select(Note).where(Note.synology_note_id == note_id)
+    db_result = await db.execute(stmt)
+    note = db_result.scalar_one_or_none()
+    if note is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Note not found")
+
+    # Append captured HTML (with separator)
+    separator = '<hr/><p style="color:#888;font-size:0.85em;">— Captured Reference —</p>'
+    note.content_html = (note.content_html or "") + separator + result.content_html
+    note.content_text = (note.content_text or "") + "\n\n---\n" + result.content_text
+
+    # Merge tags
+    existing_tags = list(note.tags or [])
+    for tag in result.tags:
+        if tag not in existing_tags:
+            existing_tags.append(tag)
+    note.tags = existing_tags or None
+
+    now = datetime.now(UTC)
+    note.source_updated_at = now
+    note.local_modified_at = now
+    note.sync_status = "local_modified"
+
+    await db.flush()
+
+    source = result.metadata.get("capture_source", "unknown")
+    await log_activity(
+        "note",
+        "completed",
+        message=f"참고문헌 삽입({source}): {result.title} → {note.title}",
+        triggered_by=get_trigger_name(current_user),
+    )
+
+    return NoteDetailResponse(
+        note_id=note.synology_note_id,
+        title=note.title,
+        snippet=truncate_snippet(note.content_text),
+        notebook=note.notebook_name,
+        tags=normalize_db_tags(note.tags),
+        created_at=datetime_to_iso(note.source_created_at),
+        updated_at=datetime_to_iso(note.source_updated_at),
+        content=note.content_html,
+        attachments=[],
+    )
+
+
+@router.post("/insert/{note_id}", response_model=NoteDetailResponse)
+async def insert_capture(
+    note_id: str = Path(description="Target note ID to append captured content"),  # noqa: B008
+    payload: InsertCaptureRequest = ...,
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> NoteDetailResponse:
+    """Capture external content and append it to an existing note."""
+    try:
+        if payload.pmid:
+            result = await _capture.capture_pubmed(payload.pmid)
+        elif payload.arxiv_id:
+            result = await _capture.capture_arxiv(payload.arxiv_id)
+        elif payload.url:
+            result = await _capture.capture_url(payload.url)
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Provide one of: url, arxiv_id, or pmid",
+            )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Capture failed for insert into %s", note_id)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Capture failed: {e}") from e
+
+    return await _append_to_note(note_id, result, current_user, db)
