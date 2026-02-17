@@ -2,9 +2,9 @@
 // @SPEC docs/plans/2026-01-29-labnote-ai-design.md#노트-상세
 // @TEST frontend/src/__tests__/NoteDetail.test.tsx
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Notebook, Tag, Paperclip, Image, File, FileText, AlertCircle, Calendar, Share2, AlertTriangle, CloudOff, CloudUpload, CloudDownload, Download, Loader2, Check, Sparkles, X, Plus, Wand2, Link2, Eye, ScanText, RotateCcw, CheckCircle2 } from 'lucide-react'
+import { ArrowLeft, Notebook, Tag, Paperclip, Image, File, FileText, AlertCircle, Calendar, Share2, AlertTriangle, CloudOff, CloudUpload, CloudDownload, Download, Loader2, Check, Sparkles, X, Plus, Wand2, Link2, Eye, ScanText, RotateCcw, CheckCircle2, Save } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { apiClient } from '@/lib/api'
 import { useNote } from '@/hooks/useNote'
@@ -12,7 +12,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { NoteAIPanel } from '@/components/NoteAIPanel'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
 import { EmptyState } from '@/components/EmptyState'
-import { NoteEditor } from '@/components/NoteEditor'
+import { NoteEditor, type NoteEditorHandle } from '@/components/NoteEditor'
 import { NoteSharing } from '@/components/NoteSharing'
 import { ConflictDialog } from '@/components/ConflictDialog'
 import { useConflicts } from '@/hooks/useConflicts'
@@ -61,6 +61,26 @@ export default function NoteDetail() {
   } | null>(null)
   const [textModal, setTextModal] = useState<{ title: string; text: string; pageCount?: number } | null>(null)
   const [summaryModal, setSummaryModal] = useState<{ fileId: string; fileName: string } | null>(null)
+  const editorRef = useRef<NoteEditorHandle>(null)
+  const [editorSaveStatus, setEditorSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+
+  // Poll editor save status from ref
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (editorRef.current) {
+        setEditorSaveStatus(editorRef.current.saveStatus)
+      }
+    }, 200)
+    return () => clearInterval(interval)
+  }, [])
+
+  // Reset "saved" indicator back to idle after 3 seconds
+  useEffect(() => {
+    if (editorSaveStatus === 'saved') {
+      const timer = setTimeout(() => setEditorSaveStatus('idle'), 3000)
+      return () => clearTimeout(timer)
+    }
+  }, [editorSaveStatus])
 
   const { data: editorWidthSetting } = useQuery<{ value: string }>({
     queryKey: ['settings', 'editor_width'],
@@ -544,6 +564,35 @@ export default function NoteDetail() {
                 {t('notes.localOnly')}
               </span>
             )}
+            {/* Save button */}
+            <button
+              onClick={() => editorRef.current?.save()}
+              disabled={editorSaveStatus === 'saving'}
+              className={`inline-flex items-center gap-2 text-xs px-2.5 py-1.5 rounded border transition-colors ${
+                editorSaveStatus === 'saved'
+                  ? 'border-green-300 bg-green-50 text-green-700'
+                  : editorSaveStatus === 'error'
+                    ? 'border-red-300 bg-red-50 text-red-700'
+                    : 'border-input text-muted-foreground hover:text-foreground hover:border-primary/30'
+              }`}
+            >
+              {editorSaveStatus === 'saving' ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : editorSaveStatus === 'saved' ? (
+                <Check className="h-3.5 w-3.5" />
+              ) : editorSaveStatus === 'error' ? (
+                <AlertCircle className="h-3.5 w-3.5" />
+              ) : (
+                <Save className="h-3.5 w-3.5" />
+              )}
+              {editorSaveStatus === 'saving'
+                ? t('notes.manualSaving', 'Saving...')
+                : editorSaveStatus === 'saved'
+                  ? t('notes.manualSaved', 'Saved')
+                  : editorSaveStatus === 'error'
+                    ? t('notes.saveFailed')
+                    : t('notes.manualSave', 'Save')}
+            </button>
             {/* Pull button (NAS → local) */}
             {pullState === 'conflict' ? (
               <div className="inline-flex items-center gap-1">
@@ -786,6 +835,7 @@ export default function NoteDetail() {
         {/* 에디터 (항상 편집 가능) */}
         <article className="mb-8" onContextMenu={handleInlineImageContextMenu}>
           <NoteEditor
+            ref={editorRef}
             noteId={note.note_id}
             initialContent={note.content}
             onAutoSave={handleAutoSave}

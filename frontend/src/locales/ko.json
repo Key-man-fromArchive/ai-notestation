@@ -201,7 +201,25 @@
     "emptyNotesDesc": "제목과 본문이 모두 비어있는 노트입니다.",
     "deleteAllEmpty": "전체 삭제",
     "deleteConfirmTitle": "빈 노트 삭제",
-    "deleteConfirmDesc": "{{count}}개의 빈 노트를 NAS와 로컬 DB에서 영구 삭제합니다. 이 작업은 되돌릴 수 없습니다."
+    "deleteConfirmDesc": "{{count}}개의 빈 노트를 NAS와 로컬 DB에서 영구 삭제합니다. 이 작업은 되돌릴 수 없습니다.",
+    "manualSave": "저장",
+    "manualSaving": "저장 중...",
+    "manualSaved": "저장됨",
+    "shortcuts": {
+      "title": "키보드 단축키",
+      "save": "저장",
+      "undo": "실행 취소",
+      "redo": "다시 실행",
+      "bold": "굵게",
+      "italic": "기울임",
+      "underline": "밑줄",
+      "strikethrough": "취소선",
+      "code": "인라인 코드",
+      "link": "링크",
+      "heading1": "제목 1",
+      "heading2": "제목 2",
+      "heading3": "제목 3"
+    }
   },
   "relatedNotes": {
     "title": "관련 노트",

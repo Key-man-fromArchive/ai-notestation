@@ -1,6 +1,6 @@
 // Rich text editor for note editing (TipTap) with auto-save
 
-import { type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type ChangeEvent, Fragment, forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { EditorContent, useEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Underline from '@tiptap/extension-underline'
@@ -43,12 +43,18 @@ import {
   Check,
   AlertCircle,
   Upload,
+  Keyboard,
 } from 'lucide-react'
 
 interface NoteEditorProps {
   noteId: string
   initialContent: string
   onAutoSave: (html: string, json: object) => Promise<void>
+}
+
+export interface NoteEditorHandle {
+  save: () => void
+  saveStatus: SaveStatus
 }
 
 // Custom Image extension that accepts <img> tags without src (NAS placeholders)
@@ -152,13 +158,15 @@ function SaveStatusIndicator({ status }: { status: SaveStatus }) {
   return null
 }
 
-export function NoteEditor({ noteId, initialContent, onAutoSave }: NoteEditorProps) {
+export const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(function NoteEditor({ noteId, initialContent, onAutoSave }, ref) {
   const { t } = useTranslation()
   const [wordCount, setWordCount] = useState(0)
   const [charCount, setCharCount] = useState(0)
   const [, setRenderKey] = useState(0)
   const [isDragOver, setIsDragOver] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
+  const [showShortcuts, setShowShortcuts] = useState(false)
+  const shortcutsRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const editorRef = useRef<ReturnType<typeof useEditor>>(null)
   const handleDropFilesRef = useRef<(files: File[], view: unknown, event: DragEvent | null) => void>()
@@ -231,6 +239,20 @@ export function NoteEditor({ noteId, initialContent, onAutoSave }: NoteEditorPro
     maxIntervalMs: 30000,
     onSave: handleAutoSave,
   })
+
+  useImperativeHandle(ref, () => ({ save, saveStatus }), [save, saveStatus])
+
+  // Close shortcuts popover on outside click
+  useEffect(() => {
+    if (!showShortcuts) return
+    const handler = (e: MouseEvent) => {
+      if (shortcutsRef.current && !shortcutsRef.current.contains(e.target as Node)) {
+        setShowShortcuts(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [showShortcuts])
 
   // Sync content when initialContent changes (e.g. after pull sync)
   useEffect(() => {
@@ -557,6 +579,49 @@ export function NoteEditor({ noteId, initialContent, onAutoSave }: NoteEditorPro
             onChange={event => editor?.chain().focus().setColor(event.target.value).run()}
           />
         </label>
+
+        {/* Keyboard shortcuts — pushed to the right */}
+        <div className="relative ml-auto" ref={shortcutsRef}>
+          <button
+            type="button"
+            onClick={() => setShowShortcuts(v => !v)}
+            className={cn(
+              'inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs transition-colors',
+              showShortcuts
+                ? 'bg-accent text-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
+            )}
+          >
+            <Keyboard className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">{t('notes.shortcuts.title', 'Keyboard Shortcuts')}</span>
+          </button>
+          {showShortcuts && (
+            <div className="absolute right-0 top-full mt-1.5 z-50 w-72 rounded-lg border border-border bg-popover p-4 shadow-lg">
+              <h4 className="text-sm font-semibold text-foreground mb-3">{t('notes.shortcuts.title', 'Keyboard Shortcuts')}</h4>
+              <div className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1.5 text-sm">
+                {[
+                  ['Ctrl+S', t('notes.shortcuts.save', 'Save')],
+                  ['Ctrl+Z', t('notes.shortcuts.undo', 'Undo')],
+                  ['Ctrl+Shift+Z', t('notes.shortcuts.redo', 'Redo')],
+                  ['Ctrl+B', t('notes.shortcuts.bold', 'Bold')],
+                  ['Ctrl+I', t('notes.shortcuts.italic', 'Italic')],
+                  ['Ctrl+U', t('notes.shortcuts.underline', 'Underline')],
+                  ['Ctrl+Shift+S', t('notes.shortcuts.strikethrough', 'Strikethrough')],
+                  ['Ctrl+E', t('notes.shortcuts.code', 'Inline Code')],
+                  ['Ctrl+K', t('notes.shortcuts.link', 'Link')],
+                  ['Ctrl+Alt+1', t('notes.shortcuts.heading1', 'Heading 1')],
+                  ['Ctrl+Alt+2', t('notes.shortcuts.heading2', 'Heading 2')],
+                  ['Ctrl+Alt+3', t('notes.shortcuts.heading3', 'Heading 3')],
+                ].map(([key, label]) => (
+                  <Fragment key={key}>
+                    <span className="text-muted-foreground">{label}</span>
+                    <kbd className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-mono text-[11px]">{key}</kbd>
+                  </Fragment>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Editor content area with drag-and-drop overlay */}
@@ -591,18 +656,7 @@ export function NoteEditor({ noteId, initialContent, onAutoSave }: NoteEditorPro
         <EditorContent
           editor={editor}
           className={cn(
-            'prose max-w-none',
-            'prose-headings:font-semibold prose-headings:text-foreground',
-            'prose-p:text-foreground prose-p:leading-7',
-            'prose-a:text-primary hover:prose-a:text-primary/80',
-            'prose-strong:text-foreground',
-            'prose-code:text-foreground prose-code:bg-muted prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm',
-            'prose-pre:bg-muted prose-pre:border prose-pre:border-border',
-            'prose-blockquote:border-l-primary prose-blockquote:text-muted-foreground',
-            'prose-table:text-foreground',
-            'prose-ul:text-foreground prose-ol:text-foreground',
-            'prose-li:text-foreground prose-li:marker:text-muted-foreground',
-            'prose-img:rounded-lg prose-img:border prose-img:border-border',
+            'max-w-none text-foreground',
             '[&_.tiptap_p.is-editor-empty:first-child::before]:text-muted-foreground/50',
             '[&_.tiptap_p.is-editor-empty:first-child::before]:content-[attr(data-placeholder)]',
             '[&_.tiptap_p.is-editor-empty:first-child::before]:float-left',
@@ -621,4 +675,4 @@ export function NoteEditor({ noteId, initialContent, onAutoSave }: NoteEditorPro
       </div>
     </div>
   )
-}
+})

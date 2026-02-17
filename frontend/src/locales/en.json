@@ -201,7 +201,25 @@
     "emptyNotesDesc": "Notes with no title and no content.",
     "deleteAllEmpty": "Delete All",
     "deleteConfirmTitle": "Delete Empty Notes",
-    "deleteConfirmDesc": "Permanently delete {{count}} empty notes from NAS and local DB. This action cannot be undone."
+    "deleteConfirmDesc": "Permanently delete {{count}} empty notes from NAS and local DB. This action cannot be undone.",
+    "manualSave": "Save",
+    "manualSaving": "Saving...",
+    "manualSaved": "Saved",
+    "shortcuts": {
+      "title": "Keyboard Shortcuts",
+      "save": "Save",
+      "undo": "Undo",
+      "redo": "Redo",
+      "bold": "Bold",
+      "italic": "Italic",
+      "underline": "Underline",
+      "strikethrough": "Strikethrough",
+      "code": "Inline Code",
+      "link": "Link",
+      "heading1": "Heading 1",
+      "heading2": "Heading 2",
+      "heading3": "Heading 3"
+    }
   },
   "relatedNotes": {
     "title": "Related Notes",
