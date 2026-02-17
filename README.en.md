@@ -7,7 +7,7 @@
 **Unlock the thousands of research notes on your NAS with local, privacy-first AI.**
 
 <p align="left">
-  <img src="https://img.shields.io/badge/version-1.3.1-blue?style=flat-square" alt="v1.3.1" />
+  <img src="https://img.shields.io/badge/version-2.1.0-blue?style=flat-square" alt="v2.1.0" />
   <img src="https://img.shields.io/badge/license-AGPL--3.0-green?style=flat-square" alt="AGPL-3.0" />
   <img src="https://img.shields.io/badge/docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker" />
   <img src="https://img.shields.io/badge/self--hosted-black?style=flat-square" alt="Self-hosted" />
@@ -21,7 +21,7 @@
   <img src="docs/screenshots/graph.png" alt="Knowledge Graph — visualizing relationships across thousands of research notes" width="720" />
 </p>
 
-You have 2,000+ notes in Synology NoteStation. You know the data is there, but keyword search fails on a single typo and browsing by topic is impossible. LabNote AI indexes everything — text, images, PDFs — into a hybrid search engine on your own server. Semantic search, AI Q&A, OCR, and knowledge graph — without handing your data to a SaaS provider.
+You have 2,000+ notes in Synology NoteStation. You know the data is there, but keyword search fails on a single typo and browsing by topic is impossible. LabNote AI indexes everything — text, images, PDFs, HWP documents — into a hybrid search engine on your own server. Semantic search, AI Q&A, OCR, knowledge graph, PubMed/arXiv paper capture — without handing your data to a SaaS provider.
 
 ```bash
 git clone https://github.com/Key-man-fromArchive/ai-notestation.git && cd ai-notestation
@@ -33,23 +33,27 @@ bash install.sh        # Interactive setup. Enter NAS address and AI keys (or sk
 
 ## Key Features
 
-🔍 **Hybrid Search Engine** — BM25 + Trigram + Semantic search fused with Reciprocal Rank Fusion. One PostgreSQL, zero extra databases.
+**Hybrid Search Engine** — BM25 + Trigram + Semantic search fused with Reciprocal Rank Fusion. One PostgreSQL, zero extra databases.
 
-🤖 **Multi-Provider AI** — OpenAI, Anthropic, Google, ZhipuAI auto-detected from env. Model switching on-the-fly with streaming SSE.
+**Multi-Provider AI** — OpenAI, Anthropic, Google, ZhipuAI auto-detected from env. Model switching on-the-fly with streaming SSE.
 
-🔬 **AI Quality Gate** — Checklist-based self-verification. Rejects and regenerates AI responses that fail quality criteria.
+**AI Quality Gate** — Checklist-based self-verification. Rejects and regenerates AI responses that fail quality criteria.
 
-📷 **3-Engine Hybrid OCR** — GLM-OCR → PaddleOCR → AI Vision automatic fallback chain. Dual pipeline for batch processing thousands of images.
+**3-Engine Hybrid OCR** — GLM-OCR → PaddleOCR → AI Vision automatic fallback chain. Dual pipeline for batch processing thousands of images. HWP/HWPX embedded image OCR.
 
-📊 **Knowledge Graph** — Force-directed visualization of note relationships. AI clustering discovers hidden connections across your collection.
+**Knowledge Graph** — Force-directed visualization of note relationships. AI clustering discovers hidden connections across your collection.
 
-📝 **Rich Editor** — TipTap with KaTeX math, tables, code blocks. 3-second autosave. AI auto-tagging per note or batch.
+**Rich Editor** — TipTap with KaTeX math, tables, code blocks. Drag-and-drop upload. 3-second autosave. Reference insertion.
 
-🔗 **Synology Integration** — Bi-directional NoteStation sync. NSX import. Works without NAS too.
+**Academic Paper Capture** — PubMed (PMC full-text + Unpaywall OA), arXiv, URL capture. Insert references into existing notes.
 
-👥 **Team RBAC** — Owner → Admin → Member → Viewer roles. Invite-based onboarding, token-based public sharing with expiry.
+**Synology Integration** — Bi-directional NoteStation sync. NSX import. Works without NAS too.
 
-🌏 **i18n** — Korean / English UI with browser language auto-detection.
+**Team RBAC** — Owner → Admin → Member → Viewer roles. Member groups, invite-based onboarding, token-based sharing.
+
+**Evaluation Infrastructure** — A/B evaluation framework, search quality metrics, user feedback loop (search/AI).
+
+**i18n** — Korean / English UI with browser language auto-detection.
 
 ---
 
@@ -88,7 +92,7 @@ TipTap rich editor with KaTeX math, tables, code blocks, and image attachments. 
 <img src="docs/screenshots/note-ai-panel.png" alt="AI Analysis — 5 tasks with quality gate" width="100%" />
 
 **AI Analysis**
-5 structured AI tasks (Insight, Spell Check, Writing, Search Q&A, Template) with model selection across 4 providers. Checklist-based quality gate verifies output before delivery.
+6 structured AI tasks (Insight, Summarize, Spell Check, Writing, Search Q&A, Template) with model selection across 4 providers. Checklist-based quality gate verifies output before delivery.
 
 </td>
 </tr>
@@ -106,7 +110,7 @@ Track notes, notebooks, sync status, and image analysis progress at a glance. OC
 <img src="docs/screenshots/admin.png" alt="Admin — DB stats, users, storage" width="100%" />
 
 **Administration**
-6-tab settings panel covering AI models, search engine tuning, data analysis, and connections. Admin overview with DB stats, storage usage, and user management. Full backup/restore pipeline.
+7-tab settings panel (General, AI Models, Search Engine, Data Analysis, Category, Connection, Admin). DB backup/restore, search metrics, feedback summary, evaluation dashboard.
 
 </td>
 </tr>
@@ -125,31 +129,46 @@ Track notes, notebooks, sync status, and image analysis progress at a glance. OC
 
 ### AI Integration
 - **4 Providers** — OpenAI, Anthropic, Google, ZhipuAI. Auto-detected from environment variables. Switch models freely.
-- **5 AI Tasks** — Insight extraction, spell check, writing assist, search Q&A, template generation.
+- **6 AI Tasks** — Insight extraction, summarization, spell check, writing assist, search Q&A, template generation.
 - **Quality Gate** — Checklist-based self-verification with conditional regeneration on failure.
 - **Stream Monitor** — Detects repetition, language mismatch, and format drift during SSE streaming. Auto-retries.
 - **OAuth** — Google OAuth 2.0 (Gemini quota) and OpenAI PKCE (ChatGPT subscription reuse).
 - **AI Librarian** — Natural language Q&A with history tracking and relevance scoring.
 
 ### Multimodal
-- **PDF Extraction** — Text extraction from PDF attachments via PyMuPDF. Auto-indexed for search.
+- **PDF Extraction** — PyMuPDF + GLM-OCR native PDF with 50-page chunk processing. Hybrid fallback.
+- **HWP/HWPX Extraction** — OpenHWP (Rust) text extraction + embedded image OCR.
 - **3-Engine Hybrid OCR** — GLM-OCR → PaddleOCR-VL (local CPU) → AI Vision (cloud). Automatic fallback chain.
 - **Dual Pipeline Batch** — OCR (concurrency=1) and Vision description (concurrency=8) run as independent parallel pipelines. One failing doesn't block the other.
 - **Visual Search** — Extracted text and image descriptions are auto-indexed. Search images by their content.
 
+### External Capture & Academic Integration
+- **URL Capture** — Auto-extract content via readability-lxml + html2text.
+- **PubMed Full-Text Chain** — PMID → PMC ID Converter → PMC full-text (JATS XML) → Unpaywall OA PDF link fallback.
+- **arXiv Capture** — Atom API for metadata + abstract auto-parsing.
+- **Reference Insertion** — Insert PubMed/arXiv/URL capture results into existing notes from the editor.
+
 ### Editor & Notes
-- **Rich Editor** — TipTap with KaTeX math, tables, code blocks, image drag-and-drop. 4-level width control.
+- **Rich Editor** — TipTap with KaTeX math, tables, code blocks. 4-level width control.
+- **Drag & Drop** — Multi-file parallel upload + clipboard paste.
 - **Auto-Save** — 3-second debounce, 30-second periodic, save-on-navigate, Ctrl+S manual.
 - **Auto-Tagging** — AI generates tags per note or in batch across entire notebooks.
+- **Note List** — Virtualized list + infinite scroll, sort by modified/created date, calendar-style thumbnails.
 - **Related Notes** — pgvector cosine similarity discovers connections between notes.
 - **Rediscovery** — Surfaces old notes relevant to your current work on the dashboard.
 - **NAS Sync** — Bidirectional sync with NoteStation. NSX import. Works without NAS too.
 
+### Evaluation & Quality
+- **A/B Evaluation** — Synthetic test data (FictionalHot) for model comparison. Auto-scoring.
+- **Search Metrics** — Daily search volume, latency, zero-result rate, click-through trends.
+- **User Feedback** — Search result relevance voting, AI response star ratings. Admin summary view.
+
 ### Administration & Collaboration
 - **Team RBAC** — Owner → Admin → Member → Viewer. Email invitation and signup approval.
+- **Member Groups** — Group-based notebook access control (read/write/admin). Batch role changes.
+- **Notebook Categories** — 12 presets (6 research + 6 lifestyle). AI prompt/hint/boost auto-injection.
 - **Note Sharing** — Token-based public links with configurable expiry (1d / 7d / 30d / unlimited).
-- **DB Backup/Restore** — pg_dump pipeline via admin UI. Settings backup export/import.
-- **Operations Console** — NAS sync, search indexing, search engine monitoring. Activity log with 10 categories.
+- **Backup/Restore** — DB + native parallel backup, settings backup, server-side restore.
 - **i18n** — Korean and English UI. Browser language auto-detection.
 
 ---
@@ -167,7 +186,7 @@ Track notes, notebooks, sync status, and image analysis progress at a glance. OC
 | Auth | JWT + OAuth 2.0 (Google, OpenAI PKCE) |
 | Deploy | Docker Compose (3 containers) |
 
-**By the numbers:** 131 API endpoints · 21 DB migrations · 18 pages · 30 hooks · 900 i18n keys
+**By the numbers:** 177 API endpoints · 25 DB migrations · 18 pages · 37 hooks · 1,071 i18n keys
 
 ---
 
@@ -187,7 +206,7 @@ Track notes, notebooks, sync status, and image analysis progress at a glance. OC
 ┌─────────────────────────┴───────────────────────────────────┐
 │                      Backend (FastAPI)                       │
 │  ┌──────────────────────────────────────────────────────┐   │
-│  │  API Layer (131 endpoints)                            │   │
+│  │  API Layer (177 endpoints)                            │   │
 │  │  auth · notes · search · ai · sync · files · admin    │   │
 │  ├──────────────────────────────────────────────────────┤   │
 │  │  AI Router ─── OpenAI │ Anthropic │ Google │ ZhipuAI │   │
@@ -288,15 +307,15 @@ labnote-ai/
 ├── backend/
 │   └── app/
 │       ├── main.py              # FastAPI entrypoint
-│       ├── api/                 # 131 REST API endpoints
+│       ├── api/                 # 177 REST API endpoints
 │       ├── ai_router/           # Multi-provider AI (providers, prompts, quality gate)
 │       ├── search/              # Hybrid search (FTS, semantic, RRF, JUDGE)
-│       ├── services/            # OCR, Vision, tagging, related notes, PDF, backup
+│       ├── services/            # OCR, Vision, tagging, related notes, PDF, HWP, capture, backup, evaluation
 │       └── synology_gateway/    # NAS API wrappers
 ├── frontend/src/
 │   ├── pages/                   # 18 pages (code-split)
 │   ├── components/              # shadcn/ui + custom
-│   └── hooks/                   # 30 hooks (TanStack Query, SSE)
+│   └── hooks/                   # 37 hooks (TanStack Query, SSE)
 └── docker-compose.yml           # 3-container deployment
 ```
 
@@ -319,11 +338,12 @@ cd backend && ruff check . && ruff format --check .           # Lint
 
 ## Roadmap
 
-- [x] Phase 1 — Search Enhancement (Why matched, Adaptive Search, Multi-turn Refinement)
-- [x] Phase 2 — AI Quality Gates (Checklist, QA Evaluation, Stream Monitor)
-- [x] Phase 3 — Content Intelligence (Auto-Tagging, Related Notes, Rediscovery, Graph Insights)
-- [x] Phase 4 — Multimodal (PDF extraction, 3-engine hybrid OCR, dual-pipeline Vision)
-- [ ] Phase 5 — Evaluation Infrastructure (A/B framework, metrics dashboard, feedback loop)
+- [x] Phase 1 — Search Enhancement (Why matched, Adaptive Search, Multi-turn Refinement) `v1.1.0`
+- [x] Phase 2 — AI Quality Gates (Checklist, QA Evaluation, Stream Monitor) `v1.2.0`
+- [x] Phase 3 — Content Intelligence (Auto-Tagging, Related Notes, Rediscovery, Graph Insights) `v1.3.1`
+- [x] Phase 4 — Multimodal (PDF, HWP, 3-engine OCR, dual-pipeline, PubMed full-text capture) `v1.6.0 → v2.1.0`
+- [x] Phase 5 — Evaluation Infrastructure (A/B framework, metrics dashboard, feedback loop) `v2.0.0`
+- [ ] Phase UI-1 — Foundation UX (sidebar, command palette, dark mode) `v3.0.0 planned`
 
 Details: [ROADMAP.md](ROADMAP.md) · Changelog: [CHANGELOG.md](CHANGELOG.md)
 
