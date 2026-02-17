@@ -81,6 +81,9 @@ export function useAIStream() {
   const abortControllerRef = useRef<AbortController | null>(null)
 
   const startStream = useCallback(async (options: StreamOptions) => {
+    // 기존 스트림 abort (인터리빙 방지)
+    abortControllerRef.current?.abort()
+
     // 초기화
     setContent('')
     setError(null)
@@ -269,6 +272,7 @@ export function useAIStream() {
   }, [])
 
   const reset = useCallback(() => {
+    abortControllerRef.current?.abort()
     setContent('')
     setError(null)
     setMatchedNotes([])

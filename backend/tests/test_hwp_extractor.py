@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import zipfile
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -107,3 +108,165 @@ async def test_hwp_extension_accepted_by_routing():
 
     assert ".hwp" in _HWP_EXTENSIONS
     assert ".hwpx" in _HWP_EXTENSIONS
+
+
+# --- HWPX image extraction tests ---
+
+# 1x1 red PNG (smallest valid PNG)
+_TINY_PNG = (
+    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01"
+    b"\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00"
+    b"\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00"
+    b"\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82"
+)
+
+
+def test_extract_hwpx_images_basic(tmp_path):
+    """HWPX image extraction picks up images from BinData/ folder."""
+    hwpx_file = tmp_path / "with_images.hwpx"
+    with zipfile.ZipFile(hwpx_file, "w") as zf:
+        zf.writestr("Preview/PrvText.txt", "text")
+        zf.writestr("BinData/image001.png", _TINY_PNG)
+        zf.writestr("BinData/chart.jpg", b"\xff\xd8\xff\xe0fake-jpg")
+        zf.writestr("BinData/vector.wmf", b"wmf-data")  # should be skipped
+        zf.writestr("BinData/ole.ole", b"ole-data")  # should be skipped
+
+    extractor = HwpExtractor()
+    images = extractor._extract_hwpx_images(hwpx_file)
+
+    filenames = [name for name, _ in images]
+    assert "image001.png" in filenames
+    assert "chart.jpg" in filenames
+    assert "vector.wmf" not in filenames
+    assert "ole.ole" not in filenames
+    assert len(images) == 2
+
+
+def test_extract_hwpx_images_no_bindata(tmp_path):
+    """HWPX without BinData/ returns empty list."""
+    hwpx_file = tmp_path / "no_images.hwpx"
+    with zipfile.ZipFile(hwpx_file, "w") as zf:
+        zf.writestr("Preview/PrvText.txt", "text only")
+
+    extractor = HwpExtractor()
+    images = extractor._extract_hwpx_images(hwpx_file)
+    assert images == []
+
+
+def test_extract_hwpx_images_empty_data_skipped(tmp_path):
+    """HWPX images with zero-length data are skipped."""
+    hwpx_file = tmp_path / "empty_img.hwpx"
+    with zipfile.ZipFile(hwpx_file, "w") as zf:
+        zf.writestr("Preview/PrvText.txt", "text")
+        zf.writestr("BinData/empty.png", b"")  # empty, should be skipped
+        zf.writestr("BinData/valid.png", _TINY_PNG)
+
+    extractor = HwpExtractor()
+    images = extractor._extract_hwpx_images(hwpx_file)
+    assert len(images) == 1
+    assert images[0][0] == "valid.png"
+
+
+# --- OCR merging tests ---
+
+
+def _make_ocr_result(text: str):
+    """Create a mock OCRResult."""
+    from app.services.ocr_service import OCRResult
+
+    return OCRResult(text=text, confidence=0.9, method="mock")
+
+
+@pytest.mark.asyncio
+async def test_ocr_images_combines_text():
+    """OCR results from multiple images are combined."""
+    extractor = HwpExtractor()
+    images = [
+        ("img1.png", _TINY_PNG),
+        ("img2.jpg", b"\xff\xd8\xff\xe0fake"),
+    ]
+
+    mock_extract = AsyncMock(
+        side_effect=[
+            _make_ocr_result("텍스트 from image 1"),
+            _make_ocr_result("텍스트 from image 2"),
+        ]
+    )
+
+    with patch("app.services.ocr_service.OCRService.extract_text", mock_extract):
+        text, meta = await extractor._ocr_images(images)
+
+    assert "텍스트 from image 1" in text
+    assert "텍스트 from image 2" in text
+    assert meta["ocr"] is True
+    assert meta["ocr_image_count"] == 2
+    assert "ocr_errors" not in meta
+
+
+@pytest.mark.asyncio
+async def test_ocr_images_partial_failure():
+    """First image fails, second succeeds — returns partial text + error count."""
+    extractor = HwpExtractor()
+    images = [
+        ("fail.png", _TINY_PNG),
+        ("ok.png", _TINY_PNG),
+    ]
+
+    mock_extract = AsyncMock(
+        side_effect=[
+            RuntimeError("OCR engine unavailable"),
+            _make_ocr_result("성공한 OCR 텍스트"),
+        ]
+    )
+
+    with patch("app.services.ocr_service.OCRService.extract_text", mock_extract):
+        text, meta = await extractor._ocr_images(images)
+
+    assert "성공한 OCR 텍스트" in text
+    assert meta["ocr"] is True
+    assert meta["ocr_image_count"] == 1
+    assert meta["ocr_errors"] == 1
+
+
+@pytest.mark.asyncio
+async def test_ocr_images_empty_list():
+    """No images → empty text and no OCR metadata."""
+    extractor = HwpExtractor()
+    text, meta = await extractor._ocr_images([])
+    assert text == ""
+    assert meta == {}
+
+
+@pytest.mark.asyncio
+async def test_extract_hwpx_text_only_no_ocr_metadata(tmp_path):
+    """HWPX with text but no images has no OCR keys in metadata."""
+    hwpx_file = tmp_path / "text_only.hwpx"
+    with zipfile.ZipFile(hwpx_file, "w") as zf:
+        zf.writestr("Preview/PrvText.txt", "순수 텍스트 문서")
+
+    extractor = HwpExtractor()
+    result = await extractor.extract(str(hwpx_file))
+
+    assert result.text == "순수 텍스트 문서"
+    assert "ocr" not in result.metadata
+    assert "ocr_image_count" not in result.metadata
+
+
+@pytest.mark.asyncio
+async def test_extract_hwpx_with_ocr_integration(tmp_path):
+    """Full HWPX extraction: body text + OCR from embedded image."""
+    hwpx_file = tmp_path / "full.hwpx"
+    with zipfile.ZipFile(hwpx_file, "w") as zf:
+        zf.writestr("Preview/PrvText.txt", "본문 텍스트")
+        zf.writestr("BinData/scan.png", _TINY_PNG)
+
+    mock_extract = AsyncMock(return_value=_make_ocr_result("스캔된 텍스트"))
+
+    extractor = HwpExtractor()
+    with patch("app.services.ocr_service.OCRService.extract_text", mock_extract):
+        result = await extractor.extract(str(hwpx_file))
+
+    assert "본문 텍스트" in result.text
+    assert "스캔된 텍스트" in result.text
+    assert result.metadata["ocr"] is True
+    assert result.metadata["format"] == "hwpx"
