@@ -312,6 +312,8 @@ async def list_notes(
     notebook: str | None = Query(None, description="Filter by notebook name"),
     tag: str | None = Query(None, description="Filter by tag name"),
     empty_only: bool = Query(False, description="Filter to only empty notes (no title and no content)"),
+    sort_by: str = Query("updated_at", description="Sort field: updated_at or created_at"),
+    sort_order: str = Query("desc", description="Sort order: desc or asc"),
     current_user: dict = Depends(get_current_user),  # noqa: B008
     db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> NoteListResponse:
@@ -351,10 +353,24 @@ async def list_notes(
         count_stmt = count_stmt.where(empty_filter)
         stmt = stmt.where(empty_filter)
 
-    stmt = stmt.order_by(
-        Note.source_updated_at.desc().nulls_last(),
-        Note.updated_at.desc().nulls_last(),
-    )
+    # Dynamic sorting
+    if sort_by == "created_at":
+        primary_col = Note.source_created_at
+        fallback_col = Note.created_at
+    else:
+        primary_col = Note.source_updated_at
+        fallback_col = Note.updated_at
+
+    if sort_order == "asc":
+        stmt = stmt.order_by(
+            primary_col.asc().nulls_last(),
+            fallback_col.asc().nulls_last(),
+        )
+    else:
+        stmt = stmt.order_by(
+            primary_col.desc().nulls_last(),
+            fallback_col.desc().nulls_last(),
+        )
 
     total_result = await db.execute(count_stmt)
     total = int(total_result.scalar_one())

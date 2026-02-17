@@ -13,10 +13,15 @@ interface NoteCreateRequest {
   tags?: string[]
 }
 
+export type SortBy = 'updated_at' | 'created_at'
+export type SortOrder = 'desc' | 'asc'
+
 interface UseNotesOptions {
   notebook?: string
   tag?: string
   emptyOnly?: boolean
+  sortBy?: SortBy
+  sortOrder?: SortOrder
   limit?: number
 }
 
@@ -27,13 +32,15 @@ interface UseNotesOptions {
  * - 노트북 필터링
  * - 태그 필터링
  */
-export function useNotes({ notebook, tag, emptyOnly, limit = 20 }: UseNotesOptions = {}) {
+export function useNotes({ notebook, tag, emptyOnly, sortBy = 'updated_at', sortOrder = 'desc', limit = 20 }: UseNotesOptions = {}) {
   return useInfiniteQuery({
-    queryKey: ['notes', { notebook, tag, emptyOnly }],
+    queryKey: ['notes', { notebook, tag, emptyOnly, sortBy, sortOrder }],
     queryFn: async ({ pageParam = 0 }) => {
       const params = new URLSearchParams({
         offset: pageParam.toString(),
         limit: limit.toString(),
+        sort_by: sortBy,
+        sort_order: sortOrder,
       })
 
       if (notebook) {

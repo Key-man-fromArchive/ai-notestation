@@ -4,9 +4,9 @@
 
 import { useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { FileText, AlertCircle, FolderOpen, Folder, BookOpen, Search, X, Plus, Wand2, Loader2, Tag, Globe, FileX2, Trash2 } from 'lucide-react'
+import { FileText, AlertCircle, FolderOpen, Folder, BookOpen, Search, X, Plus, Wand2, Loader2, Tag, Globe, FileX2, Trash2, ArrowUpDown, ArrowDown, ArrowUp } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { useNotes, useCreateNote, useBatchDeleteNotes } from '@/hooks/useNotes'
+import { useNotes, useCreateNote, useBatchDeleteNotes, type SortBy, type SortOrder } from '@/hooks/useNotes'
 import { useNotebooks } from '@/hooks/useNotebooks'
 import { useAutoTag, useLocalTags } from '@/hooks/useAutoTag'
 import { NoteList } from '@/components/NoteList'
@@ -144,6 +144,8 @@ export default function Notes() {
   const selectedTag = searchParams.get('tag') || undefined
   const emptyOnly = searchParams.get('empty') === 'true'
   const [filterText, setFilterText] = useState('')
+  const [sortBy, setSortBy] = useState<SortBy>('updated_at')
+  const [sortOrder, setSortOrder] = useState<SortOrder>('desc')
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [isCaptureOpen, setIsCaptureOpen] = useState(false)
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
@@ -161,7 +163,7 @@ export default function Notes() {
     hasNextPage,
     isFetchingNextPage,
     fetchNextPage,
-  } = useNotes({ notebook: selectedNotebook, tag: selectedTag, emptyOnly })
+  } = useNotes({ notebook: selectedNotebook, tag: selectedTag, emptyOnly, sortBy, sortOrder })
 
   // 노트북 목록 데이터
   const { data: notebooksData, isLoading: isLoadingNotebooks } = useNotebooks()
@@ -463,30 +465,59 @@ export default function Notes() {
             )}
           </div>
 
-          {/* 빠른 필터 */}
-          <div className="relative mb-3">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" aria-hidden="true" />
-            <input
-              type="text"
-              value={filterText}
-              onChange={(e) => setFilterText(e.target.value)}
-              placeholder={t('notes.filterPlaceholder')}
-              className={cn(
-                'flex h-9 w-full rounded-lg border border-input bg-background pl-9 pr-8 py-2',
-                'text-sm text-foreground placeholder:text-muted-foreground',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-                'transition-colors'
+          {/* 빠른 필터 + 정렬 */}
+          <div className="flex items-center gap-2 mb-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" aria-hidden="true" />
+              <input
+                type="text"
+                value={filterText}
+                onChange={(e) => setFilterText(e.target.value)}
+                placeholder={t('notes.filterPlaceholder')}
+                className={cn(
+                  'flex h-9 w-full rounded-lg border border-input bg-background pl-9 pr-8 py-2',
+                  'text-sm text-foreground placeholder:text-muted-foreground',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                  'transition-colors'
+                )}
+              />
+              {filterText && (
+                <button
+                  onClick={() => setFilterText('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded text-muted-foreground hover:text-foreground transition-colors"
+                  aria-label={t('common.clearFilter')}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
               )}
-            />
-            {filterText && (
-              <button
-                onClick={() => setFilterText('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded text-muted-foreground hover:text-foreground transition-colors"
-                aria-label={t('common.clearFilter')}
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
+            </div>
+
+            {/* 정렬 기준 */}
+            <button
+              onClick={() => setSortBy(sortBy === 'updated_at' ? 'created_at' : 'updated_at')}
+              className={cn(
+                'flex items-center gap-1.5 h-9 px-3 rounded-lg border border-input text-sm',
+                'hover:bg-muted transition-colors whitespace-nowrap',
+              )}
+            >
+              <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" />
+              {sortBy === 'updated_at' ? t('notes.sortByUpdated') : t('notes.sortByCreated')}
+            </button>
+
+            {/* 정렬 순서 */}
+            <button
+              onClick={() => setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc')}
+              className={cn(
+                'flex items-center gap-1.5 h-9 px-3 rounded-lg border border-input text-sm',
+                'hover:bg-muted transition-colors whitespace-nowrap',
+              )}
+            >
+              {sortOrder === 'desc' ? (
+                <><ArrowDown className="h-3.5 w-3.5 text-muted-foreground" />{t('notes.sortDesc')}</>
+              ) : (
+                <><ArrowUp className="h-3.5 w-3.5 text-muted-foreground" />{t('notes.sortAsc')}</>
+              )}
+            </button>
           </div>
 
           {/* 태그 필터 + 배치 태깅 */}

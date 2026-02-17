@@ -9,6 +9,7 @@ export interface NoteListItem {
   title: string
   snippet?: string
   notebook: string | null
+  created_at: string | null
   updated_at: string | null
   tags: string[]
   sync_status?: string
