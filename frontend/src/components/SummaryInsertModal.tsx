@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useQuery } from '@tanstack/react-query'
 import { X, Loader2, FileText } from 'lucide-react'
 import { useAIStream } from '@/hooks/useAIStream'
 import { MarkdownRenderer } from '@/components/MarkdownRenderer'
@@ -21,6 +22,10 @@ export function SummaryInsertModal({ isOpen, onClose, fileId, fileName, noteId, 
   const [fetchError, setFetchError] = useState<string | null>(null)
   const [isInserting, setIsInserting] = useState(false)
   const [started, setStarted] = useState(false)
+  const { data: defaultModelSetting } = useQuery<{ value: unknown }>({
+    queryKey: ['settings', 'default_ai_model'],
+    queryFn: () => apiClient.get('/settings/default_ai_model'),
+  })
 
   // Fetch PDF text and start streaming on mount
   useEffect(() => {
@@ -67,7 +72,10 @@ export function SummaryInsertModal({ isOpen, onClose, fileId, fileName, noteId, 
     setIsInserting(true)
     try {
       const contentHtml = markdownToHtml(content)
-      const merged = `${noteContent}<hr><h2>${t('summary.heading')}</h2>${contentHtml}`
+      const modelName = (typeof defaultModelSetting?.value === 'string' ? defaultModelSetting.value : '') || 'AI'
+      const now = new Date().toLocaleString()
+      const meta = `<p><em style="font-size:0.85em;color:gray;">${modelName} · ${now}</em></p>`
+      const merged = `${noteContent}<hr><h2>${t('summary.heading')}</h2>${meta}${contentHtml}`
       await apiClient.put(`/notes/${noteId}`, { content: merged })
       window.location.reload()
     } catch {

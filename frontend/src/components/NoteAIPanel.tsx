@@ -122,7 +122,9 @@ export function NoteAIPanel({ noteId, noteContent, noteTitle }: NoteAIPanelProps
     if (!content || isSaving) return
     setIsSaving(true)
     const contentHtml = markdownToHtml(content)
-    const merged = `${noteContent}<hr><h2>${t('ai.aiSummary')}</h2>${contentHtml}`
+    const now = new Date().toLocaleString()
+    const meta = `<p><em style="font-size:0.85em;color:gray;">${selectedModel || 'AI'} · ${now}</em></p>`
+    const merged = `${noteContent}<hr><h2>${t('ai.aiSummary')}</h2>${meta}${contentHtml}`
     await apiClient.put(`/notes/${noteId}`, { content: merged })
     window.location.reload()
   }
