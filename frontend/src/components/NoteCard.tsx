@@ -1,10 +1,11 @@
 // @TASK P5-T5.2 - 노트 카드 컴포넌트
 // @SPEC docs/plans/2026-01-29-labnote-ai-design.md#노트-목록
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { FileText, Tag, FolderOpen, Calendar } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { apiClient } from '@/lib/api'
 import type { NoteListItem } from '@/types/note'
 
 interface NoteCardProps {
@@ -92,6 +93,15 @@ export function NoteCard({ note, className }: NoteCardProps) {
 
   const noteDate = note.updated_at ? new Date(note.updated_at) : null
 
+  // /api/nas-images/ and /api/images/ require auth token
+  const authedThumbnail = useMemo(() => {
+    const url = note.thumbnail_url
+    if (!url) return null
+    if (url.startsWith('/api/files/')) return url
+    const token = apiClient.getToken()
+    return token ? `${url}?token=${token}` : url
+  }, [note.thumbnail_url])
+
   const formattedDate = noteDate ? noteDate.toLocaleDateString('ko-KR', {
     year: 'numeric',
     month: 'short',
@@ -112,7 +122,7 @@ export function NoteCard({ note, className }: NoteCardProps) {
     >
       {/* 좌측: 달력 스타일 날짜 썸네일 */}
       {noteDate && (
-        <DateThumbnail date={noteDate} thumbnailUrl={note.thumbnail_url} />
+        <DateThumbnail date={noteDate} thumbnailUrl={authedThumbnail} />
       )}
 
       {/* 우측: 텍스트 콘텐츠 */}
