@@ -238,7 +238,14 @@ class NoteIndexer:
         for text, name in rows:
             if text and text.strip():
                 suffix = PurePosixPath(name).suffix.lower() if name else ""
-                label = "HWP" if suffix in (".hwp", ".hwpx") else "PDF" if suffix == ".pdf" else "FILE"
+                if suffix in (".hwp", ".hwpx"):
+                    label = "HWP"
+                elif suffix == ".pdf":
+                    label = "PDF"
+                elif suffix in (".docx", ".doc"):
+                    label = "DOCX"
+                else:
+                    label = "FILE"
                 parts.append(f"[{label}: {name}]\n{text.strip()}")
 
         return "\n\n---\n\n".join(parts)

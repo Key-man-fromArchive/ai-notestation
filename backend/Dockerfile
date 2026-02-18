@@ -18,6 +18,7 @@ RUN apt-get update && \
         libgl1 \
         libglib2.0-0 \
         postgresql-client \
+        antiword \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

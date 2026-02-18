@@ -27,6 +27,7 @@ settings = get_settings()
 
 _IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"}
 _HWP_EXTENSIONS = {".hwp", ".hwpx"}
+_WORD_EXTENSIONS = {".docx", ".doc"}
 
 
 @router.post("/files", status_code=status.HTTP_201_CREATED)
@@ -122,9 +123,10 @@ async def extract_file_text(
     is_pdf = file_id.lower().endswith(".pdf")
     is_image = any(file_id.lower().endswith(ext) for ext in _IMAGE_EXTENSIONS)
     is_hwp = any(file_id.lower().endswith(ext) for ext in _HWP_EXTENSIONS)
+    is_word = any(file_id.lower().endswith(ext) for ext in _WORD_EXTENSIONS)
 
-    if not is_pdf and not is_image and not is_hwp:
-        raise HTTPException(status_code=400, detail="Only PDF, image, and HWP/HWPX files can be extracted")
+    if not is_pdf and not is_image and not is_hwp and not is_word:
+        raise HTTPException(status_code=400, detail="Only PDF, image, HWP/HWPX, and Word files can be extracted")
 
     stmt = select(NoteAttachment).where(NoteAttachment.file_id == file_id)
     result = await db.execute(stmt)
@@ -142,6 +144,8 @@ async def extract_file_text(
         background_tasks.add_task(_run_pdf_extraction, file_id, str(file_path))
     elif is_hwp:
         background_tasks.add_task(_run_hwp_extraction, file_id, str(file_path))
+    elif is_word:
+        background_tasks.add_task(_run_word_extraction, file_id, str(file_path))
     else:
         background_tasks.add_task(_run_ocr_extraction, file_id, str(file_path))
 
@@ -325,6 +329,35 @@ async def _run_hwp_extraction(file_id: str, file_path: str) -> None:
 
         except Exception:
             logger.exception("HWP extraction failed for %s", file_id)
+            attachment.extraction_status = "failed"
+            await db.commit()
+
+
+async def _run_word_extraction(file_id: str, file_path: str) -> None:
+    """Background task: extract Word (.docx/.doc) text and reindex the note."""
+    from app.database import async_session_factory
+    from app.services.word_extractor import WordExtractor
+
+    async with async_session_factory() as db:
+        stmt = select(NoteAttachment).where(NoteAttachment.file_id == file_id)
+        result = await db.execute(stmt)
+        attachment = result.scalar_one_or_none()
+        if not attachment:
+            return
+
+        try:
+            extractor = WordExtractor()
+            extraction = await extractor.extract(file_path)
+
+            attachment.extracted_text = extraction.text
+            attachment.extraction_status = "completed"
+            attachment.page_count = extraction.page_count
+            await db.commit()
+
+            await _reindex_note(attachment.note_id, db)
+
+        except Exception:
+            logger.exception("Word extraction failed for %s", file_id)
             attachment.extraction_status = "failed"
             await db.commit()
 
