@@ -45,23 +45,12 @@ export async function injectAuth(page: Page, token: string) {
 }
 
 /**
- * Login as the default admin user (ceo@invirustech.com).
- * Returns the auth token.
+ * Create and login as an admin user (owner role).
+ * Returns the auth token and email.
  */
 export async function loginAsAdmin(request: APIRequestContext) {
-  const res = await request.post(`${API}/auth/login`, {
-    data: {
-      email: 'ceo@invirustech.com',
-      password: '!1npark2beom',
-    },
-  })
-
-  if (res.status() !== 200) {
-    throw new Error(`Admin login failed: ${res.status()}`)
-  }
-
-  const { access_token } = await res.json()
-  return { token: access_token, email: 'ceo@invirustech.com' }
+  const { token, email } = await createTestUser(request, 'admin')
+  return { token, email }
 }
 
 /**

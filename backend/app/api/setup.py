@@ -296,8 +296,13 @@ async def setup_complete(db: AsyncSession = Depends(get_db)):
 
         await db.commit()
 
-        # Generate tokens
-        token_data = {"sub": str(user.id)}
+        # Generate tokens (must match get_current_user expectations)
+        token_data = {
+            "sub": user.email,
+            "user_id": user.id,
+            "org_id": org.id,
+            "role": MemberRole.OWNER,
+        }
         access_token = create_access_token(token_data)
         refresh_token = create_refresh_token(token_data)
 

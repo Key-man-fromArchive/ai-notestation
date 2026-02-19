@@ -66,6 +66,9 @@ async def setup_guard(request, call_next):
     if (
         path.startswith("/api/setup")
         or path.startswith("/api/health")
+        or path.startswith("/api/files/")
+        or path.startswith("/api/images/")
+        or path.startswith("/api/nas-images/")
         or path.startswith("/docs")
         or path.startswith("/openapi")
         or path.startswith("/redoc")
