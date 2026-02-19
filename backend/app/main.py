@@ -45,11 +45,51 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        "http://labnote.local",
+        "http://labnote.local:3000",
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# --- Setup Guard Middleware ---
+from starlette.responses import JSONResponse
+
+
+@app.middleware("http")
+async def setup_guard(request, call_next):
+    """Block API calls until initial setup is complete."""
+    path = request.url.path
+
+    # Always allow these paths
+    if (
+        path.startswith("/api/setup")
+        or path.startswith("/api/health")
+        or path.startswith("/docs")
+        or path.startswith("/openapi")
+        or path.startswith("/redoc")
+        or not path.startswith("/api/")
+    ):
+        return await call_next(request)
+
+    # Check if setup is complete
+    from app.database import async_session_factory
+    from app.services.setup_state import check_initialized
+
+    async with async_session_factory() as db:
+        try:
+            if not await check_initialized(db):
+                return JSONResponse(
+                    status_code=503,
+                    content={"detail": "setup_required"},
+                )
+        except Exception:
+            # If DB check fails (e.g., tables don't exist yet), allow through
+            pass
+
+    return await call_next(request)
+
 
 # --- Router includes ---
 from app.api.auth import router as auth_router
@@ -96,6 +136,7 @@ from app.api.metrics import router as metrics_router
 from app.api.feedback import router as feedback_router
 from app.api.evaluation import router as evaluation_router
 from app.api.groups import router as groups_router
+from app.api.setup import router as setup_router
 
 app.include_router(nsx_router, prefix="/api")
 app.include_router(backup_router, prefix="/api")
@@ -115,6 +156,7 @@ app.include_router(metrics_router, prefix="/api")
 app.include_router(feedback_router, prefix="/api")
 app.include_router(evaluation_router, prefix="/api")
 app.include_router(groups_router, prefix="/api")
+app.include_router(setup_router, prefix="/api")
 
 
 @app.get("/api/health", tags=["health"])

@@ -30,6 +30,7 @@ const Graph = lazy(() => import('./pages/Graph'))
 const Admin = lazy(() => import('./pages/Admin'))
 const Operations = lazy(() => import('./pages/Operations'))
 const Librarian = lazy(() => import('./pages/Librarian'))
+const Setup = lazy(() => import('./pages/Setup'))
 
 // Demo pages
 const DemoHub = lazy(() => import('./demo/index'))
@@ -112,6 +113,7 @@ function App() {
             <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="/signup" element={<Signup />} />
+              <Route path="/setup" element={<Setup />} />
               <Route path="/shared/:token" element={<SharedView />} />
               <Route path="/*" element={<ProtectedRoutes />} />
             </Routes>

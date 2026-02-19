@@ -9,6 +9,8 @@ import os
 import tempfile
 from pathlib import Path
 
+import httpx
+
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
@@ -258,6 +260,25 @@ class OCRService:
     # finish within this timeout, fall back to the AI Vision cloud engine.
     PADDLE_TIMEOUT_SECONDS = 120
 
+    async def _external_extract(
+        self, image_bytes: bytes, mime_type: str
+    ) -> OCRResult:
+        """Extract text via external OCR container (HTTP multipart upload)."""
+        ocr_url = os.getenv("OCR_SERVICE_URL", "")
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(
+                f"{ocr_url}/ocr",
+                files={"file": ("image", image_bytes, mime_type)},
+                data={"mime_type": mime_type},
+            )
+            response.raise_for_status()
+            data = response.json()
+            return OCRResult(
+                text=data.get("text", ""),
+                confidence=data.get("confidence", 0.0),
+                method=data.get("method", "external-ocr"),
+            )
+
     async def extract_text(
         self, image_bytes: bytes, mime_type: str = "image/png"
     ) -> OCRResult:
@@ -278,6 +299,14 @@ class OCRService:
             RuntimeError: If all engines fail or no model is available.
         """
         engine = await self._get_engine_setting()
+
+        # If external OCR container is configured, try it first
+        ocr_service_url = os.getenv("OCR_SERVICE_URL", "")
+        if ocr_service_url:
+            try:
+                return await self._external_extract(image_bytes, mime_type)
+            except Exception as exc:
+                logger.warning("External OCR service failed: %s — falling back to configured engine", exc)
 
         if engine == "glm_ocr":
             try:

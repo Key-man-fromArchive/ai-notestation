@@ -110,6 +110,20 @@ class ApiClient {
       // 에러 응답 처리
       if (!response.ok) {
         const body = await response.text()
+
+        // Setup guard: 503 setup_required → redirect to /setup
+        if (response.status === 503) {
+          try {
+            const parsed = JSON.parse(body)
+            if (parsed.detail === 'setup_required' && !window.location.pathname.startsWith('/setup')) {
+              window.location.href = '/setup'
+              return undefined as T
+            }
+          } catch {
+            // Not JSON, fall through
+          }
+        }
+
         throw new ApiError(response.status, body)
       }
 
