@@ -2,7 +2,7 @@
 
 > 리서치 기반 로드맵 — ReSeek(논문), Web-Shepherd(논문), Reseek(제품) 분석 종합
 >
-> 현재 버전: **v2.1.0** | 최종 갱신: 2026-02-17
+> 현재 버전: **v2.1.0** | 최종 갱신: 2026-02-19
 >
 > **상세 계획**: [docs/roadmap/](docs/roadmap/) | **마스터 TODO**: [docs/roadmap/TODO.md](docs/roadmap/TODO.md)
 >
@@ -201,6 +201,11 @@
 - **모든 노트 카운트 수정** (v2.1.0) — 노트북 선택과 무관하게 항상 전체 노트 수 표시
 - **무한 스크롤 수정** (v2.1.0) — 20개 이상 노트 자동 로딩 복구
 - **썸네일 이미지 인증** (v2.1.0) — NAS/NSX 이미지 로드 시 인증 토큰 추가
+- **Word 문서 지원** (v2.1.0) — .docx/.doc 텍스트 추출 + 검색 인덱싱
+- **labnote-box 하드웨어 어플라이언스** (v2.1.0) — ODROID H4 기반 Docker 5컨테이너 프로덕션 스택, Setup Wizard, On-device AI (ONNX Embedding + PaddleOCR-VL), [labnote-box repo](https://github.com/Key-man-fromArchive/labnote-box)
+- **Setup Guard 이미지 바이패스** (v2.1.0) — 서버 재시작 시 이미지 503 방지
+- **Setup Wizard JWT 수정** (v2.1.0) — get_current_user()와 호환되는 토큰 필드
+- **E2E 테스트 안정화** (v2.1.0) — 65 failures → 0 failures (API 기반 auth setup)
 
 ---
 

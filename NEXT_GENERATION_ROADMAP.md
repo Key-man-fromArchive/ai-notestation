@@ -2,13 +2,15 @@
 
 > **기존 기능 로드맵(ROADMAP.md) + 제품 비전(VISION.md) + UI/UX 혁신(UI_UX_INNOVATION_ROADMAP.md)을 하나의 실행 가능한 릴리스 계획으로 통합**
 >
-> 현재 버전: **v2.0.0** | 최종 갱신: 2026-02-16
+> 현재 버전: **v2.1.0** | 최종 갱신: 2026-02-19
 >
 > 참조 문서:
-> - [ROADMAP.md](ROADMAP.md) — 기능 중심 Phase 1-5 (Phase 1-4 대부분 완료)
+> - [ROADMAP.md](ROADMAP.md) — 기능 중심 Phase 1-5 (전체 완료)
 > - [docs/roadmap/VISION.md](docs/roadmap/VISION.md) — 제품 비전, 7단계 파이프라인, BM, Zotero
 > - [docs/roadmap/UI_UX_INNOVATION_ROADMAP.md](docs/roadmap/UI_UX_INNOVATION_ROADMAP.md) — SiYuan 분석 기반 UI/UX Phase UI-1~4
 > - NotebookLM `ainote-UIUX` — 43개 소스 (아이디어 7 + 전략 3 + Deep Research + 참조 33)
+>
+> **하드웨어 어플라이언스**: [labnote-box](https://github.com/Key-man-fromArchive/labnote-box) — ODROID H4 기반 자체 호스팅 제품 (v2.1.0과 병렬 개발)
 
 ---
 
@@ -31,23 +33,31 @@
 ## 1. 릴리스 개요
 
 ```
-v2.0.0 (현재)     v3.0.0          v3.1.0           v3.2.0          v4.0.0             v4.1.0
+v2.1.0 (현재)     v3.0.0          v3.1.0           v3.2.0          v4.0.0             v4.1.0
   ┃               ┃               ┃                ┃               ┃                  ┃
   ┣━ Phase 1-5 ✅  ┣━ Foundation   ┣━ Editor        ┣━ Zotero       ┣━ Research        ┣━ Analytics
-  ┃  (검색,AI,     ┃   UX          ┃  Evolution     ┃  통합         ┃  Platform        ┃  Mobile
-  ┃   OCR,동기화,  ┃               ┃  + Category*   ┃  + External   ┃  + 연구 블록     ┃  Scale
-  ┃   평가,카테고  ┃               ┃                ┃   Capture*    ┃  + AI Ambient    ┃
-  ┃   리,멤버관리) ┃               ┃                ┃               ┃  + 평가인프라*   ┃
+  ┃  + HWP/HWPX   ┃   UX          ┃  Evolution     ┃  통합         ┃  Platform        ┃  Mobile
+  ┃  + PubMed전문  ┃               ┃  + Category*   ┃  + External   ┃  + 연구 블록     ┃  Scale
+  ┃  + 정렬/스크롤 ┃               ┃                ┃   Capture*    ┃  + AI Ambient    ┃
+  ┃  + 어플라이언스┃               ┃                ┃               ┃  + 평가인프라*   ┃
 ```
 
 > **\*** 표시 항목은 v2.0.0에서 이미 구현 완료:
 > - **카테고리 시스템** (3-6): 12종 프리셋 + AI 프롬프트 자동 주입 — v3.1.0 범위에서 선행 구현
 > - **외부 콘텐츠 캡처** (4-5): URL/arXiv/PubMed → 노트 자동 생성 — v3.2.0 범위에서 선행 구현
 > - **평가 인프라** (5-8): A/B 평가 + 검색 메트릭 + 피드백 루프 — v4.0.0 범위에서 선행 구현
+>
+> **v2.1.0 추가 구현** (로드맵 외):
+> - HWP/HWPX 문서 텍스트 추출 + 내장 이미지 OCR
+> - PubMed 전문 체인 (PMC JATS XML + Unpaywall OA) + 참고문헌 삽입
+> - 노트 목록 정렬 (수정일/생성일) + 무한 스크롤 복구 + 달력 썸네일
+> - 에디터 드래그앤드롭 업로드 + Ctrl+S 저장 + AI 요약 삽입 개선
+> - **labnote-box 하드웨어 어플라이언스**: Docker 5컨테이너 프로덕션 스택, Setup Wizard, On-device AI (ONNX Embedding + PaddleOCR-VL)
 
 | 버전 | 코드명 | 핵심 가치 | 과금 변화 | 타깃 | 상태 |
 |------|--------|----------|----------|------|------|
-| **v3.0.0** | Foundation UX | 일상 사용 경험의 질적 도약 | 없음 (기존 무료) | 전체 사용자 | 🔲 |
+| **v2.1.0** | Appliance + Polish | HW 어플라이언스 + 에디터 개선 + 문서 포맷 확장 | 없음 | 전체 | ✅ 완료 |
+| **v3.0.0** | Foundation UX | 일상 사용 경험의 질적 도약 | 없음 (기존 무료) | 전체 사용자 | **다음 목표** |
 | **v3.1.0** | Editor + Category | 멀티 문서 작업 + 카테고리 시스템 기반 | Category Tier 1 도입 | 파워 유저 | ⚡ 카테고리 선행 완료 |
 | **v3.2.0** | Zotero + Capture | 학술 생태계 연결 + 외부 콘텐츠 | Zotero는 Pro 전용 | 연구자 | ⚡ 캡처 선행 완료 |
 | **v4.0.0** | Research Platform | 7단계 연구 파이프라인 실현 | Pro/Enterprise 정식 출시 | 연구실/기업 | ⚡ 평가 선행 완료 |
@@ -1300,4 +1310,4 @@ v4.1.0 Analytics & Scale            │
 - *[docs/roadmap/UI_UX_INNOVATION_ROADMAP.md](docs/roadmap/UI_UX_INNOVATION_ROADMAP.md) — SiYuan 분석 기반 UI/UX*
 - *NotebookLM `ainote-UIUX` 43개 소스 — 인지과학, 경쟁 분석, 기술 설계*
 
-*작성일: 2026-02-14 | 최종 갱신: 2026-02-16*
+*작성일: 2026-02-14 | 최종 갱신: 2026-02-19*
