@@ -12,6 +12,9 @@ interface NoteListProps {
   hasNextPage: boolean
   isFetchingNextPage: boolean
   fetchNextPage: () => void
+  selectable?: boolean
+  selectedIds?: Set<string>
+  onSelect?: (noteId: string) => void
 }
 
 /**
@@ -24,6 +27,9 @@ export function NoteList({
   hasNextPage,
   isFetchingNextPage,
   fetchNextPage,
+  selectable,
+  selectedIds,
+  onSelect,
 }: NoteListProps) {
   const { t } = useTranslation()
   const parentRef = useRef<HTMLDivElement>(null)
@@ -84,7 +90,12 @@ export function NoteList({
                 transform: `translateY(${virtualItem.start}px)`,
               }}
             >
-              <NoteCard note={note} />
+              <NoteCard
+                note={note}
+                selectable={selectable}
+                selected={selectedIds?.has(note.note_id)}
+                onSelect={onSelect}
+              />
             </div>
           )
         })}

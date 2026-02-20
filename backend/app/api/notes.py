@@ -764,6 +764,87 @@ async def delete_notes_batch(
     return BatchDeleteResponse(deleted=deleted, failed=failed)
 
 
+class BatchTrashRequest(BaseModel):
+    note_ids: list[str]
+
+
+class BatchTrashResponse(BaseModel):
+    trashed: int
+    operation_id: int
+
+
+@router.post("/notes/batch-trash", response_model=BatchTrashResponse)
+async def trash_notes_batch(
+    request: BatchTrashRequest,
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> BatchTrashResponse:
+    """Move multiple notes to trash (backup + delete from local DB, NAS untouched).
+
+    Notes can be restored from the Admin trash panel.
+    """
+    from app.services.trash_service import trash_notes_batch as _trash_batch
+
+    try:
+        op = await _trash_batch(db, request.note_ids, get_trigger_name(current_user))
+        await db.commit()
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+
+    await log_activity(
+        "note", "completed",
+        message=f"노트 {op.item_count}개 휴지통 이동",
+        triggered_by=get_trigger_name(current_user),
+    )
+
+    return BatchTrashResponse(trashed=op.item_count, operation_id=op.id)
+
+
+class BatchMoveRequest(BaseModel):
+    note_ids: list[str]
+    notebook: str | None  # None = remove from notebook (uncategorize)
+
+
+class BatchMoveResponse(BaseModel):
+    moved: int
+    failed: list[str]
+
+
+@router.post("/notes/batch-move", response_model=BatchMoveResponse)
+async def move_notes_batch(
+    request: BatchMoveRequest,
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> BatchMoveResponse:
+    """Move multiple notes to a different notebook."""
+    moved = 0
+    failed: list[str] = []
+
+    for note_id in request.note_ids:
+        try:
+            result = await db.execute(select(Note).where(Note.synology_note_id == note_id))
+            db_note = result.scalar_one_or_none()
+            if db_note:
+                db_note.notebook_name = request.notebook
+                moved += 1
+            else:
+                failed.append(note_id)
+        except Exception:
+            logger.exception("Failed to move note %s", note_id)
+            failed.append(note_id)
+
+    await db.commit()
+
+    target_name = request.notebook or "미분류"
+    await log_activity(
+        "note", "completed",
+        message=f"노트 {moved}개를 '{target_name}'(으)로 이동",
+        triggered_by=get_trigger_name(current_user),
+    )
+
+    return BatchMoveResponse(moved=moved, failed=failed)
+
+
 @router.delete("/notes/{note_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_note(
     note_id: str,

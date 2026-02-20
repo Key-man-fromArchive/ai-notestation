@@ -2,11 +2,11 @@
 // @SPEC docs/plans/2026-01-29-labnote-ai-design.md#노트-목록
 // @TEST frontend/src/__tests__/Notes.test.tsx
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { FileText, AlertCircle, FolderOpen, Folder, BookOpen, Search, X, Plus, Wand2, Loader2, Tag, Globe, FileX2, Trash2, ArrowUpDown, ArrowDown, ArrowUp, Inbox } from 'lucide-react'
+import { FileText, AlertCircle, FolderOpen, Folder, BookOpen, Search, X, Plus, Wand2, Loader2, Tag, Globe, FileX2, Trash2, ArrowUpDown, ArrowDown, ArrowUp, Inbox, CheckSquare, Square } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { useNotes, useCreateNote, useBatchDeleteNotes, type SortBy, type SortOrder } from '@/hooks/useNotes'
+import { useNotes, useCreateNote, useBatchDeleteNotes, useBatchTrashNotes, useBatchMoveNotes, type SortBy, type SortOrder } from '@/hooks/useNotes'
 import { useNotebooks } from '@/hooks/useNotebooks'
 import { useAutoTag, useLocalTags } from '@/hooks/useAutoTag'
 import { NoteList } from '@/components/NoteList'
@@ -149,11 +149,18 @@ export default function Notes() {
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [isCaptureOpen, setIsCaptureOpen] = useState(false)
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
+  const [selectMode, setSelectMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [isBatchDeleteOpen, setIsBatchDeleteOpen] = useState(false)
+  const [isMoveOpen, setIsMoveOpen] = useState(false)
+  const [moveTarget, setMoveTarget] = useState<string>('')
 
   // 태그 관련 훅
   const { data: localTags } = useLocalTags()
   const autoTag = useAutoTag()
   const batchDelete = useBatchDeleteNotes()
+  const batchTrash = useBatchTrashNotes()
+  const batchMove = useBatchMoveNotes()
 
   // 노트 목록 데이터
   const {
@@ -224,6 +231,37 @@ export default function Notes() {
       setSearchParams({ empty: 'true' })
     }
   }
+
+  // 선택 모드 토글
+  const toggleSelectMode = useCallback(() => {
+    setSelectMode(prev => {
+      if (prev) setSelectedIds(new Set())
+      return !prev
+    })
+  }, [])
+
+  // 개별 노트 선택/해제
+  const handleSelect = useCallback((noteId: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(noteId)) {
+        next.delete(noteId)
+      } else {
+        next.add(noteId)
+      }
+      return next
+    })
+  }, [])
+
+  // 전체 선택
+  const handleSelectAll = useCallback(() => {
+    setSelectedIds(new Set(filteredNotes.map(n => n.note_id)))
+  }, [filteredNotes])
+
+  // 전체 해제
+  const handleDeselectAll = useCallback(() => {
+    setSelectedIds(new Set())
+  }, [])
 
   // 로딩 상태
   if (isLoading) {
@@ -433,13 +471,28 @@ export default function Notes() {
           <div className="flex items-center gap-3 mb-4">
             <div className="flex items-baseline gap-3 flex-1 min-w-0">
               <h1 className="text-2xl font-bold text-foreground truncate">
-                {emptyOnly ? t('notes.emptyNotes') : selectedNotebook || t('notes.allNotes')}
+                {emptyOnly ? t('notes.emptyNotes') : selectedNotebook === '__uncategorized__' ? t('notes.uncategorized') : selectedNotebook || t('notes.allNotes')}
               </h1>
               <span className="text-sm text-muted-foreground shrink-0">
                 {filterText ? `${filteredNotes.length} / ${t('common.count_items', { count: totalNotes })}` : t('common.count_items', { count: totalNotes })}
               </span>
             </div>
-            {emptyOnly && totalNotes > 0 && (
+            {/* 선택 모드 토글 */}
+            {filteredNotes.length > 0 && (
+              <button
+                onClick={toggleSelectMode}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md',
+                  'border border-input',
+                  'hover:bg-muted transition-colors',
+                  selectMode && 'bg-primary/10 border-primary text-primary',
+                )}
+              >
+                {selectMode ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+                {selectMode ? t('notes.exitSelectMode') : t('notes.selectMode')}
+              </button>
+            )}
+            {emptyOnly && totalNotes > 0 && !selectMode && (
               <button
                 onClick={() => setIsDeleteConfirmOpen(true)}
                 disabled={batchDelete.isPending}
@@ -458,7 +511,7 @@ export default function Notes() {
                 {batchDelete.isPending ? t('common.deleting') : t('notes.deleteAllEmpty')}
               </button>
             )}
-            {!emptyOnly && (
+            {!emptyOnly && !selectMode && (
               <>
                 <button
                   onClick={() => setIsCaptureOpen(true)}
@@ -594,7 +647,7 @@ export default function Notes() {
             <EmptyState
               icon={emptyOnly ? FileX2 : FileText}
               title={emptyOnly ? t('notes.emptyNotes') : t('notes.noNotes')}
-              description={emptyOnly ? t('notes.emptyNotesDesc') : selectedNotebook ? t('notes.notebookEmpty', { notebook: selectedNotebook }) : t('notes.noNotesDesc')}
+              description={emptyOnly ? t('notes.emptyNotesDesc') : selectedNotebook ? t('notes.notebookEmpty', { notebook: selectedNotebook === '__uncategorized__' ? t('notes.uncategorized') : selectedNotebook }) : t('notes.noNotesDesc')}
               action={emptyOnly ? {
                 label: t('notes.viewAllNotes'),
                 onClick: () => handleEmptyToggle(),
@@ -619,10 +672,73 @@ export default function Notes() {
               hasNextPage={filterText ? false : (hasNextPage ?? false)}
               isFetchingNextPage={isFetchingNextPage}
               fetchNextPage={fetchNextPage}
+              selectable={selectMode}
+              selectedIds={selectedIds}
+              onSelect={handleSelect}
             />
           )}
         </div>
       </main>
+
+      {/* 선택 모드 플로팅 액션바 */}
+      {selectMode && selectedIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 px-5 py-3 bg-card border border-border rounded-xl shadow-lg">
+          <span className="text-sm font-medium text-foreground">
+            {t('notes.selectedCount', { count: selectedIds.size })}
+          </span>
+          <div className="w-px h-5 bg-border" />
+          <button
+            onClick={handleSelectAll}
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {t('notes.selectAllPage')}
+          </button>
+          <button
+            onClick={handleDeselectAll}
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {t('notes.deselectAll')}
+          </button>
+          <div className="w-px h-5 bg-border" />
+          <button
+            onClick={() => {
+              setMoveTarget('')
+              setIsMoveOpen(true)
+            }}
+            disabled={batchMove.isPending}
+            className={cn(
+              'flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md',
+              'border border-input',
+              'hover:bg-muted transition-colors',
+              'disabled:opacity-50 disabled:cursor-not-allowed',
+            )}
+          >
+            {batchMove.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <FolderOpen className="h-4 w-4" />
+            )}
+            {t('notes.batchMoveToNotebook')}
+          </button>
+          <button
+            onClick={() => setIsBatchDeleteOpen(true)}
+            disabled={batchTrash.isPending}
+            className={cn(
+              'flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md',
+              'bg-destructive text-destructive-foreground',
+              'hover:bg-destructive/90 transition-colors',
+              'disabled:opacity-50 disabled:cursor-not-allowed',
+            )}
+          >
+            {batchTrash.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Trash2 className="h-4 w-4" />
+            )}
+            {batchTrash.isPending ? t('common.deleting') : t('notes.batchDelete')}
+          </button>
+        </div>
+      )}
 
       <CreateNoteModal
         isOpen={isCreateOpen}
@@ -634,6 +750,121 @@ export default function Notes() {
         onClose={() => setIsCaptureOpen(false)}
         defaultNotebook={selectedNotebook}
       />
+
+      {/* 선택 휴지통 이동 확인 다이얼로그 */}
+      {isBatchDeleteOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setIsBatchDeleteOpen(false)} />
+          <div className="relative bg-card rounded-lg border border-border shadow-lg w-full max-w-sm mx-4">
+            <div className="p-6 space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-destructive/10">
+                  <Trash2 className="h-5 w-5 text-destructive" />
+                </div>
+                <h2 className="text-lg font-semibold">{t('notes.batchDeleteConfirmTitle')}</h2>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {t('notes.batchDeleteConfirmDesc', { count: selectedIds.size })}
+              </p>
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  onClick={() => setIsBatchDeleteOpen(false)}
+                  className={cn(
+                    'px-4 py-2 text-sm rounded-md border border-input',
+                    'hover:bg-muted transition-colors',
+                  )}
+                >
+                  {t('common.cancel')}
+                </button>
+                <button
+                  onClick={async () => {
+                    await batchTrash.mutateAsync(Array.from(selectedIds))
+                    setIsBatchDeleteOpen(false)
+                    setSelectedIds(new Set())
+                    setSelectMode(false)
+                  }}
+                  disabled={batchTrash.isPending}
+                  className={cn(
+                    'px-4 py-2 text-sm rounded-md',
+                    'bg-destructive text-destructive-foreground',
+                    'hover:bg-destructive/90 transition-colors',
+                    'disabled:opacity-50 disabled:cursor-not-allowed',
+                  )}
+                >
+                  {batchTrash.isPending ? t('common.deleting') : t('common.delete')}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 노트북 이동 다이얼로그 */}
+      {isMoveOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setIsMoveOpen(false)} />
+          <div className="relative bg-card rounded-lg border border-border shadow-lg w-full max-w-sm mx-4">
+            <div className="p-6 space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
+                  <FolderOpen className="h-5 w-5 text-primary" />
+                </div>
+                <h2 className="text-lg font-semibold">{t('notes.batchMoveToNotebook')}</h2>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {t('notes.selectedCount', { count: selectedIds.size })}
+              </p>
+              <select
+                value={moveTarget}
+                onChange={(e) => setMoveTarget(e.target.value)}
+                className={cn(
+                  'flex h-9 w-full rounded-md border border-input bg-background px-3 py-2',
+                  'text-sm',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                )}
+              >
+                <option value="">{t('contextMenu.noNotebook')}</option>
+                {notebooksData?.items.map((nb) => (
+                  <option key={nb.id} value={nb.name}>
+                    {nb.name}
+                  </option>
+                ))}
+              </select>
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  onClick={() => setIsMoveOpen(false)}
+                  className={cn(
+                    'px-4 py-2 text-sm rounded-md border border-input',
+                    'hover:bg-muted transition-colors',
+                  )}
+                >
+                  {t('common.cancel')}
+                </button>
+                <button
+                  onClick={async () => {
+                    await batchMove.mutateAsync({
+                      noteIds: Array.from(selectedIds),
+                      notebook: moveTarget || null,
+                    })
+                    setIsMoveOpen(false)
+                    setSelectedIds(new Set())
+                    setSelectMode(false)
+                  }}
+                  disabled={batchMove.isPending}
+                  className={cn(
+                    'px-4 py-2 text-sm rounded-md',
+                    'bg-primary text-primary-foreground',
+                    'hover:bg-primary/90 transition-colors',
+                    'disabled:opacity-50 disabled:cursor-not-allowed',
+                  )}
+                >
+                  {batchMove.isPending ? t('common.loading') : t('contextMenu.moveToNotebook')}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 빈 노트 일괄 삭제 확인 다이얼로그 */}
       {isDeleteConfirmOpen && (

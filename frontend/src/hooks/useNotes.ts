@@ -81,6 +81,23 @@ interface BatchDeleteResponse {
   failed: string[]
 }
 
+interface NoteUpdateRequest {
+  title?: string
+  notebook?: string | null
+}
+
+export function useUpdateNote() {
+  const queryClient = useQueryClient()
+
+  return useMutation<Note, ApiError, { noteId: string; data: NoteUpdateRequest }>({
+    mutationFn: ({ noteId, data }) =>
+      apiClient.put<Note>(`/notes/${noteId}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notes'] })
+    },
+  })
+}
+
 export function useDeleteNote() {
   const queryClient = useQueryClient()
 
@@ -100,6 +117,47 @@ export function useBatchDeleteNotes() {
       apiClient.post<BatchDeleteResponse>('/notes/batch-delete', { note_ids: noteIds }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['notes'] })
+    },
+  })
+}
+
+interface BatchTrashResponse {
+  trashed: number
+  operation_id: number
+}
+
+export function useBatchTrashNotes() {
+  const queryClient = useQueryClient()
+
+  return useMutation<BatchTrashResponse, ApiError, string[]>({
+    mutationFn: noteIds =>
+      apiClient.post<BatchTrashResponse>('/notes/batch-trash', { note_ids: noteIds }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notes'] })
+      queryClient.invalidateQueries({ queryKey: ['notebooks'] })
+    },
+  })
+}
+
+interface BatchMoveResponse {
+  moved: number
+  failed: string[]
+}
+
+interface BatchMoveRequest {
+  noteIds: string[]
+  notebook: string | null
+}
+
+export function useBatchMoveNotes() {
+  const queryClient = useQueryClient()
+
+  return useMutation<BatchMoveResponse, ApiError, BatchMoveRequest>({
+    mutationFn: ({ noteIds, notebook }) =>
+      apiClient.post<BatchMoveResponse>('/notes/batch-move', { note_ids: noteIds, notebook }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notes'] })
+      queryClient.invalidateQueries({ queryKey: ['notebooks'] })
     },
   })
 }

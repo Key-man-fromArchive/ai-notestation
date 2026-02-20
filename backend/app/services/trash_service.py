@@ -604,6 +604,125 @@ async def purge_all(db: AsyncSession) -> int:
 
 
 # ---------------------------------------------------------------------------
+# Notes Batch Trash (user-facing soft delete)
+# ---------------------------------------------------------------------------
+
+
+async def trash_notes_batch(
+    db: AsyncSession, note_ids: list[str], triggered_by: str
+) -> TrashOperation:
+    """Move selected notes to trash (backup to JSONL, delete from local DB only).
+
+    NAS notes are NOT deleted — they can be recovered via re-sync or restore.
+    """
+    if not note_ids:
+        raise ValueError("No note IDs provided")
+
+    placeholders = ", ".join(f":id_{i}" for i in range(len(note_ids)))
+    params = {f"id_{i}": nid for i, nid in enumerate(note_ids)}
+
+    count_result = await db.execute(
+        text(f"SELECT COUNT(*) FROM notes WHERE synology_note_id IN ({placeholders})"),  # noqa: S608
+        params,
+    )
+    count = count_result.scalar() or 0
+    if count == 0:
+        raise ValueError("No matching notes found")
+
+    op = TrashOperation(
+        operation_type="notes_batch",
+        description=f"노트 {count}개 휴지통 이동",
+        item_count=count,
+        backup_path="",
+        manifest={"note_ids": note_ids},
+        triggered_by=triggered_by,
+    )
+    db.add(op)
+    await db.flush()
+
+    backup_dir = _trash_dir(op.id)
+    op.backup_path = f"{op.id}/"
+
+    # Backup notes
+    jsonl_path = backup_dir / "notes.jsonl"
+    await _dump_query_to_jsonl(
+        db,
+        f"SELECT * FROM notes WHERE synology_note_id IN ({placeholders})",  # noqa: S608
+        jsonl_path,
+        params,
+    )
+
+    # Backup related images
+    img_jsonl = backup_dir / "note_images.jsonl"
+    await _dump_query_to_jsonl(
+        db,
+        f"SELECT * FROM note_images WHERE synology_note_id IN ({placeholders})",  # noqa: S608
+        img_jsonl,
+        params,
+    )
+
+    # Backup embeddings metadata (no vectors)
+    emb_jsonl = backup_dir / "note_embeddings.jsonl"
+    await _dump_query_to_jsonl(
+        db,
+        f"""SELECT ne.id, ne.note_id, ne.chunk_index, ne.chunk_text, ne.created_at
+            FROM note_embeddings ne
+            JOIN notes n ON ne.note_id = n.id
+            WHERE n.synology_note_id IN ({placeholders})""",  # noqa: S608
+        emb_jsonl,
+        params,
+    )
+
+    # Delete embeddings
+    await db.execute(
+        text(
+            f"""DELETE FROM note_embeddings
+                WHERE note_id IN (
+                    SELECT id FROM notes WHERE synology_note_id IN ({placeholders})
+                )"""  # noqa: S608
+        ),
+        params,
+    )
+
+    # Delete images
+    await db.execute(
+        text(f"DELETE FROM note_images WHERE synology_note_id IN ({placeholders})"),  # noqa: S608
+        params,
+    )
+
+    # Delete notes (cascades to attachments, access, share links)
+    await db.execute(
+        text(f"DELETE FROM notes WHERE synology_note_id IN ({placeholders})"),  # noqa: S608
+        params,
+    )
+
+    op.size_bytes = _dir_size(backup_dir)
+    return op
+
+
+async def restore_notes_batch(db: AsyncSession, op: TrashOperation) -> int:
+    """Restore notes from a batch trash operation."""
+    settings = get_settings()
+    backup_dir = Path(settings.TRASH_PATH) / op.backup_path
+    total = 0
+
+    notes_jsonl = backup_dir / "notes.jsonl"
+    if notes_jsonl.exists():
+        total += await _restore_jsonl_insert(db, "notes", notes_jsonl)
+        await _reset_sequence(db, "notes")
+
+    img_jsonl = backup_dir / "note_images.jsonl"
+    if img_jsonl.exists():
+        total += await _restore_jsonl_insert(db, "note_images", img_jsonl)
+        await _reset_sequence(db, "note_images")
+
+    # Embeddings metadata only — vectors need re-indexing
+    logger.info("Notes batch restore: embeddings need re-indexing")
+
+    return total
+
+
+# ---------------------------------------------------------------------------
 # Restore dispatcher
 # ---------------------------------------------------------------------------
 
@@ -614,6 +733,7 @@ _RESTORE_MAP = {
     "embeddings": restore_embeddings,
     "vision_data": restore_vision_data,
     "notes_reset": restore_notes_reset,
+    "notes_batch": restore_notes_batch,
 }
 
 
