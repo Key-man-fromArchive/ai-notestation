@@ -396,7 +396,7 @@ class TestBuildTsqueryExpr:
 
         result = engine._build_tsquery_expr("python async programming")
         assert "python" in result.tsquery_expr
-        assert " | " in result.tsquery_expr
+        assert " OR " in result.tsquery_expr
 
     def test_empty_query_returns_empty_expr(self):
         """An empty string returns empty tsquery expression."""

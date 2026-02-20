@@ -96,7 +96,6 @@ class SearchResult(BaseModel):
     match_explanation: MatchExplanation | None = None
 
 
-
 class JudgeInfo(BaseModel):
     """Metadata about the adaptive search strategy decision."""
 
@@ -107,6 +106,7 @@ class JudgeInfo(BaseModel):
     fts_result_count: int | None = None
     fts_avg_score: float | None = None
     term_coverage: float | None = None
+
 
 class SearchPage(BaseModel):
     """Paginated search results with total count."""
@@ -150,18 +150,23 @@ class FullTextSearchEngine:
 
         params = get_search_params()
 
-        # Build tsquery using to_tsquery with OR-joined morphemes
-        tsquery = func.to_tsquery(literal_column("'simple'"), analysis.tsquery_expr)
+        # Build tsquery using websearch_to_tsquery (safe against special characters)
+        tsquery = func.websearch_to_tsquery(literal_column("'simple'"), analysis.tsquery_expr)
 
         # BM25-approximated scoring with field boosting:
         # - Title (weight A): configurable boost (default 3x)
         # - Content (weight B): configurable weight (default 1x), with document length normalization (flag=1)
         title_rank = func.ts_rank(
-            func.setweight(func.to_tsvector(literal_column("'simple'"), func.coalesce(Note.title, "")), literal_column("'A'")),
+            func.setweight(
+                func.to_tsvector(literal_column("'simple'"), func.coalesce(Note.title, "")), literal_column("'A'")
+            ),
             tsquery,
         )
         content_rank = func.ts_rank(
-            func.setweight(func.to_tsvector(literal_column("'simple'"), func.coalesce(Note.content_text, "")), literal_column("'B'")),
+            func.setweight(
+                func.to_tsvector(literal_column("'simple'"), func.coalesce(Note.content_text, "")),
+                literal_column("'B'"),
+            ),
             tsquery,
             1,  # normalization: divide by document length
         )
@@ -216,7 +221,11 @@ class FullTextSearchEngine:
                 created_at=_dt_to_iso(row.source_created_at),
                 updated_at=_dt_to_iso(row.source_updated_at),
                 match_explanation=MatchExplanation(
-                    engines=[EngineContribution(engine="fts", rank=rank, raw_score=float(row.score), rrf_score=float(row.score))],
+                    engines=[
+                        EngineContribution(
+                            engine="fts", rank=rank, raw_score=float(row.score), rrf_score=float(row.score)
+                        )
+                    ],
                     matched_terms=_extract_matched_terms(row.snippet or ""),
                     combined_score=float(row.score),
                 ),
@@ -359,7 +368,11 @@ class TrigramSearchEngine:
                 created_at=_dt_to_iso(row.source_created_at),
                 updated_at=_dt_to_iso(row.source_updated_at),
                 match_explanation=MatchExplanation(
-                    engines=[EngineContribution(engine="trigram", rank=rank, raw_score=float(row.score), rrf_score=float(row.score))],
+                    engines=[
+                        EngineContribution(
+                            engine="trigram", rank=rank, raw_score=float(row.score), rrf_score=float(row.score)
+                        )
+                    ],
                     matched_terms=[],
                     combined_score=float(row.score),
                 ),
@@ -418,7 +431,11 @@ class TrigramSearchEngine:
                 created_at=_dt_to_iso(row.source_created_at),
                 updated_at=_dt_to_iso(row.source_updated_at),
                 match_explanation=MatchExplanation(
-                    engines=[EngineContribution(engine="trigram", rank=rank, raw_score=float(row.score), rrf_score=float(row.score))],
+                    engines=[
+                        EngineContribution(
+                            engine="trigram", rank=rank, raw_score=float(row.score), rrf_score=float(row.score)
+                        )
+                    ],
                     matched_terms=[],
                     combined_score=float(row.score),
                 ),
@@ -465,6 +482,9 @@ class SemanticSearchEngine:
 
         The query is first converted to a vector embedding, then compared
         against stored note chunk embeddings using pgvector cosine distance.
+
+        Uses DISTINCT ON (note_id) to ensure each note appears at most once,
+        keeping only the best-matching chunk per note.
         """
         # Guard: empty/whitespace queries
         stripped = query.strip()
@@ -488,31 +508,47 @@ class SemanticSearchEngine:
 
         # Build cosine distance expression: embedding <=> :query_vector
         cosine_distance = NoteEmbedding.embedding.cosine_distance(query_embedding)
+
+        # Inner subquery: DISTINCT ON (note_id) keeps only the best chunk per note
+        inner = (
+            select(
+                NoteEmbedding.note_id,
+                NoteEmbedding.chunk_text,
+                cosine_distance.label("cosine_distance"),
+            )
+            .distinct(NoteEmbedding.note_id)
+            .join(Note, NoteEmbedding.note_id == Note.id)
+            .order_by(NoteEmbedding.note_id, cosine_distance.asc())
+        )
+
+        # Apply optional filters in the inner subquery to reduce work
+        if notebook_name is not None:
+            inner = inner.where(Note.notebook_name == notebook_name)
+        if date_from is not None:
+            inner = inner.where(Note.source_updated_at >= date_from)
+        if date_to is not None:
+            inner = inner.where(Note.source_updated_at <= date_to)
+
+        inner = inner.subquery("best_chunks")
+
+        # Outer query: join back to Note for metadata, sort by distance, paginate
         total_count = func.count().over().label("total_count")
 
         stmt = (
             select(
                 Note.synology_note_id.label("note_id"),
                 Note.title,
-                NoteEmbedding.chunk_text,
-                cosine_distance.label("cosine_distance"),
+                inner.c.chunk_text,
+                inner.c.cosine_distance,
                 total_count,
                 Note.source_created_at,
                 Note.source_updated_at,
             )
-            .join(Note, NoteEmbedding.note_id == Note.id)
-            .order_by(cosine_distance.asc())
+            .join(inner, Note.id == inner.c.note_id)
+            .order_by(inner.c.cosine_distance.asc())
             .limit(limit)
             .offset(offset)
         )
-
-        # Apply optional filters
-        if notebook_name is not None:
-            stmt = stmt.where(Note.notebook_name == notebook_name)
-        if date_from is not None:
-            stmt = stmt.where(Note.source_updated_at >= date_from)
-        if date_to is not None:
-            stmt = stmt.where(Note.source_updated_at <= date_to)
 
         result = await self._session.execute(stmt)
         rows = result.fetchall()
@@ -531,7 +567,14 @@ class SemanticSearchEngine:
                     created_at=_dt_to_iso(row.source_created_at),
                     updated_at=_dt_to_iso(row.source_updated_at),
                     match_explanation=MatchExplanation(
-                        engines=[EngineContribution(engine="semantic", rank=rank, raw_score=raw_score, rrf_score=raw_score)],
+                        engines=[
+                            EngineContribution(
+                                engine="semantic",
+                                rank=rank,
+                                raw_score=raw_score,
+                                rrf_score=raw_score,
+                            ),
+                        ],
                         matched_terms=[],
                         combined_score=raw_score,
                     ),
@@ -617,7 +660,12 @@ class HybridSearchEngine:
 
         # Step 1: Always run FTS first
         fts_page = await self._safe_search(
-            self._fts_engine, query, limit=limit, offset=offset, label="FTS", **filter_kwargs,
+            self._fts_engine,
+            query,
+            limit=limit,
+            offset=offset,
+            label="FTS",
+            **filter_kwargs,
         )
 
         # Step 2: Judge evaluates FTS results
@@ -638,12 +686,20 @@ class HybridSearchEngine:
 
         # Step 4: Semantic needed — run and merge
         sem_page = await self._safe_search(
-            self._semantic_engine, query, limit=limit, offset=offset, label="Semantic", **filter_kwargs,
+            self._semantic_engine,
+            query,
+            limit=limit,
+            offset=offset,
+            label="Semantic",
+            **filter_kwargs,
         )
 
         merged = self.rrf_merge(
-            fts_page.results, sem_page.results,
-            k=k, fts_weight=fts_weight, semantic_weight=sem_weight,
+            fts_page.results,
+            sem_page.results,
+            k=k,
+            fts_weight=fts_weight,
+            semantic_weight=sem_weight,
         )
         total = max(fts_page.total, sem_page.total)
 
@@ -828,12 +884,24 @@ class HybridSearchEngine:
         still returned (graceful degradation).
         """
         fts_task = self._safe_search(
-            self._fts_engine, query, limit=limit, offset=offset, label="FTS",
-            notebook_name=notebook_name, date_from=date_from, date_to=date_to,
+            self._fts_engine,
+            query,
+            limit=limit,
+            offset=offset,
+            label="FTS",
+            notebook_name=notebook_name,
+            date_from=date_from,
+            date_to=date_to,
         )
         sem_task = self._safe_search(
-            self._semantic_engine, query, limit=limit, offset=offset, label="Semantic",
-            notebook_name=notebook_name, date_from=date_from, date_to=date_to,
+            self._semantic_engine,
+            query,
+            limit=limit,
+            offset=offset,
+            label="Semantic",
+            notebook_name=notebook_name,
+            date_from=date_from,
+            date_to=date_to,
         )
 
         fts_page, sem_page = await asyncio.gather(fts_task, sem_task)
@@ -853,8 +921,12 @@ class HybridSearchEngine:
         """Call engine.search() with error handling."""
         try:
             return await engine.search(
-                query, limit=limit, offset=offset,
-                notebook_name=notebook_name, date_from=date_from, date_to=date_to,
+                query,
+                limit=limit,
+                offset=offset,
+                notebook_name=notebook_name,
+                date_from=date_from,
+                date_to=date_to,
             )
         except Exception:
             logger.warning("%s engine failed for query: %r", label, query)
@@ -891,19 +963,32 @@ class UnifiedSearchEngine:
             return SearchPage(results=[], total=0)
 
         fts_task = self._safe_search(
-            self._fts_engine, query, limit=limit, offset=offset, label="FTS",
-            notebook_name=notebook_name, date_from=date_from, date_to=date_to,
+            self._fts_engine,
+            query,
+            limit=limit,
+            offset=offset,
+            label="FTS",
+            notebook_name=notebook_name,
+            date_from=date_from,
+            date_to=date_to,
         )
         trigram_task = self._safe_search(
-            self._trigram_engine, query, limit=limit, offset=offset, label="Trigram",
-            notebook_name=notebook_name, date_from=date_from, date_to=date_to,
+            self._trigram_engine,
+            query,
+            limit=limit,
+            offset=offset,
+            label="Trigram",
+            notebook_name=notebook_name,
+            date_from=date_from,
+            date_to=date_to,
         )
 
         fts_page, trigram_page = await asyncio.gather(fts_task, trigram_task)
 
         params = get_search_params()
         merged = self._rrf_merge(
-            fts_page.results, trigram_page.results,
+            fts_page.results,
+            trigram_page.results,
             k=int(params["rrf_k"]),
             fts_weight=params["unified_fts_weight"],
             trigram_weight=params["unified_trigram_weight"],
@@ -985,8 +1070,12 @@ class UnifiedSearchEngine:
         """Call engine.search() with error handling."""
         try:
             return await engine.search(
-                query, limit=limit, offset=offset,
-                notebook_name=notebook_name, date_from=date_from, date_to=date_to,
+                query,
+                limit=limit,
+                offset=offset,
+                notebook_name=notebook_name,
+                date_from=date_from,
+                date_to=date_to,
             )
         except Exception:
             logger.warning("%s engine failed for query: %r", label, query)
@@ -1024,9 +1113,11 @@ class ExactMatchSearchEngine:
         total_count = func.count().over().label("total_count")
 
         # Use regexp_replace for case-insensitive highlighting
+        # Escape regex metacharacters in user input to prevent regex injection
+        escaped = re.escape(stripped)
         highlighted_snippet = func.regexp_replace(
             func.left(Note.content_text, self._SNIPPET_MAX_LENGTH),
-            f"({stripped})",
+            f"({escaped})",
             r"<b>\1</b>",
             literal_column("'gi'"),
         ).label("snippet")

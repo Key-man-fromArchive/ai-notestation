@@ -119,7 +119,7 @@ def _build_tsquery_expr(morphemes: list[str], original_tokens: list[str]) -> str
             seen.add(lower)
             terms.append(lower.replace("'", "''"))
 
-    return " | ".join(terms)
+    return " OR ".join(terms)
 
 
 def analyze_query(query: str) -> QueryAnalysis:
@@ -152,9 +152,7 @@ def analyze_query(query: str) -> QueryAnalysis:
     is_single_term = len(tokens) == 1
 
     # Extract morphemes (Korean analysis) or use tokens directly for English
-    morphemes = (
-        _extract_korean_morphemes(normalized) if language in ("ko", "mixed") else [t.lower() for t in tokens]
-    )
+    morphemes = _extract_korean_morphemes(normalized) if language in ("ko", "mixed") else [t.lower() for t in tokens]
 
     # Build tsquery expression
     tsquery_expr = _build_tsquery_expr(morphemes, tokens)
