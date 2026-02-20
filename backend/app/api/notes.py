@@ -377,7 +377,11 @@ async def list_notes(
     count_stmt = select(func.count()).select_from(Note)
     stmt = select(Note)
 
-    if notebook:
+    if notebook == "__uncategorized__":
+        uncategorized_filter = (Note.notebook_name.is_(None)) | (Note.notebook_name == "")
+        count_stmt = count_stmt.where(uncategorized_filter)
+        stmt = stmt.where(uncategorized_filter)
+    elif notebook:
         count_stmt = count_stmt.where(Note.notebook_name == notebook)
         stmt = stmt.where(Note.notebook_name == notebook)
 

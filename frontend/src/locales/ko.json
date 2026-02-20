@@ -209,6 +209,7 @@
     "filterByTag": "태그로 필터",
     "clearTagFilter": "태그 필터 해제",
     "untaggedNotes": "미태깅 {{count}}개",
+    "uncategorized": "미분류",
     "emptyNotes": "빈 노트",
     "emptyNotesCount": "빈 노트 ({{count}}개)",
     "emptyNotesDesc": "제목과 본문이 모두 비어있는 노트입니다.",

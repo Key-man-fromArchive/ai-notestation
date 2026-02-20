@@ -4,7 +4,7 @@
 
 import { useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { FileText, AlertCircle, FolderOpen, Folder, BookOpen, Search, X, Plus, Wand2, Loader2, Tag, Globe, FileX2, Trash2, ArrowUpDown, ArrowDown, ArrowUp } from 'lucide-react'
+import { FileText, AlertCircle, FolderOpen, Folder, BookOpen, Search, X, Plus, Wand2, Loader2, Tag, Globe, FileX2, Trash2, ArrowUpDown, ArrowDown, ArrowUp, Inbox } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useNotes, useCreateNote, useBatchDeleteNotes, type SortBy, type SortOrder } from '@/hooks/useNotes'
 import { useNotebooks } from '@/hooks/useNotebooks'
@@ -324,6 +324,30 @@ export default function Notes() {
             <span className="flex-1 truncate">{t('notes.emptyNotes')}</span>
             {emptyOnly && (
               <span className="text-xs font-medium px-1.5 py-0.5 rounded-full min-w-[1.5rem] text-center bg-destructive/20 text-destructive">
+                {totalNotes}
+              </span>
+            )}
+          </button>
+
+          {/* 미분류 (노트북 없는 노트) */}
+          <button
+            onClick={() => handleNotebookChange('__uncategorized__')}
+            className={cn(
+              'w-full text-left px-3 py-2.5 rounded-md text-sm mb-0.5',
+              'hover:bg-muted/80 transition-colors',
+              'flex items-center gap-2.5',
+              selectedNotebook === '__uncategorized__'
+                ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 font-medium'
+                : 'text-muted-foreground'
+            )}
+          >
+            <Inbox className={cn(
+              'h-4 w-4 flex-shrink-0',
+              selectedNotebook === '__uncategorized__' ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'
+            )} aria-hidden="true" />
+            <span className="flex-1 truncate">{t('notes.uncategorized')}</span>
+            {selectedNotebook === '__uncategorized__' && (
+              <span className="text-xs font-medium px-1.5 py-0.5 rounded-full min-w-[1.5rem] text-center bg-amber-200/60 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400">
                 {totalNotes}
               </span>
             )}

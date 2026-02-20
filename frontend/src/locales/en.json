@@ -209,6 +209,7 @@
     "filterByTag": "Filter by tag",
     "clearTagFilter": "Clear tag filter",
     "untaggedNotes": "{{count}} untagged",
+    "uncategorized": "Uncategorized",
     "emptyNotes": "Empty Notes",
     "emptyNotesCount": "Empty Notes ({{count}})",
     "emptyNotesDesc": "Notes with no title and no content.",
