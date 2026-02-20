@@ -1,4 +1,7 @@
 {
+  "breadcrumb": {
+    "home": "홈"
+  },
   "common": {
     "save": "저장",
     "saving": "저장 중...",
@@ -54,7 +57,17 @@
     "operations": "운영 현황",
     "admin": "관리자",
     "demo": "데모",
-    "logout": "로그아웃"
+    "logout": "로그아웃",
+    "collapse": "사이드바 접기",
+    "expand": "사이드바 펼치기"
+  },
+  "commandPalette": {
+    "placeholder": "명령어 검색...",
+    "pages": "페이지",
+    "quickActions": "빠른 작업",
+    "notes": "노트",
+    "newNote": "새 노트",
+    "noResults": "결과가 없습니다."
   },
   "auth": {
     "login": "로그인",
@@ -501,6 +514,13 @@
     "backupDesc": "데이터를 백업하거나 복원합니다",
     "oauth": "OAuth 연결",
     "language": "언어",
+    "theme": {
+      "title": "테마",
+      "light": "라이트",
+      "dark": "다크",
+      "system": "시스템",
+      "description": "애플리케이션 색상 테마를 선택하세요"
+    },
     "oauthLinkGenerating": "링크 생성 중...",
     "oauthConnectWith": "{{label}}로 연결",
     "oauthStep1": "1. 아래 링크를 열어 인증을 완료하세요:",
@@ -1219,5 +1239,17 @@
     "summarySystem": "시스템 정보",
     "completeSetup": "설정 완료",
     "completing": "설정 중..."
+  },
+  "shortcuts": {
+    "title": "키보드 단축키",
+    "navigation": "네비게이션",
+    "actions": "액션",
+    "general": "일반",
+    "toggleSidebar": "사이드바 토글",
+    "commandPalette": "커맨드 팔레트",
+    "showHelp": "키보드 단축키 보기",
+    "newNote": "새 노트",
+    "goSearch": "검색으로 이동",
+    "goSettings": "설정으로 이동"
   }
 }

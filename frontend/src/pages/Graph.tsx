@@ -1,9 +1,10 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
-import { Network, SlidersHorizontal, BarChart3 } from 'lucide-react'
+import { SlidersHorizontal, BarChart3 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
+import { Breadcrumb } from '@/components/Breadcrumb'
 import { apiClient } from '@/lib/api'
 import { ObsidianGraph } from '@/components/ObsidianGraph'
 import { GraphAnalysisPanel } from '@/components/GraphAnalysisPanel'
@@ -178,9 +179,12 @@ export default function Graph() {
     <div className="h-[calc(100vh-57px)] flex flex-col">
       <div className="flex items-center justify-between px-4 py-2 flex-shrink-0">
         <div className="flex items-center gap-3">
-          <Network className="h-6 w-6 text-primary" />
           <div>
-            <h1 className="text-2xl font-bold">{t('graph.title')}</h1>
+            <Breadcrumb items={[
+              { label: t('sidebar.dashboard'), to: '/' },
+              { label: t('graph.title') }
+            ]} />
+            <h1 className="text-2xl font-bold mt-2">{t('graph.title')}</h1>
             <p className="text-sm text-muted-foreground">
               {t('graph.layout')}
             </p>

@@ -338,7 +338,7 @@ export function NoteAIPanel({ noteId, noteContent, noteTitle }: NoteAIPanelProps
                   aria-label={copied ? t('ai.copied') : t('ai.copyResult')}
                 >
                   {copied ? (
-                    <Check className="h-3.5 w-3.5 text-green-600" />
+                    <Check className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
                   ) : (
                     <Copy className="h-3.5 w-3.5" />
                   )}
@@ -352,11 +352,11 @@ export function NoteAIPanel({ noteId, noteContent, noteTitle }: NoteAIPanelProps
 
             {/* Retry notification */}
             {retryReason && isStreaming && (
-              <div className="flex items-center gap-2 text-amber-600 text-sm bg-amber-500/10 px-3 py-2 rounded-md mt-3 animate-pulse">
+              <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 text-sm bg-amber-500/10 dark:bg-amber-900/30 px-3 py-2 rounded-md mt-3 animate-pulse">
                 <RefreshCw className="h-4 w-4 animate-spin" />
                 <div className="flex-1">
                   <p className="font-medium">{t('ai.retryingBetterResponse')}</p>
-                  <p className="text-xs text-amber-700">{retryReason}</p>
+                  <p className="text-xs text-amber-700 dark:text-amber-300">{retryReason}</p>
                 </div>
               </div>
             )}
@@ -365,7 +365,7 @@ export function NoteAIPanel({ noteId, noteContent, noteTitle }: NoteAIPanelProps
             {!isStreaming && streamWarnings.length > 0 && (
               <div className="mt-2 space-y-1">
                 {streamWarnings.map((warning, idx) => (
-                  <div key={idx} className="flex items-center gap-2 text-amber-600 text-xs bg-amber-500/10 px-2 py-1 rounded">
+                  <div key={idx} className="flex items-center gap-2 text-amber-600 dark:text-amber-400 text-xs bg-amber-500/10 dark:bg-amber-900/30 px-2 py-1 rounded">
                     <AlertTriangle className="h-3 w-3 flex-shrink-0" />
                     <span>{warning.reason}</span>
                   </div>

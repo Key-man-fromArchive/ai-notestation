@@ -1,7 +1,7 @@
 {
   "name": "labnote-ai-frontend",
   "private": true,
-  "version": "1.3.1",
+  "version": "3.0.0",
   "description": "LabNote AI - Synology NoteStation enhanced with AI",
   "type": "module",
   "scripts": {
@@ -35,6 +35,7 @@
     "@tiptap/starter-kit": "^2.2.4",
     "autoprefixer": "^10.4.0",
     "clsx": "^2.1.0",
+    "cmdk": "^1.1.1",
     "dompurify": "^3.3.1",
     "i18next": "^25.8.6",
     "i18next-browser-languagedetector": "^8.2.0",

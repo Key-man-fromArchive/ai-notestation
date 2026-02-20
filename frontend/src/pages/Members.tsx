@@ -4,11 +4,12 @@ import { useMembers, type Member } from '@/hooks/useMembers'
 import { useMemberNotebookAccess, type MemberNotebookAccessItem } from '@/hooks/useMemberNotebookAccess'
 import { useNotebooks } from '@/hooks/useNotebooks'
 import { useGroups, type Group } from '@/hooks/useGroups'
-import { useGroupMembers, type GroupMember } from '@/hooks/useGroupMembers'
+import { useGroupMembers } from '@/hooks/useGroupMembers'
 import { useGroupNotebookAccess } from '@/hooks/useGroupNotebookAccess'
 import { apiClient } from '@/lib/api'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
 import { EmptyState } from '@/components/EmptyState'
+import { Breadcrumb } from '@/components/Breadcrumb'
 import {
   Users, UserPlus, AlertCircle, CheckCircle, Clock,
   Shield, Crown, Eye, Loader2, X, Trash2, KeyRound,
@@ -350,7 +351,7 @@ function GroupDetailModal({
   const { members: groupMembers, isLoading, addMembers, isAdding, removeMembers, isRemoving } = useGroupMembers(group?.id ?? 0)
   const { accesses, isLoading: accessLoading, updateAccess, isUpdating, revokeAccess, isRevoking } = useGroupNotebookAccess(group?.id ?? 0)
   const { data: notebooksData } = useNotebooks()
-  const notebooks = notebooksData?.notebooks ?? []
+  const notebooks = notebooksData?.items ?? []
   const [activeSection, setActiveSection] = useState<'members' | 'access'>('members')
   const [addMemberIds, setAddMemberIds] = useState<number[]>([])
   const [addNotebookId, setAddNotebookId] = useState(0)
@@ -661,7 +662,7 @@ function NotebookAccessPanel({
   const { accesses, isLoading, updateAccess, isUpdating, revokeAccess, isRevoking } =
     useMemberNotebookAccess(member?.id ?? 0)
   const { data: notebooksData } = useNotebooks()
-  const notebooks = notebooksData?.notebooks ?? []
+  const notebooks = notebooksData?.items ?? []
 
   const [addNotebookId, setAddNotebookId] = useState<number>(0)
   const [addPermission, setAddPermission] = useState('read')
@@ -1067,6 +1068,10 @@ export default function Members() {
 
   return (
     <div className="p-6 space-y-6">
+      <Breadcrumb items={[
+        { label: t('sidebar.dashboard'), to: '/' },
+        { label: t('members.title') }
+      ]} />
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

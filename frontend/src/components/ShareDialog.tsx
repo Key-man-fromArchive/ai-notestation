@@ -112,7 +112,7 @@ function LinkRow({
           className={cn(
             'p-2 rounded-lg transition-colors',
             copied
-              ? 'bg-green-100 text-green-600'
+              ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
               : 'hover:bg-accent text-muted-foreground hover:text-foreground',
           )}
           title={copied ? t('sharing.copiedTooltip') : t('sharing.copyLinkTooltip')}

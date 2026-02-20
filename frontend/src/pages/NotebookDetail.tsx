@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
-  ArrowLeft,
   BookOpen,
   FileText,
   Pencil,
@@ -16,6 +15,7 @@ import {
   Edit,
   Network,
 } from 'lucide-react'
+import { Breadcrumb } from '@/components/Breadcrumb'
 import { useNotebook, useUpdateNotebook, useDeleteNotebook } from '@/hooks/useNotebooks'
 import type { NotebookCategory } from '@/types/note'
 import { useCategories, getCategoryOptions } from '@/lib/categories'
@@ -324,14 +324,12 @@ export default function NotebookDetail() {
 
   return (
     <div className="p-6">
-      <div className="flex items-center gap-4 mb-6">
-        <button
-          onClick={() => navigate('/notebooks')}
-          className="p-2 rounded-lg hover:bg-accent"
-          aria-label={t('common.back')}
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </button>
+      <Breadcrumb items={[
+        { label: t('sidebar.dashboard'), to: '/' },
+        { label: t('sidebar.notebooks'), to: '/notebooks' },
+        { label: notebook.name }
+      ]} />
+      <div className="flex items-center gap-4 mb-6 mt-6">
         <div className="flex-1">
           <div className="flex items-center gap-2">
             <BookOpen className="h-6 w-6 text-primary" />

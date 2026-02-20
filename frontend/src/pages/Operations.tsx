@@ -67,8 +67,8 @@ export default function Operations() {
               <RefreshCw
                 className={cn(
                   'h-5 w-5',
-                  syncStatus === 'syncing' && 'animate-spin text-yellow-600',
-                  syncStatus === 'completed' && 'text-green-600',
+                  syncStatus === 'syncing' && 'animate-spin text-yellow-600 dark:text-yellow-500',
+                  syncStatus === 'completed' && 'text-green-600 dark:text-green-400',
                   syncStatus === 'error' && 'text-destructive',
                   syncStatus === 'idle' && 'text-muted-foreground',
                 )}
@@ -107,8 +107,8 @@ export default function Operations() {
               <Database
                 className={cn(
                   'h-5 w-5',
-                  indexStatus === 'indexing' && 'text-yellow-600',
-                  indexStatus === 'completed' && 'text-green-600',
+                  indexStatus === 'indexing' && 'text-yellow-600 dark:text-yellow-500',
+                  indexStatus === 'completed' && 'text-green-600 dark:text-green-400',
                   indexStatus === 'error' && 'text-destructive',
                   indexStatus === 'idle' && 'text-muted-foreground',
                 )}
@@ -126,7 +126,7 @@ export default function Operations() {
               ({indexPercentage}%)
             </p>
             {pendingNotes > 0 && (
-              <p>{t('settings.pendingIndex')}: <span className="text-amber-600 font-medium">{pendingNotes.toLocaleString()}</span></p>
+              <p>{t('settings.pendingIndex')}: <span className="text-amber-600 dark:text-amber-400 font-medium">{pendingNotes.toLocaleString()}</span></p>
             )}
             {indexError && <p className="text-destructive text-xs">{indexError}</p>}
           </div>
@@ -151,22 +151,22 @@ export default function Operations() {
               <Search
                 className={cn(
                   'h-5 w-5',
-                  indexPercentage === 100 ? 'text-green-600' :
-                  indexPercentage > 0 ? 'text-yellow-600' : 'text-muted-foreground',
+                  indexPercentage === 100 ? 'text-green-600 dark:text-green-400' :
+                  indexPercentage > 0 ? 'text-yellow-600 dark:text-yellow-500' : 'text-muted-foreground',
                 )}
               />
               <h3 className="font-semibold">{t('search.title')}</h3>
             </div>
           </div>
           <div className="space-y-2 text-sm text-muted-foreground mb-3">
-            <p>{t('search.fts')}: <span className="text-green-600 font-medium">{t('admin.available')}</span></p>
+            <p>{t('search.fts')}: <span className="text-green-600 dark:text-green-400 font-medium">{t('admin.available')}</span></p>
             <p>
               {t('search.semantic')}:{' '}
-              <span className={cn('font-medium', indexPercentage === 100 ? 'text-green-600' : 'text-amber-600')}>
+              <span className={cn('font-medium', indexPercentage === 100 ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-400')}>
                 {indexPercentage === 100 ? t('admin.available') : `${indexPercentage}%`}
               </span>
             </p>
-            <p>{t('search.hybrid')}: <span className={cn('font-medium', indexPercentage > 0 ? 'text-green-600' : 'text-amber-600')}>
+            <p>{t('search.hybrid')}: <span className={cn('font-medium', indexPercentage > 0 ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-400')}>
               {indexPercentage > 0 ? t('admin.available') : t('settings.pendingIndex')}
             </span></p>
           </div>
@@ -175,7 +175,7 @@ export default function Operations() {
               <div
                 className={cn(
                   'h-full transition-all duration-300',
-                  indexPercentage === 100 ? 'bg-green-500' : 'bg-primary',
+                  indexPercentage === 100 ? 'bg-green-500 dark:bg-green-600' : 'bg-primary',
                 )}
                 style={{ width: `${indexPercentage}%` }}
               />
@@ -243,9 +243,9 @@ export default function Operations() {
             {logData.items.map((item) => (
               <div key={item.id} className="flex items-start gap-3 p-3">
                 <div className="mt-0.5">
-                  {item.status === 'completed' && <CheckCircle className="h-4 w-4 text-green-600" />}
+                  {item.status === 'completed' && <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />}
                   {item.status === 'error' && <XCircle className="h-4 w-4 text-destructive" />}
-                  {item.status === 'started' && <Play className="h-4 w-4 text-yellow-600" />}
+                  {item.status === 'started' && <Play className="h-4 w-4 text-yellow-600 dark:text-yellow-500" />}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
@@ -295,19 +295,19 @@ function FilterButton({ label, value, current, onClick }: { label: string; value
 function OperationBadge({ operation }: { operation: string }) {
   const { t } = useTranslation()
   const OPERATION_LABELS: Record<string, { labelKey: string; color: string }> = {
-    sync: { labelKey: 'operations.syncHistory', color: 'bg-blue-100 text-blue-700' },
-    embedding: { labelKey: 'admin.embeddingCount', color: 'bg-purple-100 text-purple-700' },
-    image_sync: { labelKey: 'settings.imageSync', color: 'bg-amber-100 text-amber-700' },
-    nsx: { labelKey: 'settings.nsxImport', color: 'bg-indigo-100 text-indigo-700' },
-    auth: { labelKey: 'auth.login', color: 'bg-green-100 text-green-700' },
-    member: { labelKey: 'members.title', color: 'bg-teal-100 text-teal-700' },
-    oauth: { labelKey: 'settings.oauth', color: 'bg-cyan-100 text-cyan-700' },
-    note: { labelKey: 'notes.title', color: 'bg-pink-100 text-pink-700' },
-    notebook: { labelKey: 'notebooks.title', color: 'bg-rose-100 text-rose-700' },
-    access: { labelKey: 'notebooks.accessPermissions', color: 'bg-violet-100 text-violet-700' },
-    share_link: { labelKey: 'sharing.publicLink', color: 'bg-fuchsia-100 text-fuchsia-700' },
-    settings: { labelKey: 'settings.title', color: 'bg-slate-100 text-slate-700' },
-    admin: { labelKey: 'admin.title', color: 'bg-red-100 text-red-700' },
+    sync: { labelKey: 'operations.syncHistory', color: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400' },
+    embedding: { labelKey: 'admin.embeddingCount', color: 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400' },
+    image_sync: { labelKey: 'settings.imageSync', color: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400' },
+    nsx: { labelKey: 'settings.nsxImport', color: 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400' },
+    auth: { labelKey: 'auth.login', color: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' },
+    member: { labelKey: 'members.title', color: 'bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-400' },
+    oauth: { labelKey: 'settings.oauth', color: 'bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-400' },
+    note: { labelKey: 'notes.title', color: 'bg-pink-100 dark:bg-pink-900/30 text-pink-700 dark:text-pink-400' },
+    notebook: { labelKey: 'notebooks.title', color: 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400' },
+    access: { labelKey: 'notebooks.accessPermissions', color: 'bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-400' },
+    share_link: { labelKey: 'sharing.publicLink', color: 'bg-fuchsia-100 dark:bg-fuchsia-900/30 text-fuchsia-700 dark:text-fuchsia-400' },
+    settings: { labelKey: 'settings.title', color: 'bg-slate-100 dark:bg-slate-900/30 text-slate-700 dark:text-slate-400' },
+    admin: { labelKey: 'admin.title', color: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400' },
   }
   const info = OPERATION_LABELS[operation] ?? { labelKey: operation, color: 'bg-gray-100 text-gray-700' }
   return (
@@ -324,10 +324,10 @@ function StatusBadge({ status }: { status: string }) {
       className={cn(
         'text-xs px-2 py-0.5 rounded-full font-medium',
         status === 'idle' && 'bg-muted text-muted-foreground',
-        status === 'syncing' && 'bg-yellow-100 text-yellow-700',
-        status === 'indexing' && 'bg-yellow-100 text-yellow-700',
-        status === 'completed' && 'bg-green-100 text-green-700',
-        status === 'error' && 'bg-red-100 text-red-700',
+        status === 'syncing' && 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400',
+        status === 'indexing' && 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400',
+        status === 'completed' && 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400',
+        status === 'error' && 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400',
       )}
     >
       {status === 'idle' && t('dashboard.syncIdle')}

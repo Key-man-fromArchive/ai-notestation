@@ -379,7 +379,7 @@ export function SearchParamsSection() {
           {resetting ? t('common.resetting', 'Resetting...') : t('common.reset', 'Reset')}
         </button>
         {saved && (
-          <div className="flex items-center gap-2 text-green-600">
+          <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
             <CheckCircle className="h-4 w-4" aria-hidden="true" />
             <span className="text-sm">{t('common.saved')}</span>
           </div>

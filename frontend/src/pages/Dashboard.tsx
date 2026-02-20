@@ -195,19 +195,19 @@ export default function Dashboard() {
               <div className="text-xs text-muted-foreground">{t('dashboard.totalImages')}</div>
             </div>
             <div className="text-center">
-              <div className="text-lg font-bold text-green-600">{imageStats.ocr_done}</div>
+              <div className="text-lg font-bold text-green-600 dark:text-green-400">{imageStats.ocr_done}</div>
               <div className="text-xs text-muted-foreground">OCR</div>
             </div>
             <div className="text-center">
-              <div className="text-lg font-bold text-blue-600">{imageStats.vision_done}</div>
+              <div className="text-lg font-bold text-blue-600 dark:text-blue-400">{imageStats.vision_done}</div>
               <div className="text-xs text-muted-foreground">Vision</div>
             </div>
             <div className="text-center">
-              <div className="text-lg font-bold text-amber-600">{imageStats.pending}</div>
+              <div className="text-lg font-bold text-amber-600 dark:text-amber-400">{imageStats.pending}</div>
               <div className="text-xs text-muted-foreground">OCR {t('dashboard.pendingAnalysis')}</div>
             </div>
             <div className="text-center">
-              <div className="text-lg font-bold text-amber-600">{imageStats.vision_pending}</div>
+              <div className="text-lg font-bold text-amber-600 dark:text-amber-400">{imageStats.vision_pending}</div>
               <div className="text-xs text-muted-foreground">Vision {t('dashboard.pendingAnalysis')}</div>
             </div>
           </div>
@@ -215,11 +215,11 @@ export default function Dashboard() {
             <div className="mt-3">
               <div className="h-1.5 bg-muted rounded-full overflow-hidden flex">
                 <div
-                  className="h-full bg-green-500 transition-all duration-300"
+                  className="h-full bg-green-500 dark:bg-green-600 transition-all duration-300"
                   style={{ width: `${Math.round((imageStats.ocr_done / imageStats.total) * 100)}%` }}
                 />
                 <div
-                  className="h-full bg-blue-500 transition-all duration-300"
+                  className="h-full bg-blue-500 dark:bg-blue-600 transition-all duration-300"
                   style={{ width: `${Math.round(((imageStats.vision_done - imageStats.ocr_done) / imageStats.total) * 100)}%` }}
                 />
               </div>
@@ -365,7 +365,7 @@ export default function Dashboard() {
         <div>
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-              <Lightbulb className="h-5 w-5 text-amber-500" aria-hidden="true" />
+              <Lightbulb className="h-5 w-5 text-amber-500 dark:text-amber-400" aria-hidden="true" />
               <h3 className="text-lg font-semibold">{t('dashboard.rediscoveryTitle')}</h3>
             </div>
             <button
@@ -392,7 +392,7 @@ export default function Dashboard() {
                   to={`/notes/${item.note_id}`}
                   className={cn(
                     'block p-4 border border-border rounded-lg',
-                    'hover:border-amber-500/40 hover:bg-amber-50/30 transition-colors duration-200',
+                    'hover:border-amber-500/40 hover:bg-amber-50/30 dark:hover:bg-amber-900/20 transition-colors duration-200',
                     'motion-reduce:transition-none'
                   )}
                 >
@@ -405,7 +405,7 @@ export default function Dashboard() {
                     </p>
                   )}
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 font-medium">
                       {t('dashboard.rediscoverySimilarity', { percent })}
                     </span>
                     {daysAgo !== null && (

@@ -9,8 +9,10 @@ import { useSearchIndex } from '@/hooks/useSearchIndex'
 import { useImageSync } from '@/hooks/useImageSync'
 import { useBatchImageAnalysis } from '@/hooks/useBatchImageAnalysis'
 import { useImageAnalysisStats } from '@/hooks/useImageAnalysisStats'
+import { useTheme } from '@/hooks/useTheme'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
 import { EmptyState } from '@/components/EmptyState'
+import { Breadcrumb } from '@/components/Breadcrumb'
 import {
   OAuthSection,
   SettingRow,
@@ -42,6 +44,9 @@ import {
   Columns3,
   Eye,
   Tag,
+  Sun,
+  Moon,
+  Monitor,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -168,6 +173,10 @@ export default function Settings() {
 
   return (
     <div className="p-6 flex flex-col gap-6">
+      <Breadcrumb items={[
+        { label: t('sidebar.dashboard'), to: '/' },
+        { label: t('settings.title') }
+      ]} />
       <div>
         <h1 className="text-2xl font-bold mb-1">{t('settings.title')}</h1>
         <p className="text-sm text-muted-foreground">{t('settings.subtitle')}</p>
@@ -200,6 +209,7 @@ export default function Settings() {
         {activeTab === 'general' && (
           <div className="flex flex-col gap-6">
             <LanguageSection />
+            <ThemeSection />
             <EditorWidthSection />
             <TimezoneSection
               data={data}
@@ -1814,6 +1824,48 @@ function QualityGateSection() {
             </label>
           </div>
         )}
+      </div>
+    </div>
+  )
+}
+
+function ThemeSection() {
+  const { t } = useTranslation()
+  const { theme, setTheme } = useTheme()
+
+  const themeOptions = [
+    { value: 'light' as const, labelKey: 'settings.theme.light', icon: Sun },
+    { value: 'dark' as const, labelKey: 'settings.theme.dark', icon: Moon },
+    { value: 'system' as const, labelKey: 'settings.theme.system', icon: Monitor },
+  ]
+
+  return (
+    <div className="p-4 border border-input rounded-md">
+      <h3 className="text-lg font-semibold mb-3">
+        {t('settings.theme.title')}
+      </h3>
+      <p className="text-sm text-muted-foreground mb-4">
+        {t('settings.theme.description')}
+      </p>
+      <div className="flex gap-3">
+        {themeOptions.map((option) => {
+          const Icon = option.icon
+          return (
+            <button
+              key={option.value}
+              onClick={() => setTheme(option.value)}
+              className={cn(
+                'flex-1 flex flex-col items-center gap-2 px-4 py-3 rounded-md border text-sm font-medium transition-colors',
+                theme === option.value
+                  ? 'border-primary bg-primary/10 text-primary'
+                  : 'border-input hover:bg-accent',
+              )}
+            >
+              <Icon className="h-5 w-5" aria-hidden="true" />
+              {t(option.labelKey)}
+            </button>
+          )
+        })}
       </div>
     </div>
   )

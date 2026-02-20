@@ -8,18 +8,18 @@ import type { CategoryPreset } from '@/lib/categories'
 import { cn } from '@/lib/utils'
 
 const COLOR_OPTIONS = [
-  { value: 'bg-blue-100 text-blue-700', label: 'Blue', preview: 'bg-blue-200' },
-  { value: 'bg-green-100 text-green-700', label: 'Green', preview: 'bg-green-200' },
-  { value: 'bg-purple-100 text-purple-700', label: 'Purple', preview: 'bg-purple-200' },
-  { value: 'bg-orange-100 text-orange-700', label: 'Orange', preview: 'bg-orange-200' },
-  { value: 'bg-red-100 text-red-700', label: 'Red', preview: 'bg-red-200' },
-  { value: 'bg-gray-100 text-gray-700', label: 'Gray', preview: 'bg-gray-200' },
-  { value: 'bg-yellow-100 text-yellow-700', label: 'Yellow', preview: 'bg-yellow-200' },
-  { value: 'bg-pink-100 text-pink-700', label: 'Pink', preview: 'bg-pink-200' },
-  { value: 'bg-cyan-100 text-cyan-700', label: 'Cyan', preview: 'bg-cyan-200' },
-  { value: 'bg-teal-100 text-teal-700', label: 'Teal', preview: 'bg-teal-200' },
-  { value: 'bg-indigo-100 text-indigo-700', label: 'Indigo', preview: 'bg-indigo-200' },
-  { value: 'bg-amber-100 text-amber-700', label: 'Amber', preview: 'bg-amber-200' },
+  { value: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400', label: 'Blue', preview: 'bg-blue-200 dark:bg-blue-800' },
+  { value: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400', label: 'Green', preview: 'bg-green-200 dark:bg-green-800' },
+  { value: 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400', label: 'Purple', preview: 'bg-purple-200 dark:bg-purple-800' },
+  { value: 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400', label: 'Orange', preview: 'bg-orange-200 dark:bg-orange-800' },
+  { value: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400', label: 'Red', preview: 'bg-red-200 dark:bg-red-800' },
+  { value: 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-400', label: 'Gray', preview: 'bg-gray-200 dark:bg-gray-700' },
+  { value: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400', label: 'Yellow', preview: 'bg-yellow-200 dark:bg-yellow-800' },
+  { value: 'bg-pink-100 dark:bg-pink-900/30 text-pink-700 dark:text-pink-400', label: 'Pink', preview: 'bg-pink-200 dark:bg-pink-800' },
+  { value: 'bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-400', label: 'Cyan', preview: 'bg-cyan-200 dark:bg-cyan-800' },
+  { value: 'bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-400', label: 'Teal', preview: 'bg-teal-200 dark:bg-teal-800' },
+  { value: 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400', label: 'Indigo', preview: 'bg-indigo-200 dark:bg-indigo-800' },
+  { value: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400', label: 'Amber', preview: 'bg-amber-200 dark:bg-amber-800' },
 ]
 
 export function CategorySettingsSection() {
@@ -287,7 +287,7 @@ export function CategorySettingsSection() {
         </button>
 
         {saved && (
-          <div className="flex items-center gap-1.5 text-green-600">
+          <div className="flex items-center gap-1.5 text-green-600 dark:text-green-400">
             <CheckCircle className="h-4 w-4" />
             <span className="text-sm">{t('common.saved')}</span>
           </div>

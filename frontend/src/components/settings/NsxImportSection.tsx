@@ -82,22 +82,22 @@ export function NsxImportSection() {
         <div
           className={cn(
             'mb-4 p-3 rounded-md border',
-            importStatus.status === 'importing' && 'bg-blue-500/10 border-blue-500/20',
-            importStatus.status === 'completed' && 'bg-green-500/10 border-green-500/20',
+            importStatus.status === 'importing' && 'bg-blue-500/10 dark:bg-blue-900/30 border-blue-500/20 dark:border-blue-700/40',
+            importStatus.status === 'completed' && 'bg-green-500/10 dark:bg-green-900/30 border-green-500/20 dark:border-green-700/40',
             importStatus.status === 'error' && 'bg-destructive/10 border-destructive/20',
           )}
         >
           <div className="flex items-center gap-2 mb-2">
             {importStatus.status === 'importing' && (
               <>
-                <div className="h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-                <span className="text-sm font-medium text-blue-600">{t('common.importing', 'Importing...')}</span>
+                <div className="h-4 w-4 border-2 border-blue-500 dark:border-blue-400 border-t-transparent rounded-full animate-spin" />
+                <span className="text-sm font-medium text-blue-600 dark:text-blue-400">{t('common.importing', 'Importing...')}</span>
               </>
             )}
             {importStatus.status === 'completed' && (
               <>
-                <CheckCircle className="h-4 w-4 text-green-600" aria-hidden="true" />
-                <span className="text-sm font-medium text-green-600">{t('common.importComplete', 'Import complete')}</span>
+                <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" aria-hidden="true" />
+                <span className="text-sm font-medium text-green-600 dark:text-green-400">{t('common.importComplete', 'Import complete')}</span>
               </>
             )}
             {importStatus.status === 'error' && (

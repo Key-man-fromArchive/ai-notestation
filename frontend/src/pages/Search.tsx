@@ -275,11 +275,11 @@ export default function Search() {
 
         {/* 하이브리드 모드 임베딩 경고 */}
         {searchMode === 'hybrid' && !hasEmbeddings && (
-          <div className="flex items-start gap-3 mt-3 p-4 rounded-lg bg-amber-50 border border-amber-200 text-sm">
-            <AlertCircle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
+          <div className="flex items-start gap-3 mt-3 p-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 text-sm">
+            <AlertCircle className="h-5 w-5 text-amber-500 dark:text-amber-400 shrink-0 mt-0.5" />
             <div className="flex-1">
-              <p className="font-medium text-amber-800">{t('settings.searchIndexing')}</p>
-              <p className="text-amber-700 mt-0.5">
+              <p className="font-medium text-amber-800 dark:text-amber-300">{t('settings.searchIndexing')}</p>
+              <p className="text-amber-700 dark:text-amber-400 mt-0.5">
                 {t('settings.searchIndexDesc')}
               </p>
             </div>
@@ -288,14 +288,14 @@ export default function Search() {
                 onClick={() => triggerIndex()}
                 className={cn(
                   'shrink-0 px-3 py-1.5 rounded-md text-xs font-medium',
-                  'bg-amber-600 text-white hover:bg-amber-700 transition-colors'
+                  'bg-amber-600 dark:bg-amber-700 text-white hover:bg-amber-700 dark:hover:bg-amber-600 transition-colors'
                 )}
               >
                 {t('settings.startIndex')}
               </button>
             )}
             {isIndexing && (
-              <Loader2 className="h-4 w-4 animate-spin text-amber-600 shrink-0 mt-0.5" />
+              <Loader2 className="h-4 w-4 animate-spin text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
             )}
           </div>
         )}
@@ -421,8 +421,8 @@ export default function Search() {
                 <span
                   className={cn(
                     'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium cursor-help',
-                    judgeInfo.strategy === 'fts_only' && 'bg-blue-100 text-blue-700',
-                    judgeInfo.strategy === 'hybrid' && 'bg-emerald-100 text-emerald-700',
+                    judgeInfo.strategy === 'fts_only' && 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400',
+                    judgeInfo.strategy === 'hybrid' && 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400',
                   )}
                   title={
                     judgeInfo.strategy === 'fts_only'
@@ -516,9 +516,9 @@ export default function Search() {
                               key={e.engine}
                               className={cn(
                                 'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium',
-                                e.engine === 'fts' && 'bg-blue-100 text-blue-700',
-                                e.engine === 'semantic' && 'bg-purple-100 text-purple-700',
-                                e.engine === 'trigram' && 'bg-amber-100 text-amber-700',
+                                e.engine === 'fts' && 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400',
+                                e.engine === 'semantic' && 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400',
+                                e.engine === 'trigram' && 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400',
                               )}
                             >
                               {e.engine === 'fts' ? t('search.engineFts') :

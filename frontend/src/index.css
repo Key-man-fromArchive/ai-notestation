@@ -4,7 +4,7 @@
 @import "tailwindcss";
 
 @theme {
-  /* shadcn/ui 호환 디자인 토큰 (Light mode only) */
+  /* shadcn/ui 호환 디자인 토큰 (Light mode) */
   --color-background: oklch(100% 0 0);
   --color-foreground: oklch(9.8% 0.023 286);
 
@@ -36,6 +36,29 @@
   --radius-lg: 0.5rem;
   --radius-md: calc(0.5rem - 2px);
   --radius-sm: calc(0.5rem - 4px);
+}
+
+/* Dark mode tokens */
+.dark {
+  --color-background: oklch(12% 0.01 280);
+  --color-foreground: oklch(93% 0.005 260);
+  --color-card: oklch(16% 0.012 270);
+  --color-card-foreground: oklch(93% 0.005 260);
+  --color-popover: oklch(16% 0.012 270);
+  --color-popover-foreground: oklch(93% 0.005 260);
+  --color-primary: oklch(65% 0.18 263);
+  --color-primary-foreground: oklch(100% 0 0);
+  --color-secondary: oklch(22% 0.015 260);
+  --color-secondary-foreground: oklch(90% 0.005 260);
+  --color-muted: oklch(20% 0.01 260);
+  --color-muted-foreground: oklch(65% 0.01 260);
+  --color-accent: oklch(22% 0.015 260);
+  --color-accent-foreground: oklch(90% 0.005 260);
+  --color-destructive: oklch(55% 0.2 25);
+  --color-destructive-foreground: oklch(100% 0 0);
+  --color-border: oklch(28% 0.01 260);
+  --color-input: oklch(25% 0.01 260);
+  --color-ring: oklch(65% 0.18 263);
 }
 
 * {

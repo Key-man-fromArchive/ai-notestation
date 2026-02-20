@@ -49,9 +49,50 @@ from app.utils.note_utils import (
     truncate_snippet,
 )
 
+# Router instance
+router = APIRouter(tags=["notes"])
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["notes"])
+
+# === Quick Search for Command Palette ===
+
+
+class QuickSearchItem(BaseModel):
+    """Lightweight note item for quick search."""
+
+    note_id: str
+    title: str
+    notebook: str | None = None
+
+
+class QuickSearchResponse(BaseModel):
+    items: list[QuickSearchItem]
+
+
+@router.get("/notes/quick-search", response_model=QuickSearchResponse)
+async def quick_search_notes(
+    q: str = Query("", min_length=1, description="Search query"),
+    limit: int = Query(10, ge=1, le=30, description="Maximum results"),
+    current_user: dict = Depends(get_current_user),  # noqa: ARG001, B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> QuickSearchResponse:
+    """Quick title search for command palette.
+
+    Uses ILIKE for simple fuzzy matching on note titles.
+    """
+    stmt = (
+        select(Note.synology_note_id, Note.title, Note.notebook_name)
+        .where(Note.title.ilike(f"%{q}%"))
+        .order_by(Note.source_updated_at.desc().nulls_last())
+        .limit(limit)
+    )
+    result = await db.execute(stmt)
+    rows = result.all()
+    return QuickSearchResponse(
+        items=[QuickSearchItem(note_id=r[0], title=r[1], notebook=r[2]) for r in rows]
+    )
+
+
 settings = get_settings()
 
 

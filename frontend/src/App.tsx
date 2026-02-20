@@ -10,6 +10,7 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import { Layout } from './components/Layout'
 import { LoadingSpinner } from './components/LoadingSpinner'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { ThemeProvider } from './hooks/useTheme'
 
 // Lazy load all pages for code splitting
 const Dashboard = lazy(() => import('./pages/Dashboard'))
@@ -102,23 +103,25 @@ function App() {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <AuthProvider>
-          <Suspense
-            fallback={
-              <div className="flex items-center justify-center min-h-screen">
-                <LoadingSpinner size="lg" />
-              </div>
-            }
-          >
-            <Routes>
-              <Route path="/login" element={<Login />} />
-              <Route path="/signup" element={<Signup />} />
-              <Route path="/setup" element={<Setup />} />
-              <Route path="/shared/:token" element={<SharedView />} />
-              <Route path="/*" element={<ProtectedRoutes />} />
-            </Routes>
-          </Suspense>
-        </AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <Suspense
+              fallback={
+                <div className="flex items-center justify-center min-h-screen">
+                  <LoadingSpinner size="lg" />
+                </div>
+              }
+            >
+              <Routes>
+                <Route path="/login" element={<Login />} />
+                <Route path="/signup" element={<Signup />} />
+                <Route path="/setup" element={<Setup />} />
+                <Route path="/shared/:token" element={<SharedView />} />
+                <Route path="/*" element={<ProtectedRoutes />} />
+              </Routes>
+            </Suspense>
+          </AuthProvider>
+        </ThemeProvider>
       </QueryClientProvider>
     </ErrorBoundary>
   )

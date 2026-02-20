@@ -4,8 +4,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Notebook, Tag, Paperclip, Image, File, FileText, AlertCircle, Calendar, Share2, AlertTriangle, CloudOff, CloudUpload, CloudDownload, Download, Loader2, Check, Sparkles, X, Plus, Wand2, Link2, Eye, ScanText, RotateCcw, CheckCircle2, Save, Globe, BookOpen, Beaker } from 'lucide-react'
+import { Notebook, Tag, Paperclip, Image, File, FileText, AlertCircle, Calendar, Share2, AlertTriangle, CloudOff, CloudUpload, CloudDownload, Download, Loader2, Check, Sparkles, X, Plus, Wand2, Link2, Eye, ScanText, RotateCcw, CheckCircle2, Save, Globe, BookOpen, Beaker } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { Breadcrumb } from '@/components/Breadcrumb'
 import { apiClient } from '@/lib/api'
 import { useNote } from '@/hooks/useNote'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -667,14 +668,14 @@ export default function NoteDetail() {
   return (
     <div className="p-6 h-full overflow-y-auto">
       <div className={`${editorWidthClass} mx-auto p-6`}>
-        {/* 뒤로가기 버튼 */}
-        <button
-          onClick={() => navigate('/notes')}
-          className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6 transition-colors"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          {t('notes.backToList')}
-        </button>
+        {/* Breadcrumb navigation */}
+        <div className="mb-6">
+          <Breadcrumb items={[
+            { label: t('sidebar.notes'), to: '/notes' },
+            ...(note.notebook ? [{ label: note.notebook, to: '/notebooks' }] : []),
+            { label: note.title }
+          ]} />
+        </div>
 
         {/* 노트 제목 */}
         <div className="flex items-start justify-between gap-4 mb-2">
@@ -682,7 +683,7 @@ export default function NoteDetail() {
           <div className="flex items-center gap-2">
             {/* Sync status badges */}
             {note.sync_status === 'local_modified' && (
-              <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded bg-amber-100 text-amber-700 border border-amber-200">
+              <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-700">
                 <CloudOff className="h-3.5 w-3.5" />
                 {t('notes.unsynced')}
               </span>
@@ -690,14 +691,14 @@ export default function NoteDetail() {
             {note.sync_status === 'conflict' && (
               <button
                 onClick={() => setIsConflictOpen(true)}
-                className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded bg-red-100 text-red-700 border border-red-200 hover:bg-red-200"
+                className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-700 hover:bg-red-200 dark:hover:bg-red-900/40"
               >
                 <AlertTriangle className="h-3.5 w-3.5" />
                 {t('notes.conflictResolve')}
               </button>
             )}
             {note.sync_status === 'local_only' && (
-              <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded bg-purple-100 text-purple-700 border border-purple-200">
+              <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 border border-purple-200 dark:border-purple-700">
                 <CloudOff className="h-3.5 w-3.5" />
                 {t('notes.localOnly')}
               </span>
@@ -708,9 +709,9 @@ export default function NoteDetail() {
               disabled={editorSaveStatus === 'saving'}
               className={`inline-flex items-center gap-2 text-xs px-2.5 py-1.5 rounded border transition-colors ${
                 editorSaveStatus === 'saved'
-                  ? 'border-green-300 bg-green-50 text-green-700'
+                  ? 'border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400'
                   : editorSaveStatus === 'error'
-                    ? 'border-red-300 bg-red-50 text-red-700'
+                    ? 'border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400'
                     : 'border-input text-muted-foreground hover:text-foreground hover:border-primary/30'
               }`}
             >
@@ -734,13 +735,13 @@ export default function NoteDetail() {
             {/* Pull button (NAS → local) */}
             {pullState === 'conflict' ? (
               <div className="inline-flex items-center gap-1">
-                <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded border border-amber-300 bg-amber-50 text-amber-700">
+                <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400">
                   <AlertTriangle className="h-3.5 w-3.5" />
                   {pullMessage || t('notes.localModified')}
                 </span>
                 <button
                   onClick={() => handlePullSync(true)}
-                  className="text-xs px-2 py-1.5 rounded border border-red-300 bg-red-50 text-red-700 hover:bg-red-100"
+                  className="text-xs px-2 py-1.5 rounded border border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30"
                 >
                   {t('notes.forcePull')}
                 </button>
@@ -758,11 +759,11 @@ export default function NoteDetail() {
                 title={pullMessage || undefined}
                 className={`inline-flex items-center gap-2 text-xs px-2.5 py-1.5 rounded border transition-colors ${
                   pullState === 'success'
-                    ? 'border-green-300 bg-green-50 text-green-700'
+                    ? 'border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400'
                     : pullState === 'error'
-                      ? 'border-red-300 bg-red-50 text-red-700'
+                      ? 'border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400'
                       : pullState === 'skipped'
-                        ? 'border-blue-300 bg-blue-50 text-blue-700'
+                        ? 'border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400'
                         : 'border-input text-muted-foreground hover:text-foreground hover:border-primary/30'
                 }`}
               >
@@ -779,13 +780,13 @@ export default function NoteDetail() {
             {/* Push button (local → NAS) */}
             {syncState === 'conflict' ? (
               <div className="inline-flex items-center gap-1">
-                <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded border border-amber-300 bg-amber-50 text-amber-700">
+                <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400">
                   <AlertTriangle className="h-3.5 w-3.5" />
                   {syncMessage || t('notes.nasNewer')}
                 </span>
                 <button
                   onClick={() => handlePushSync(true)}
-                  className="text-xs px-2 py-1.5 rounded border border-red-300 bg-red-50 text-red-700 hover:bg-red-100"
+                  className="text-xs px-2 py-1.5 rounded border border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30"
                 >
                   {t('notes.forcePush')}
                 </button>
@@ -803,11 +804,11 @@ export default function NoteDetail() {
                 title={syncMessage || undefined}
                 className={`inline-flex items-center gap-2 text-xs px-2.5 py-1.5 rounded border transition-colors ${
                   syncState === 'success'
-                    ? 'border-green-300 bg-green-50 text-green-700'
+                    ? 'border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400'
                     : syncState === 'error'
-                      ? 'border-red-300 bg-red-50 text-red-700'
+                      ? 'border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400'
                       : syncState === 'skipped'
-                        ? 'border-blue-300 bg-blue-50 text-blue-700'
+                        ? 'border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400'
                         : 'border-input text-muted-foreground hover:text-foreground hover:border-primary/30'
                 }`}
               >
@@ -852,8 +853,8 @@ export default function NoteDetail() {
 
         {/* AI 제목/태그 제안 미리보기 */}
         {summarizeState === 'preview' && (
-          <div className="mb-4 rounded-lg border border-violet-200 bg-violet-50/50 p-4">
-            <div className="flex items-center gap-2 mb-3 text-sm font-medium text-violet-700">
+          <div className="mb-4 rounded-lg border border-violet-200 dark:border-violet-700 bg-violet-50/50 dark:bg-violet-900/20 p-4">
+            <div className="flex items-center gap-2 mb-3 text-sm font-medium text-violet-700 dark:text-violet-400">
               <Sparkles className="h-4 w-4" />
               {t('notes.aiSuggestion')}
             </div>
@@ -864,7 +865,7 @@ export default function NoteDetail() {
                   type="text"
                   value={suggestedTitle}
                   onChange={(e) => setSuggestedTitle(e.target.value)}
-                  className="w-full px-3 py-1.5 text-sm rounded border border-violet-200 bg-white focus:outline-none focus:ring-2 focus:ring-violet-300"
+                  className="w-full px-3 py-1.5 text-sm rounded border border-violet-200 dark:border-violet-700 bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600"
                 />
               </div>
               <div>
@@ -873,7 +874,7 @@ export default function NoteDetail() {
                   {suggestedTags.map((tag, i) => (
                     <span
                       key={i}
-                      className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-violet-100 text-violet-700"
+                      className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-400"
                     >
                       {tag}
                       <button
@@ -896,7 +897,7 @@ export default function NoteDetail() {
                 <button
                   onClick={handleApplySummary}
                   disabled={isApplying}
-                  className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded bg-violet-600 dark:bg-violet-700 text-white hover:bg-violet-700 dark:hover:bg-violet-600 disabled:opacity-50"
                 >
                   {isApplying && <Loader2 className="h-3 w-3 animate-spin" />}
                   {t('common.apply')}

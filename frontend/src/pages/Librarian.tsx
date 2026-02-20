@@ -6,6 +6,7 @@ import { useSearch } from '@/hooks/useSearch'
 import { useSearchIndex } from '@/hooks/useSearchIndex'
 import { EmptyState } from '@/components/EmptyState'
 import { InsightHistory } from '@/components/InsightHistory'
+import { Breadcrumb } from '@/components/Breadcrumb'
 import {
   BookOpenCheck,
   Search,
@@ -103,6 +104,10 @@ export default function Librarian() {
 
   return (
     <div className="p-6 flex flex-col gap-8 max-w-3xl mx-auto">
+      <Breadcrumb items={[
+        { label: t('sidebar.dashboard'), to: '/' },
+        { label: t('librarian.title') }
+      ]} />
       {/* Hero */}
       <div className="text-center pt-4">
         <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 mb-4">

@@ -1,4 +1,7 @@
 {
+  "breadcrumb": {
+    "home": "Home"
+  },
   "common": {
     "save": "Save",
     "saving": "Saving...",
@@ -54,7 +57,17 @@
     "operations": "Operations",
     "admin": "Admin",
     "demo": "Demo",
-    "logout": "Logout"
+    "logout": "Logout",
+    "collapse": "Collapse sidebar",
+    "expand": "Expand sidebar"
+  },
+  "commandPalette": {
+    "placeholder": "Search commands...",
+    "pages": "Pages",
+    "quickActions": "Quick Actions",
+    "notes": "Notes",
+    "newNote": "New Note",
+    "noResults": "No results found."
   },
   "auth": {
     "login": "Login",
@@ -501,6 +514,13 @@
     "backupDesc": "Back up or restore data",
     "oauth": "OAuth Connection",
     "language": "Language",
+    "theme": {
+      "title": "Theme",
+      "light": "Light",
+      "dark": "Dark",
+      "system": "System",
+      "description": "Choose the application color theme"
+    },
     "oauthLinkGenerating": "Generating link...",
     "oauthConnectWith": "Connect with {{label}}",
     "oauthStep1": "1. Open the link below to complete authentication:",
@@ -1219,5 +1239,17 @@
     "summarySystem": "System Info",
     "completeSetup": "Complete Setup",
     "completing": "Setting up..."
+  },
+  "shortcuts": {
+    "title": "Keyboard Shortcuts",
+    "navigation": "Navigation",
+    "actions": "Actions",
+    "general": "General",
+    "toggleSidebar": "Toggle sidebar",
+    "commandPalette": "Command palette",
+    "showHelp": "Show keyboard shortcuts",
+    "newNote": "New note",
+    "goSearch": "Go to search",
+    "goSettings": "Go to settings"
   }
 }

@@ -178,10 +178,10 @@ export function OAuthSection({ provider, label }: OAuthSectionProps) {
 
   if (connected) {
     return (
-      <div className="flex items-center justify-between p-3 bg-green-500/10 border border-green-500/20 rounded-md">
+      <div className="flex items-center justify-between p-3 bg-green-500/10 dark:bg-green-900/30 border border-green-500/20 dark:border-green-700/40 rounded-md">
         <div className="flex items-center gap-2">
-          <CheckCircle className="h-4 w-4 text-green-600" aria-hidden="true" />
-          <span className="text-sm font-medium text-green-700">
+          <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" aria-hidden="true" />
+          <span className="text-sm font-medium text-green-700 dark:text-green-400">
             {label} {t('common.connected', 'Connected')}
           </span>
           {email && (
@@ -300,9 +300,9 @@ export function OAuthSection({ provider, label }: OAuthSectionProps) {
             </div>
 
             {codeExchangeStatus === 'success' && (
-              <div className="flex items-center gap-2 p-2 bg-green-500/10 border border-green-500/20 rounded-md">
-                <CheckCircle className="h-3.5 w-3.5 text-green-600" />
-                <span className="text-xs text-green-700">
+              <div className="flex items-center gap-2 p-2 bg-green-500/10 dark:bg-green-900/30 border border-green-500/20 dark:border-green-700/40 rounded-md">
+                <CheckCircle className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
+                <span className="text-xs text-green-700 dark:text-green-400">
                   {t('settings.oauthAuthComplete')}
                 </span>
               </div>
@@ -480,7 +480,7 @@ export function OAuthSection({ provider, label }: OAuthSectionProps) {
                   title={t('settings.oauthCopyCode')}
                 >
                   {copied ? (
-                    <Check className="h-4 w-4 text-green-600" />
+                    <Check className="h-4 w-4 text-green-600 dark:text-green-400" />
                   ) : (
                     <Copy className="h-4 w-4 text-muted-foreground" />
                   )}
@@ -494,12 +494,12 @@ export function OAuthSection({ provider, label }: OAuthSectionProps) {
           )}
 
           {deviceStatus === 'completed' && (
-            <div className="flex items-center gap-2 p-2 bg-green-500/10 border border-green-500/20 rounded-md">
+            <div className="flex items-center gap-2 p-2 bg-green-500/10 dark:bg-green-900/30 border border-green-500/20 dark:border-green-700/40 rounded-md">
               <CheckCircle
-                className="h-3.5 w-3.5 text-green-600"
+                className="h-3.5 w-3.5 text-green-600 dark:text-green-400"
                 aria-hidden="true"
               />
-              <span className="text-xs text-green-700">
+              <span className="text-xs text-green-700 dark:text-green-400">
                 {t('settings.oauthAuthComplete')}
               </span>
             </div>
@@ -608,9 +608,9 @@ function ApiKeySection({
       </div>
 
       {status === 'success' && (
-        <div className="flex items-center gap-2 p-2 bg-green-500/10 border border-green-500/20 rounded-md">
-          <CheckCircle className="h-3.5 w-3.5 text-green-600" />
-          <span className="text-xs text-green-700">{t('common.apiKeySaved', 'API key saved')}</span>
+        <div className="flex items-center gap-2 p-2 bg-green-500/10 dark:bg-green-900/30 border border-green-500/20 dark:border-green-700/40 rounded-md">
+          <CheckCircle className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
+          <span className="text-xs text-green-700 dark:text-green-400">{t('common.apiKeySaved', 'API key saved')}</span>
         </div>
       )}
 

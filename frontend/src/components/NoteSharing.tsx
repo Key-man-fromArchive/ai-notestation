@@ -29,9 +29,9 @@ function PermissionBadge({ permission }: { permission: string }) {
     <span
       className={cn(
         'inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium',
-        permission === 'admin' && 'bg-purple-100 text-purple-700',
-        permission === 'write' && 'bg-blue-100 text-blue-700',
-        permission === 'read' && 'bg-gray-100 text-gray-700',
+        permission === 'admin' && 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400',
+        permission === 'write' && 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400',
+        permission === 'read' && 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-400',
       )}
     >
       <Icon className="h-3 w-3" />

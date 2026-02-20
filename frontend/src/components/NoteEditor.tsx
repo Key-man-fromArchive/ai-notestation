@@ -141,7 +141,7 @@ function SaveStatusIndicator({ status }: { status: SaveStatus }) {
   }
   if (status === 'saved') {
     return (
-      <span className="inline-flex items-center gap-1.5 text-xs text-green-600">
+      <span className="inline-flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400">
         <Check className="h-3 w-3" />
         {t('notes.autoSaved')}
       </span>
@@ -169,7 +169,7 @@ export const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(function
   const shortcutsRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const editorRef = useRef<ReturnType<typeof useEditor>>(null)
-  const handleDropFilesRef = useRef<(files: File[], view: unknown, event: DragEvent | null) => void>()
+  const handleDropFilesRef = useRef<(files: File[], view: unknown, event: DragEvent | null) => void>(undefined)
 
   const token = apiClient.getToken()
 
