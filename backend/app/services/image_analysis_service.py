@@ -19,6 +19,18 @@ from app.models import NoteImage
 
 logger = logging.getLogger(__name__)
 
+# Skip analysis for tiny/placeholder images (e.g. NoteStation transparent.gif)
+_MIN_IMAGE_BYTES = 2048  # 2KB — images smaller than this are likely placeholders
+_SKIP_MIME_TYPES = {"image/gif"}  # GIF rarely contains meaningful scientific content
+
+def _should_skip_image(image_bytes: bytes, mime_type: str) -> str | None:
+    """Return a skip reason if the image should not be analyzed, else None."""
+    if len(image_bytes) < _MIN_IMAGE_BYTES:
+        return f"too small ({len(image_bytes)}B < {_MIN_IMAGE_BYTES}B)"
+    if mime_type in _SKIP_MIME_TYPES:
+        return f"skipped mime type ({mime_type})"
+    return None
+
 # Vision prompt for image description
 _VISION_PROMPT = (
     "Describe this image concisely in 2-3 sentences. "
@@ -55,7 +67,9 @@ class ImageAnalysisService:
                 )
             )
             vision_done = await db.scalar(
-                select(func.count()).select_from(NoteImage).where(NoteImage.vision_status == "completed")
+                select(func.count()).select_from(NoteImage).where(
+                    NoteImage.vision_status.in_(["completed", "skipped"])
+                )
             )
             ocr_failed = await db.scalar(
                 select(func.count()).select_from(NoteImage).where(NoteImage.extraction_status == "failed")
@@ -74,7 +88,11 @@ class ImageAnalysisService:
             "vision_pending": (total or 0) - (vision_done or 0) - (vision_failed or 0),
         }
 
-    async def run_batch(self, on_progress: callable | None = None) -> dict:
+    async def run_batch(
+        self,
+        on_progress: callable | None = None,
+        is_cancelled: callable | None = None,
+    ) -> dict:
         """Run batch OCR + Vision analysis as two independent pipelines.
 
         Pipeline 1: OCR  (concurrency=1)  — all images needing OCR
@@ -84,6 +102,7 @@ class ImageAnalysisService:
 
         Args:
             on_progress: Optional callback(processed, total, ocr_done, vision_done, failed)
+            is_cancelled: Optional callable returning True if cancellation was requested
 
         Returns:
             Summary dict with counts.
@@ -109,7 +128,7 @@ class ImageAnalysisService:
                         select(NoteImage.id).where(
                             or_(
                                 NoteImage.vision_status.is_(None),
-                                NoteImage.vision_status != "completed",
+                                ~NoteImage.vision_status.in_(["completed", "skipped"]),
                             )
                         )
                     )
@@ -139,7 +158,11 @@ class ImageAnalysisService:
                     )
 
         async def _ocr_one(image_id: int):
+            if is_cancelled and is_cancelled():
+                return
             async with self._ocr_sem:
+                if is_cancelled and is_cancelled():
+                    return
                 async with async_session_factory() as db:
                     img = await db.get(NoteImage, image_id)
                     if not img:
@@ -155,7 +178,11 @@ class ImageAnalysisService:
                 await _report(image_id, "ocr", ok)
 
         async def _vision_one(image_id: int):
+            if is_cancelled and is_cancelled():
+                return
             async with self._vision_sem:
+                if is_cancelled and is_cancelled():
+                    return
                 async with async_session_factory() as db:
                     img = await db.get(NoteImage, image_id)
                     if not img:
@@ -216,7 +243,7 @@ class ImageAnalysisService:
                     result["error"] = True
 
             # Step 2: Vision if needed
-            if img.vision_status != "completed":
+            if img.vision_status not in ("completed", "skipped"):
                 vision_ok = await self._run_vision(db, img, image_bytes, mime_type)
                 if vision_ok:
                     result["vision"] = True
@@ -230,6 +257,12 @@ class ImageAnalysisService:
 
     async def _run_ocr(self, db: AsyncSession, img: NoteImage, image_bytes: bytes, mime_type: str) -> bool:
         """Run OCR on a single image."""
+        skip_reason = _should_skip_image(image_bytes, mime_type)
+        if skip_reason:
+            logger.debug("Skipping OCR for image %d: %s", img.id, skip_reason)
+            img.extraction_status = "empty"
+            await db.flush()
+            return True
         if True:
             try:
                 from app.services.ocr_service import OCRService
@@ -250,6 +283,12 @@ class ImageAnalysisService:
 
     async def _run_vision(self, db: AsyncSession, img: NoteImage, image_bytes: bytes, mime_type: str) -> bool:
         """Run Vision analysis on a single image."""
+        skip_reason = _should_skip_image(image_bytes, mime_type)
+        if skip_reason:
+            logger.debug("Skipping Vision for image %d: %s", img.id, skip_reason)
+            img.vision_status = "skipped"
+            await db.flush()
+            return True
         if True:
             try:
                 from app.ai_router.router import AIRouter

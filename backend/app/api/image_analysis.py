@@ -20,7 +20,7 @@ class ImageAnalysisState:
     """In-memory state tracker for batch processing progress."""
 
     def __init__(self) -> None:
-        self.status: str = "idle"  # idle | processing | completed | error
+        self.status: str = "idle"  # idle | processing | completed | error | cancelled
         self.total: int = 0
         self.processed: int = 0
         self.ocr_done: int = 0
@@ -29,6 +29,7 @@ class ImageAnalysisState:
         self.error_message: str | None = None
         self.started_at: str | None = None
         self.completed_at: str | None = None
+        self.cancel_requested: bool = False
 
 
 _state = ImageAnalysisState()
@@ -94,6 +95,7 @@ async def trigger_analysis():
     _state.error_message = None
     _state.started_at = datetime.now(UTC).isoformat()
     _state.completed_at = None
+    _state.cancel_requested = False
 
     # Launch background task
     asyncio.create_task(_run_batch_background())
@@ -116,22 +118,33 @@ async def _run_batch_background():
             _state.vision_done = vision_done
             _state.failed = failed
 
-        result = await service.run_batch(on_progress=on_progress)
+        def is_cancelled():
+            return _state.cancel_requested
 
-        _state.status = "completed"
+        result = await service.run_batch(on_progress=on_progress, is_cancelled=is_cancelled)
+
+        if _state.cancel_requested:
+            _state.status = "cancelled"
+            _state.completed_at = datetime.now(UTC).isoformat()
+            logger.info(
+                "Batch analysis cancelled at %d/%d processed",
+                result["processed"], result.get("total", _state.total),
+            )
+        else:
+            _state.status = "completed"
+            _state.completed_at = datetime.now(UTC).isoformat()
+            logger.info(
+                "Batch analysis completed: %d processed, %d OCR, %d Vision, %d failed",
+                result["processed"],
+                result["ocr_done"],
+                result["vision_done"],
+                result["failed"],
+            )
+
         _state.processed = result["processed"]
         _state.ocr_done = result["ocr_done"]
         _state.vision_done = result["vision_done"]
         _state.failed = result["failed"]
-        _state.completed_at = datetime.now(UTC).isoformat()
-
-        logger.info(
-            "Batch analysis completed: %d processed, %d OCR, %d Vision, %d failed",
-            result["processed"],
-            result["ocr_done"],
-            result["vision_done"],
-            result["failed"],
-        )
     except Exception as exc:
         _state.status = "error"
         _state.error_message = str(exc)
@@ -153,6 +166,18 @@ async def get_analysis_status():
         started_at=_state.started_at,
         completed_at=_state.completed_at,
     )
+
+
+@router.post("/cancel", response_model=TriggerResponse)
+async def cancel_analysis():
+    """Request cancellation of the running batch analysis."""
+    if _state.status != "processing":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="No batch analysis is currently running.",
+        )
+    _state.cancel_requested = True
+    return TriggerResponse(status="cancelling", message="Cancellation requested. Processing will stop shortly.")
 
 
 @router.get("/stats", response_model=StatsResponse)

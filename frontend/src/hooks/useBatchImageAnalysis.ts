@@ -48,6 +48,15 @@ export function useBatchImageAnalysis() {
     }
   }, [fetchStatus])
 
+  const cancelBatch = useCallback(async () => {
+    try {
+      await apiClient.post('/image-analysis/cancel', {})
+      fetchStatus()
+    } catch {
+      // Ignore errors during cancel
+    }
+  }, [fetchStatus])
+
   // Poll status while processing
   useEffect(() => {
     if (!isProcessing) return
@@ -82,6 +91,7 @@ export function useBatchImageAnalysis() {
     progress,
     isProcessing,
     triggerBatch,
+    cancelBatch,
     refetch: fetchStatus,
   }
 }

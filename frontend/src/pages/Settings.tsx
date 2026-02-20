@@ -813,6 +813,7 @@ function BatchImageAnalysisSection() {
     startedAt,
     completedAt,
     triggerBatch,
+    cancelBatch,
   } = useBatchImageAnalysis()
   const { stats } = useImageAnalysisStats()
   const [showFailedDetail, setShowFailedDetail] = useState(false)
@@ -1007,19 +1008,33 @@ function BatchImageAnalysisSection() {
         </div>
       )}
 
-      <button
-        onClick={handleTrigger}
-        disabled={isProcessing}
-        className={cn(
-          'flex items-center gap-2 px-4 py-2 rounded-md',
-          'bg-primary text-primary-foreground',
-          'hover:bg-primary/90 transition-colors',
-          'disabled:opacity-50 disabled:cursor-not-allowed',
+      <div className="flex items-center gap-2">
+        <button
+          onClick={handleTrigger}
+          disabled={isProcessing}
+          className={cn(
+            'flex items-center gap-2 px-4 py-2 rounded-md',
+            'bg-primary text-primary-foreground',
+            'hover:bg-primary/90 transition-colors',
+            'disabled:opacity-50 disabled:cursor-not-allowed',
+          )}
+        >
+          <Eye className="h-4 w-4" aria-hidden="true" />
+          {isProcessing ? t('settings.batchAnalyzing') : t('settings.batchAnalysisButton')}
+        </button>
+        {isProcessing && (
+          <button
+            onClick={cancelBatch}
+            className={cn(
+              'flex items-center gap-2 px-4 py-2 rounded-md',
+              'bg-destructive text-destructive-foreground',
+              'hover:bg-destructive/90 transition-colors',
+            )}
+          >
+            {t('settings.batchAnalysisCancel')}
+          </button>
         )}
-      >
-        <Eye className="h-4 w-4" aria-hidden="true" />
-        {isProcessing ? t('settings.batchAnalyzing') : t('settings.batchAnalysisButton')}
-      </button>
+      </div>
     </div>
   )
 }
