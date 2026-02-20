@@ -522,3 +522,65 @@ async def revoke_notebook_access_endpoint(
     )
 
     return {"success": True}
+
+
+class TransferOwnershipRequest(BaseModel):
+    new_owner_id: int
+
+
+@router.put("/{notebook_id}/transfer-ownership")
+async def transfer_notebook_ownership(
+    notebook_id: int,
+    request: TransferOwnershipRequest,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[dict, Depends(get_current_user)],
+) -> NotebookResponse:
+    """Transfer notebook ownership. Only the current owner can transfer."""
+    stmt = select(Notebook).where(Notebook.id == notebook_id)
+    result = await db.execute(stmt)
+    notebook = result.scalar_one_or_none()
+    if not notebook:
+        raise HTTPException(status_code=404, detail="Notebook not found")
+
+    if notebook.owner_id != current_user["user_id"]:
+        raise HTTPException(status_code=403, detail="Only the owner can transfer ownership")
+
+    # Verify new owner exists
+    new_owner_stmt = select(User).where(User.id == request.new_owner_id)
+    new_owner_result = await db.execute(new_owner_stmt)
+    new_owner = new_owner_result.scalar_one_or_none()
+    if not new_owner:
+        raise HTTPException(status_code=404, detail="New owner not found")
+
+    notebook.owner_id = request.new_owner_id
+
+    # Ensure new owner has ADMIN access
+    await grant_notebook_access(
+        db, notebook_id=notebook_id, user_id=request.new_owner_id,
+        permission=NotePermission.ADMIN, granted_by=current_user["user_id"],
+    )
+
+    await db.commit()
+    await db.refresh(notebook)
+
+    await log_activity(
+        "notebook", "completed",
+        message=f"노트북 소유권 이전: {notebook.name} → {new_owner.email}",
+        details={"notebook_id": notebook_id, "new_owner_id": request.new_owner_id},
+        triggered_by=current_user["email"],
+    )
+
+    count_stmt = select(func.count(Note.id)).where(Note.notebook_id == notebook_id)
+    count_result = await db.execute(count_stmt)
+    note_count = count_result.scalar() or 0
+
+    return NotebookResponse(
+        id=notebook.id,
+        name=notebook.name,
+        description=notebook.description,
+        category=notebook.category,
+        note_count=note_count,
+        is_public=notebook.is_public,
+        created_at=notebook.created_at.isoformat(),
+        updated_at=notebook.updated_at.isoformat(),
+    )

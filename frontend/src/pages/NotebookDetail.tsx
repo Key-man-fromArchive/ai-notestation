@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
@@ -8,19 +8,23 @@ import {
   Share2,
   Users,
   AlertCircle,
-  X,
   Trash2,
   Shield,
   Eye,
   Edit,
   Network,
+  CheckSquare,
+  Square,
+  Loader2,
+  FolderOpen,
 } from 'lucide-react'
 import { Breadcrumb } from '@/components/Breadcrumb'
-import { useNotebook, useUpdateNotebook, useDeleteNotebook } from '@/hooks/useNotebooks'
-import type { NotebookCategory } from '@/types/note'
-import { useCategories, getCategoryOptions } from '@/lib/categories'
+import { useNotebook, useDeleteNotebook } from '@/hooks/useNotebooks'
+import { useBatchTrashNotes, useBatchMoveNotes } from '@/hooks/useNotes'
+import { useNotebooks } from '@/hooks/useNotebooks'
 import { useNotebookAccess } from '@/hooks/useNotebookAccess'
 import { ShareDialog } from '@/components/ShareDialog'
+import { EditNotebookModal } from '@/components/EditNotebookModal'
 import { useNotes } from '@/hooks/useNotes'
 import { NoteList } from '@/components/NoteList'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
@@ -41,126 +45,6 @@ function PermissionBadge({ permission }: { permission: string }) {
       <Icon className="h-3 w-3" />
       {option?.label ?? permission}
     </span>
-  )
-}
-
-function EditModal({
-  isOpen,
-  onClose,
-  notebookId,
-  initialName,
-  initialDescription,
-  initialCategory,
-}: {
-  isOpen: boolean
-  onClose: () => void
-  notebookId: number
-  initialName: string
-  initialDescription: string | null
-  initialCategory: string | null
-}) {
-  const { t, i18n } = useTranslation()
-  const categories = useCategories()
-  const categoryOptions = getCategoryOptions(categories)
-  const [name, setName] = useState(initialName)
-  const [description, setDescription] = useState(initialDescription ?? '')
-  const [category, setCategory] = useState<NotebookCategory | ''>(
-    (initialCategory as NotebookCategory) ?? ''
-  )
-  const { mutateAsync: updateNotebook, isPending } = useUpdateNotebook()
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!name.trim()) return
-
-    try {
-      await updateNotebook({
-        id: notebookId,
-        data: {
-          name: name.trim(),
-          description: description.trim() || undefined,
-          category: category || null,
-        },
-      })
-      onClose()
-    } catch {
-      return
-    }
-  }
-
-  if (!isOpen) return null
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative bg-card rounded-lg shadow-lg w-full max-w-md mx-4 p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold">{t('notebooks.editModalTitle')}</h2>
-          <button onClick={onClose} className="p-1 rounded hover:bg-accent" aria-label={t('common.close')}>
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit}>
-          <div className="space-y-4">
-            <div>
-              <label htmlFor="edit-name" className="text-sm font-medium">{t('notebooks.nameLabel')}</label>
-              <input
-                id="edit-name"
-                type="text"
-                value={name}
-                onChange={e => setName(e.target.value)}
-                className="w-full mt-1 px-3 py-2 rounded-md border border-input bg-background focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                required
-              />
-            </div>
-            <div>
-              <label htmlFor="edit-description" className="text-sm font-medium">{t('common.description')}</label>
-              <textarea
-                id="edit-description"
-                value={description}
-                onChange={e => setDescription(e.target.value)}
-                className="w-full mt-1 px-3 py-2 rounded-md border border-input bg-background resize-none focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                rows={3}
-              />
-            </div>
-            <div>
-              <label htmlFor="edit-category" className="text-sm font-medium">{t('notebooks.categoryLabel')}</label>
-              <select
-                id="edit-category"
-                value={category}
-                onChange={e => setCategory(e.target.value)}
-                className="w-full mt-1 px-3 py-2 rounded-md border border-input bg-background focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                {categoryOptions.map(val => {
-                  const preset = categories.find(c => c.value === val)
-                  return (
-                    <option key={val || '__none'} value={val}>
-                      {val ? (preset ? preset[i18n.language === 'ko' ? 'ko' : 'en'] : val) : t('notebooks.categoryNone')}
-                    </option>
-                  )
-                })}
-              </select>
-            </div>
-          </div>
-          <div className="mt-6 flex justify-end gap-3">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-sm rounded-md hover:bg-accent">
-              {t('common.cancel')}
-            </button>
-            <button
-              type="submit"
-              disabled={isPending || !name.trim()}
-              className={cn(
-                'px-4 py-2 text-sm rounded-md bg-primary text-primary-foreground',
-                'hover:bg-primary/90 disabled:opacity-50',
-              )}
-            >
-              {isPending ? t('common.saving') : t('common.save')}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
   )
 }
 
@@ -275,8 +159,16 @@ export default function NotebookDetail() {
 
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [isShareOpen, setIsShareOpen] = useState(false)
+  const [selectMode, setSelectMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [isBatchDeleteOpen, setIsBatchDeleteOpen] = useState(false)
+  const [isMoveOpen, setIsMoveOpen] = useState(false)
+  const [moveTarget, setMoveTarget] = useState<string>('')
   const { data: notebook, isLoading, error } = useNotebook(notebookId)
   const { mutateAsync: deleteNotebook, isPending: isDeleting } = useDeleteNotebook()
+  const batchTrash = useBatchTrashNotes()
+  const batchMove = useBatchMoveNotes()
+  const { data: notebooksData } = useNotebooks()
 
   const {
     data: notesData,
@@ -286,6 +178,30 @@ export default function NotebookDetail() {
   } = useNotes({ notebook: notebook?.name })
 
   const notes = notesData?.pages.flatMap(page => page.items) ?? []
+
+  const toggleSelectMode = useCallback(() => {
+    setSelectMode(prev => {
+      if (prev) setSelectedIds(new Set())
+      return !prev
+    })
+  }, [])
+
+  const handleSelect = useCallback((noteId: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(noteId)) next.delete(noteId)
+      else next.add(noteId)
+      return next
+    })
+  }, [])
+
+  const handleSelectAll = useCallback(() => {
+    setSelectedIds(new Set(notes.map(n => n.note_id)))
+  }, [notes])
+
+  const handleDeselectAll = useCallback(() => {
+    setSelectedIds(new Set())
+  }, [])
 
   const handleDelete = async () => {
     if (!confirm(t('notebooks.deleteConfirm'))) return
@@ -384,6 +300,20 @@ export default function NotebookDetail() {
               <FileText className="h-4 w-4" />
               {t('notebooks.notes', { count: notebook.note_count })}
             </h2>
+            {notes.length > 0 && (
+              <button
+                onClick={toggleSelectMode}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md',
+                  'border border-input',
+                  'hover:bg-muted transition-colors',
+                  selectMode && 'bg-primary/10 border-primary text-primary',
+                )}
+              >
+                {selectMode ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+                {selectMode ? t('notes.exitSelectMode') : t('notes.selectMode')}
+              </button>
+            )}
           </div>
 
           {notes.length === 0 ? (
@@ -398,6 +328,9 @@ export default function NotebookDetail() {
               hasNextPage={hasNextPage}
               isFetchingNextPage={isFetchingNextPage}
               fetchNextPage={fetchNextPage}
+              selectable={selectMode}
+              selectedIds={selectedIds}
+              onSelect={handleSelect}
             />
           )}
         </div>
@@ -407,7 +340,182 @@ export default function NotebookDetail() {
         </div>
       </div>
 
-      <EditModal
+      {/* 선택 모드 플로팅 액션바 */}
+      {selectMode && selectedIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 px-5 py-3 bg-card border border-border rounded-xl shadow-lg">
+          <span className="text-sm font-medium text-foreground">
+            {t('notes.selectedCount', { count: selectedIds.size })}
+          </span>
+          <div className="w-px h-5 bg-border" />
+          <button
+            onClick={handleSelectAll}
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {t('notes.selectAllPage')}
+          </button>
+          <button
+            onClick={handleDeselectAll}
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {t('notes.deselectAll')}
+          </button>
+          <div className="w-px h-5 bg-border" />
+          <button
+            onClick={() => {
+              setMoveTarget('')
+              setIsMoveOpen(true)
+            }}
+            disabled={batchMove.isPending}
+            className={cn(
+              'flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md',
+              'border border-input',
+              'hover:bg-muted transition-colors',
+              'disabled:opacity-50 disabled:cursor-not-allowed',
+            )}
+          >
+            {batchMove.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <FolderOpen className="h-4 w-4" />
+            )}
+            {t('notes.batchMoveToNotebook')}
+          </button>
+          <button
+            onClick={() => setIsBatchDeleteOpen(true)}
+            disabled={batchTrash.isPending}
+            className={cn(
+              'flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md',
+              'bg-destructive text-destructive-foreground',
+              'hover:bg-destructive/90 transition-colors',
+              'disabled:opacity-50 disabled:cursor-not-allowed',
+            )}
+          >
+            {batchTrash.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Trash2 className="h-4 w-4" />
+            )}
+            {batchTrash.isPending ? t('common.deleting') : t('notes.batchDelete')}
+          </button>
+        </div>
+      )}
+
+      {/* 선택 휴지통 이동 확인 다이얼로그 */}
+      {isBatchDeleteOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setIsBatchDeleteOpen(false)} />
+          <div className="relative bg-card rounded-lg border border-border shadow-lg w-full max-w-sm mx-4">
+            <div className="p-6 space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-destructive/10">
+                  <Trash2 className="h-5 w-5 text-destructive" />
+                </div>
+                <h2 className="text-lg font-semibold">{t('notes.batchDeleteConfirmTitle')}</h2>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {t('notes.batchDeleteConfirmDesc', { count: selectedIds.size })}
+              </p>
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  onClick={() => setIsBatchDeleteOpen(false)}
+                  className={cn(
+                    'px-4 py-2 text-sm rounded-md border border-input',
+                    'hover:bg-muted transition-colors',
+                  )}
+                >
+                  {t('common.cancel')}
+                </button>
+                <button
+                  onClick={async () => {
+                    await batchTrash.mutateAsync(Array.from(selectedIds))
+                    setIsBatchDeleteOpen(false)
+                    setSelectedIds(new Set())
+                    setSelectMode(false)
+                  }}
+                  disabled={batchTrash.isPending}
+                  className={cn(
+                    'px-4 py-2 text-sm rounded-md',
+                    'bg-destructive text-destructive-foreground',
+                    'hover:bg-destructive/90 transition-colors',
+                    'disabled:opacity-50 disabled:cursor-not-allowed',
+                  )}
+                >
+                  {batchTrash.isPending ? t('common.deleting') : t('common.delete')}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 노트북 이동 다이얼로그 */}
+      {isMoveOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setIsMoveOpen(false)} />
+          <div className="relative bg-card rounded-lg border border-border shadow-lg w-full max-w-sm mx-4">
+            <div className="p-6 space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
+                  <FolderOpen className="h-5 w-5 text-primary" />
+                </div>
+                <h2 className="text-lg font-semibold">{t('notes.batchMoveToNotebook')}</h2>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {t('notes.selectedCount', { count: selectedIds.size })}
+              </p>
+              <select
+                value={moveTarget}
+                onChange={(e) => setMoveTarget(e.target.value)}
+                className={cn(
+                  'flex h-9 w-full rounded-md border border-input bg-background px-3 py-2',
+                  'text-sm',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                )}
+              >
+                <option value="">{t('contextMenu.noNotebook')}</option>
+                {notebooksData?.items.map((nb) => (
+                  <option key={nb.id} value={nb.name}>
+                    {nb.name}
+                  </option>
+                ))}
+              </select>
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  onClick={() => setIsMoveOpen(false)}
+                  className={cn(
+                    'px-4 py-2 text-sm rounded-md border border-input',
+                    'hover:bg-muted transition-colors',
+                  )}
+                >
+                  {t('common.cancel')}
+                </button>
+                <button
+                  onClick={async () => {
+                    await batchMove.mutateAsync({
+                      noteIds: Array.from(selectedIds),
+                      notebook: moveTarget || null,
+                    })
+                    setIsMoveOpen(false)
+                    setSelectedIds(new Set())
+                    setSelectMode(false)
+                  }}
+                  disabled={batchMove.isPending}
+                  className={cn(
+                    'px-4 py-2 text-sm rounded-md',
+                    'bg-primary text-primary-foreground',
+                    'hover:bg-primary/90 transition-colors',
+                    'disabled:opacity-50 disabled:cursor-not-allowed',
+                  )}
+                >
+                  {batchMove.isPending ? t('common.loading') : t('contextMenu.moveToNotebook')}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <EditNotebookModal
         isOpen={isEditOpen}
         onClose={() => setIsEditOpen(false)}
         notebookId={notebookId}

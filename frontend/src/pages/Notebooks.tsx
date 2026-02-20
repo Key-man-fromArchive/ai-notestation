@@ -1,15 +1,28 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { BookOpen, Plus, FileText, Globe, AlertCircle, X, Tag } from 'lucide-react'
-import { useNotebooks, useCreateNotebook } from '@/hooks/useNotebooks'
+import { BookOpen, Plus, FileText, Globe, AlertCircle, X, Tag, Pencil, Users, UserCheck, Share2, Trash2 } from 'lucide-react'
+import { useNotebooks, useCreateNotebook, useDeleteNotebook } from '@/hooks/useNotebooks'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
 import { EmptyState } from '@/components/EmptyState'
 import { cn } from '@/lib/utils'
 import { useCategories, getCategoryColors, getCategoryOptions } from '@/lib/categories'
 import type { Notebook, NotebookCategory } from '@/types/note'
+import { ContextMenu, type ContextMenuEntry } from '@/components/ContextMenu'
+import { EditNotebookModal } from '@/components/EditNotebookModal'
+import { NotebookAccessModal } from '@/components/NotebookAccessModal'
+import { TransferOwnershipModal } from '@/components/TransferOwnershipModal'
+import { ShareDialog } from '@/components/ShareDialog'
 
-function NotebookCard({ notebook, onClick }: { notebook: Notebook; onClick: () => void }) {
+function NotebookCard({
+  notebook,
+  onClick,
+  onContextMenu,
+}: {
+  notebook: Notebook
+  onClick: () => void
+  onContextMenu: (e: React.MouseEvent) => void
+}) {
   const { t, i18n } = useTranslation()
   const categories = useCategories()
   const colorMap = getCategoryColors(categories)
@@ -18,6 +31,7 @@ function NotebookCard({ notebook, onClick }: { notebook: Notebook; onClick: () =
   return (
     <button
       onClick={onClick}
+      onContextMenu={onContextMenu}
       className={cn(
         'w-full p-4 bg-card rounded-lg border border-border text-left',
         'hover:border-primary/50 transition-colors cursor-pointer',
@@ -189,6 +203,61 @@ export default function Notebooks() {
   const navigate = useNavigate()
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const { data, isLoading, error } = useNotebooks()
+  const { mutateAsync: deleteNotebook } = useDeleteNotebook()
+
+  // Context menu state
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; notebook: Notebook } | null>(null)
+  const [editTarget, setEditTarget] = useState<Notebook | null>(null)
+  const [accessTarget, setAccessTarget] = useState<Notebook | null>(null)
+  const [transferTarget, setTransferTarget] = useState<Notebook | null>(null)
+  const [shareTarget, setShareTarget] = useState<Notebook | null>(null)
+
+  const handleContextMenu = useCallback((e: React.MouseEvent, notebook: Notebook) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setContextMenu({ x: e.clientX, y: e.clientY, notebook })
+  }, [])
+
+  const handleDeleteNotebook = useCallback(async (notebook: Notebook) => {
+    if (notebook.note_count > 0) return
+    if (!confirm(t('contextMenu.deleteConfirm'))) return
+    try {
+      await deleteNotebook(notebook.id)
+    } catch {
+      return
+    }
+  }, [deleteNotebook, t])
+
+  const getMenuItems = useCallback((notebook: Notebook): ContextMenuEntry[] => [
+    {
+      icon: <Pencil className="h-4 w-4" />,
+      label: t('contextMenu.editNotebook'),
+      onClick: () => setEditTarget(notebook),
+    },
+    {
+      icon: <Users className="h-4 w-4" />,
+      label: t('contextMenu.manageAccess'),
+      onClick: () => setAccessTarget(notebook),
+    },
+    {
+      icon: <UserCheck className="h-4 w-4" />,
+      label: t('contextMenu.transferOwnership'),
+      onClick: () => setTransferTarget(notebook),
+    },
+    {
+      icon: <Share2 className="h-4 w-4" />,
+      label: t('contextMenu.shareLink'),
+      onClick: () => setShareTarget(notebook),
+    },
+    { type: 'separator' },
+    {
+      icon: <Trash2 className="h-4 w-4" />,
+      label: t('contextMenu.delete'),
+      onClick: () => handleDeleteNotebook(notebook),
+      danger: true,
+      disabled: notebook.note_count > 0,
+    },
+  ], [t, handleDeleteNotebook])
 
   if (isLoading) {
     return (
@@ -271,6 +340,7 @@ export default function Notebooks() {
             key={notebook.id}
             notebook={notebook}
             onClick={() => navigate(`/notebooks/${notebook.id}`)}
+            onContextMenu={(e) => handleContextMenu(e, notebook)}
           />
         ))}
       </div>
@@ -279,6 +349,51 @@ export default function Notebooks() {
         isOpen={isCreateOpen}
         onClose={() => setIsCreateOpen(false)}
       />
+
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          items={getMenuItems(contextMenu.notebook)}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
+
+      {editTarget && (
+        <EditNotebookModal
+          isOpen={true}
+          onClose={() => setEditTarget(null)}
+          notebookId={editTarget.id}
+          initialName={editTarget.name}
+          initialDescription={editTarget.description}
+          initialCategory={editTarget.category}
+        />
+      )}
+
+      {accessTarget && (
+        <NotebookAccessModal
+          isOpen={true}
+          onClose={() => setAccessTarget(null)}
+          notebookId={accessTarget.id}
+        />
+      )}
+
+      {transferTarget && (
+        <TransferOwnershipModal
+          isOpen={true}
+          onClose={() => setTransferTarget(null)}
+          notebookId={transferTarget.id}
+          currentOwnerId={null}
+        />
+      )}
+
+      {shareTarget && (
+        <ShareDialog
+          notebookId={shareTarget.id}
+          isOpen={true}
+          onClose={() => setShareTarget(null)}
+        />
+      )}
     </div>
   )
 }

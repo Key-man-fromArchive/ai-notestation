@@ -63,6 +63,19 @@ export function useUpdateNotebook() {
   })
 }
 
+export function useTransferNotebookOwnership() {
+  const queryClient = useQueryClient()
+
+  return useMutation<Notebook, ApiError, { notebookId: number; newOwnerId: number }>({
+    mutationFn: ({ notebookId, newOwnerId }) =>
+      apiClient.put<Notebook>(`/notebooks/${notebookId}/transfer-ownership`, { new_owner_id: newOwnerId }),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: NOTEBOOKS_KEY })
+      queryClient.invalidateQueries({ queryKey: NOTEBOOK_KEY(variables.notebookId) })
+    },
+  })
+}
+
 export function useDeleteNotebook() {
   const queryClient = useQueryClient()
 
