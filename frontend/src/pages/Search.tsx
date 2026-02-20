@@ -225,17 +225,18 @@ export default function Search() {
               )}
             >
               <TextSearch className="h-3.5 w-3.5" />
-              {t('search.fts')}
+              {t('search.exact')}
             </button>
             <button
               onClick={() => setSearchMode('search')}
               className={cn(
-                'px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
+                'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
                 searchMode === 'search'
                   ? 'bg-primary text-primary-foreground shadow-sm'
                   : 'text-muted-foreground hover:text-foreground'
               )}
             >
+              <SearchIcon className="h-3.5 w-3.5" />
               {t('search.fts')}
             </button>
             <button
