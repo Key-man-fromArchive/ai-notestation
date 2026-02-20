@@ -64,6 +64,7 @@ backend/alembic/versions/__pycache__/
 # Test artifacts
 frontend/e2e-screenshots/
 frontend/test-results/
+test-results/
 
 # Debug / scratch
 backend/test_nb.py
