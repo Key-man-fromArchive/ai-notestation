@@ -14,7 +14,7 @@
 
 | 영역 | 기능 |
 |------|------|
-| **검색** | Hybrid Search (FTS + Trigram + Semantic), RRF 병합, 12개 파라미터 튜닝 UI |
+| **검색** | Hybrid Search (FTS + Semantic), RRF 병합, 12개 파라미터 튜닝 UI, English stemming (combined simple+english tsvector), JUDGE 적응형 전략, 3-AI 크로스 모델 리뷰 기반 10건 최적화 |
 | **AI** | 6개 태스크 (insight, search_qa, writing, spellcheck, template, summarize), SSE 스트리밍, AI 품질 게이트, 카테고리 인식 AI (프롬프트/힌트/부스트 자동 주입) |
 | **AI 프로바이더** | OpenAI, Anthropic, Google, ZhipuAI 자동 감지 + OAuth |
 | **멀티모달** | 3엔진 하이브리드 OCR (GLM-OCR → Tesseract → AI Vision 자동 폴백), GLM-OCR 레이아웃 시각화, PDF 50페이지 청크 OCR, Vision 설명 생성, 듀얼 파이프라인 배치 분석, 배치 분석 중단 기능, 이미지 중복 방지 + 자동 스킵, 캐시 기반 AI Insight 최적화, PDF AI 요약 삽입, **HWP/HWPX 텍스트 추출 + 내장 이미지 OCR** |
@@ -211,6 +211,10 @@
 - **노트 멀티 선택 + 배치 작업** (v2.1.0) — 체크박스 다중 선택, 배치 휴지통/이동, 우클릭 컨텍스트 메뉴
 - **노트북 편집/접근 모달** (v2.1.0) — 인라인 편집 → 모달 전환, 노트북별 접근 권한 관리
 - **E2E 테스트 안정화** (v2.1.0) — 65 failures → 0 failures (API 기반 auth setup)
+- **검색 엔진 심층 리뷰 + 10건 수정** (v2.1.0) — 3-AI 크로스 모델 리뷰 (Codex GPT-5.3 + Gemini Pro + Claude Opus 4.6, 7개 관점)
+  - P0 버그 3건: Semantic 중복 노트 (DISTINCT ON), tsquery 인젝션 (websearch_to_tsquery), ExactMatch regex 이스케이프
+  - P1 개선 3건: RRF 페이지네이션 (merge-then-slice), Trigram 비활성화 (content에서 무용), JUDGE avg→max_score
+  - P2 개선 4건: judge_min_term_coverage 0.6, English stemming (combined simple+english tsvector), count().over()→별도 COUNT, rrf_k=60 유지
 
 ---
 

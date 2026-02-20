@@ -33,7 +33,7 @@ bash install.sh        # 대화형 설치. NAS 주소와 AI 키 입력 (Enter로
 
 ## 핵심 기능 요약
 
-**하이브리드 검색 엔진** — BM25 + 트라이그램 + 시맨틱 검색을 Reciprocal Rank Fusion으로 통합. PostgreSQL 하나, 별도 DB 불필요.
+**하이브리드 검색 엔진** — BM25(English stemming 포함) + 시맨틱 검색을 Reciprocal Rank Fusion으로 통합. JUDGE 적응형 전략으로 불필요한 시맨틱 호출 절감. PostgreSQL 하나, 별도 DB 불필요.
 
 **멀티 AI 프로바이더** — OpenAI, Anthropic, Google, ZhipuAI를 환경 변수에서 자동 감지. 모델 자유 전환, SSE 스트리밍.
 
@@ -66,7 +66,7 @@ bash install.sh        # 대화형 설치. NAS 주소와 AI 키 입력 (Enter로
 <img src="docs/screenshots/search.png" alt="하이브리드 검색" width="100%" />
 
 **하이브리드 검색 엔진**
-PostgreSQL `tsvector`(BM25) + `pg_trgm`(퍼지) + `pgvector`(시맨틱)를 Reciprocal Rank Fusion으로 통합합니다. 각 결과에 왜 매칭되었는지 — 키워드, 퍼지, 시맨틱 — 엔진별 뱃지로 표시합니다.
+PostgreSQL `tsvector`(BM25 + English stemming) + `pgvector`(시맨틱)를 Reciprocal Rank Fusion으로 통합합니다. JUDGE가 FTS 품질을 판단하여 시맨틱 검색을 조건부 실행. 각 결과에 왜 매칭되었는지 엔진별 뱃지로 표시합니다.
 
 </td>
 <td width="50%">
