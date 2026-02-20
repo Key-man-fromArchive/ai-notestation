@@ -29,14 +29,14 @@ DEFAULT_SEARCH_PARAMS: dict[str, float | int] = {
     "trigram_threshold_ko": 0.15,
     "trigram_threshold_en": 0.1,
     "trigram_title_weight": 3.0,
-    # Unified search
-    "unified_fts_weight": 0.65,
-    "unified_trigram_weight": 0.35,
+    # Unified search (trigram disabled — ineffective on content_text)
+    "unified_fts_weight": 1.0,
+    "unified_trigram_weight": 0.0,
     # Adaptive search strategy (post-retrieval judge)
     "adaptive_enabled": 1,
     "judge_min_results": 3,
-    "judge_min_avg_score": 0.1,
-    "judge_min_avg_score_ko": 0.08,
+    "judge_min_avg_score": 0.05,
+    "judge_min_avg_score_ko": 0.05,
     "judge_min_term_coverage": 0.5,
     "judge_confidence_threshold": 0.7,
 }

@@ -55,6 +55,10 @@ class SearchJudge:
     ) -> JudgeDecision:
         """Evaluate FTS results and decide if semantic search is needed.
 
+        Uses max_score (best FTS hit) instead of avg_score to avoid
+        penalizing queries where one strong match exists alongside weaker ones.
+        Formula: quality = 0.4 * max_score_factor + 0.6 * coverage_factor
+
         Args:
             analysis: Query analysis from the preprocessor.
             fts_results: List of SearchResult from FTS engine.
@@ -78,10 +82,10 @@ class SearchJudge:
         result_count = len(fts_results)
         min_results = int(params.get("judge_min_results", 3))
         lang = analysis.language
-        min_avg_score = float(
-            params.get("judge_min_avg_score_ko", 0.08)
+        min_score = float(
+            params.get("judge_min_avg_score_ko", 0.05)
             if lang in ("ko", "mixed")
-            else params.get("judge_min_avg_score", 0.1)
+            else params.get("judge_min_avg_score", 0.05)
         )
         min_term_coverage = float(params.get("judge_min_term_coverage", 0.5))
         confidence_threshold = float(params.get("judge_confidence_threshold", 0.7))
@@ -99,24 +103,23 @@ class SearchJudge:
             self._log(analysis, decision)
             return decision
 
-        # Compute quality metrics
-        avg_score = sum(r.score for r in fts_results) / result_count
+        # Compute quality metrics using max_score (best hit)
+        max_score = max(r.score for r in fts_results)
         term_coverage = self._compute_term_coverage(analysis, fts_results)
 
         # Compute per-factor scores (0.0 = bad, 1.0 = good)
-        count_score = min(result_count / min_results, 1.0)
-        avg_score_factor = min(avg_score / min_avg_score, 1.0) if min_avg_score > 0 else 1.0
+        max_score_factor = min(max_score / min_score, 1.0) if min_score > 0 else 1.0
         coverage_factor = min(term_coverage / min_term_coverage, 1.0) if min_term_coverage > 0 else 1.0
 
-        # Weighted average: count 30%, avg_score 40%, coverage 30%
-        quality = 0.3 * count_score + 0.4 * avg_score_factor + 0.3 * coverage_factor
+        # Weighted average: max_score 40%, coverage 60%
+        quality = 0.4 * max_score_factor + 0.6 * coverage_factor
 
         should_run = quality < confidence_threshold
         reasons = []
         if result_count < min_results:
             reasons.append(f"few results ({result_count}<{min_results})")
-        if avg_score < min_avg_score:
-            reasons.append(f"low avg score ({avg_score:.3f}<{min_avg_score})")
+        if max_score < min_score:
+            reasons.append(f"low max score ({max_score:.3f}<{min_score})")
         if term_coverage < min_term_coverage:
             reasons.append(f"low term coverage ({term_coverage:.2f}<{min_term_coverage})")
 
@@ -130,7 +133,7 @@ class SearchJudge:
             reason=reason,
             confidence=quality,
             fts_result_count=result_count,
-            avg_score=avg_score,
+            avg_score=max_score,
             term_coverage=term_coverage,
         )
         self._log(analysis, decision)

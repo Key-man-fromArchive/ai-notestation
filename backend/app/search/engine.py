@@ -645,6 +645,9 @@ class HybridSearchEngine:
         2. Judge evaluates FTS result quality
         3. If insufficient, run semantic and merge via RRF
         4. If sufficient, return FTS results directly
+
+        Pagination uses merge-then-slice: each engine fetches offset+limit
+        results (offset=0), merged results are sliced at [offset:offset+limit].
         """
         if not query or not query.strip():
             return SearchPage(results=[], total=0)
@@ -658,12 +661,15 @@ class HybridSearchEngine:
             "date_to": date_to,
         }
 
+        # Fetch enough results for merge-then-slice pagination
+        fetch_limit = offset + limit
+
         # Step 1: Always run FTS first
         fts_page = await self._safe_search(
             self._fts_engine,
             query,
-            limit=limit,
-            offset=offset,
+            limit=fetch_limit,
+            offset=0,
             label="FTS",
             **filter_kwargs,
         )
@@ -682,14 +688,16 @@ class HybridSearchEngine:
                 fts_avg_score=decision.avg_score,
                 term_coverage=decision.term_coverage,
             )
-            return SearchPage(results=fts_page.results, total=fts_page.total, judge_info=judge_info)
+            # Slice FTS results for requested page
+            sliced = fts_page.results[offset : offset + limit]
+            return SearchPage(results=sliced, total=fts_page.total, judge_info=judge_info)
 
         # Step 4: Semantic needed — run and merge
         sem_page = await self._safe_search(
             self._semantic_engine,
             query,
-            limit=limit,
-            offset=offset,
+            limit=fetch_limit,
+            offset=0,
             label="Semantic",
             **filter_kwargs,
         )
@@ -701,6 +709,8 @@ class HybridSearchEngine:
             fts_weight=fts_weight,
             semantic_weight=sem_weight,
         )
+        # Slice merged results for requested page
+        sliced = merged[offset : offset + limit]
         total = max(fts_page.total, sem_page.total)
 
         judge_info = JudgeInfo(
@@ -712,7 +722,7 @@ class HybridSearchEngine:
             fts_avg_score=decision.avg_score,
             term_coverage=decision.term_coverage,
         )
-        return SearchPage(results=merged, total=total, judge_info=judge_info)
+        return SearchPage(results=sliced, total=total, judge_info=judge_info)
 
     async def search_progressive(
         self,
@@ -958,15 +968,22 @@ class UnifiedSearchEngine:
         date_from: datetime | None = None,
         date_to: datetime | None = None,
     ) -> SearchPage:
-        """Execute unified search: FTS + Trigram in parallel, merged via RRF."""
+        """Execute unified search: FTS + Trigram in parallel, merged via RRF.
+
+        Pagination uses merge-then-slice: each engine fetches offset+limit
+        results (offset=0), merged results are sliced at [offset:offset+limit].
+        """
         if not query or not query.strip():
             return SearchPage(results=[], total=0)
+
+        # Fetch enough results for merge-then-slice pagination
+        fetch_limit = offset + limit
 
         fts_task = self._safe_search(
             self._fts_engine,
             query,
-            limit=limit,
-            offset=offset,
+            limit=fetch_limit,
+            offset=0,
             label="FTS",
             notebook_name=notebook_name,
             date_from=date_from,
@@ -975,8 +992,8 @@ class UnifiedSearchEngine:
         trigram_task = self._safe_search(
             self._trigram_engine,
             query,
-            limit=limit,
-            offset=offset,
+            limit=fetch_limit,
+            offset=0,
             label="Trigram",
             notebook_name=notebook_name,
             date_from=date_from,
@@ -992,20 +1009,20 @@ class UnifiedSearchEngine:
             k=int(params["rrf_k"]),
             fts_weight=params["unified_fts_weight"],
             trigram_weight=params["unified_trigram_weight"],
-            limit=limit,
         )
+        # Slice merged results for requested page
+        sliced = merged[offset : offset + limit]
         # Use max of both totals as conservative estimate (there's overlap)
         total = max(fts_page.total, trigram_page.total)
-        return SearchPage(results=merged, total=total)
+        return SearchPage(results=sliced, total=total)
 
     @staticmethod
     def _rrf_merge(
         fts_results: list[SearchResult],
         trigram_results: list[SearchResult],
         k: int = 60,
-        fts_weight: float = 0.65,
-        trigram_weight: float = 0.35,
-        limit: int = 20,
+        fts_weight: float = 1.0,
+        trigram_weight: float = 0.0,
     ) -> list[SearchResult]:
         """Merge FTS and Trigram results using Weighted RRF."""
         scores: dict[str, float] = {}
@@ -1054,7 +1071,7 @@ class UnifiedSearchEngine:
                 )
             )
 
-        return merged[:limit]
+        return merged
 
     @staticmethod
     async def _safe_search(
