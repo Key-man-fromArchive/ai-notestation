@@ -116,6 +116,17 @@ class SearchPage(BaseModel):
     judge_info: JudgeInfo | None = None
 
 
+def _apply_note_filters(stmt, notebook_name, date_from, date_to):
+    """Apply common note filters (notebook, date range) to a SQLAlchemy statement."""
+    if notebook_name is not None:
+        stmt = stmt.where(Note.notebook_name == notebook_name)
+    if date_from is not None:
+        stmt = stmt.where(Note.source_updated_at >= date_from)
+    if date_to is not None:
+        stmt = stmt.where(Note.source_updated_at <= date_to)
+    return stmt
+
+
 class FullTextSearchEngine:
     """PostgreSQL tsvector-based full-text search engine with BM25-approximated scoring.
 
@@ -150,21 +161,22 @@ class FullTextSearchEngine:
 
         params = get_search_params()
 
+        # Language-aware ts_config: 'english' for stemming, 'simple' for Korean/mixed
+        ts_config = literal_column("'english'" if analysis.language == "en" else "'simple'")
+
         # Build tsquery using websearch_to_tsquery (safe against special characters)
-        tsquery = func.websearch_to_tsquery(literal_column("'simple'"), analysis.tsquery_expr)
+        tsquery = func.websearch_to_tsquery(ts_config, analysis.tsquery_expr)
 
         # BM25-approximated scoring with field boosting:
         # - Title (weight A): configurable boost (default 3x)
         # - Content (weight B): configurable weight (default 1x), with document length normalization (flag=1)
         title_rank = func.ts_rank(
-            func.setweight(
-                func.to_tsvector(literal_column("'simple'"), func.coalesce(Note.title, "")), literal_column("'A'")
-            ),
+            func.setweight(func.to_tsvector(ts_config, func.coalesce(Note.title, "")), literal_column("'A'")),
             tsquery,
         )
         content_rank = func.ts_rank(
             func.setweight(
-                func.to_tsvector(literal_column("'simple'"), func.coalesce(Note.content_text, "")),
+                func.to_tsvector(ts_config, func.coalesce(Note.content_text, "")),
                 literal_column("'B'"),
             ),
             tsquery,
@@ -174,14 +186,13 @@ class FullTextSearchEngine:
 
         # ts_headline generates a highlighted snippet from content_text
         headline = func.ts_headline(
-            literal_column("'simple'"),
+            ts_config,
             Note.content_text,
             tsquery,
             literal_column("'StartSel=<b>, StopSel=</b>, MaxWords=35, MinWords=15'"),
         ).label("snippet")
 
-        # COUNT(*) OVER() gives total matching rows without a separate query
-        total_count = func.count().over().label("total_count")
+        match_condition = Note.search_vector.op("@@")(tsquery)
 
         stmt = (
             select(
@@ -189,28 +200,23 @@ class FullTextSearchEngine:
                 Note.title,
                 headline,
                 score,
-                total_count,
                 Note.source_created_at,
                 Note.source_updated_at,
             )
-            .where(Note.search_vector.op("@@")(tsquery))
+            .where(match_condition)
             .order_by(score.desc())
             .limit(limit)
             .offset(offset)
         )
-
-        # Apply optional filters
-        if notebook_name is not None:
-            stmt = stmt.where(Note.notebook_name == notebook_name)
-        if date_from is not None:
-            stmt = stmt.where(Note.source_updated_at >= date_from)
-        if date_to is not None:
-            stmt = stmt.where(Note.source_updated_at <= date_to)
+        stmt = _apply_note_filters(stmt, notebook_name, date_from, date_to)
 
         result = await self._session.execute(stmt)
         rows = result.fetchall()
 
-        total = rows[0].total_count if rows else 0
+        # Separate COUNT query (shares same WHERE conditions)
+        stmt_count = select(func.count()).select_from(Note).where(match_condition)
+        stmt_count = _apply_note_filters(stmt_count, notebook_name, date_from, date_to)
+        total = (await self._session.execute(stmt_count)).scalar() or 0
         results = [
             SearchResult(
                 note_id=row.note_id,
@@ -326,7 +332,10 @@ class TrigramSearchEngine:
         title_sim = func.similarity(Note.title, query).label("title_sim")
         content_sim = func.similarity(Note.content_text, query).label("content_sim")
         combined_score = (title_sim * params["trigram_title_weight"] + content_sim).label("score")
-        total_count = func.count().over().label("total_count")
+
+        match_condition = (func.similarity(Note.title, query) >= threshold) | (
+            func.similarity(Note.content_text, query) >= threshold
+        )
 
         stmt = (
             select(
@@ -334,30 +343,22 @@ class TrigramSearchEngine:
                 Note.title,
                 func.left(Note.content_text, self._SNIPPET_MAX_LENGTH).label("snippet"),
                 combined_score,
-                total_count,
                 Note.source_created_at,
                 Note.source_updated_at,
             )
-            .where(
-                (func.similarity(Note.title, query) >= threshold)
-                | (func.similarity(Note.content_text, query) >= threshold)
-            )
+            .where(match_condition)
             .order_by(combined_score.desc())
             .limit(limit)
             .offset(offset)
         )
-
-        if notebook_name is not None:
-            stmt = stmt.where(Note.notebook_name == notebook_name)
-        if date_from is not None:
-            stmt = stmt.where(Note.source_updated_at >= date_from)
-        if date_to is not None:
-            stmt = stmt.where(Note.source_updated_at <= date_to)
+        stmt = _apply_note_filters(stmt, notebook_name, date_from, date_to)
 
         result = await self._session.execute(stmt)
         rows = result.fetchall()
 
-        total = rows[0].total_count if rows else 0
+        stmt_count = select(func.count()).select_from(Note).where(match_condition)
+        stmt_count = _apply_note_filters(stmt_count, notebook_name, date_from, date_to)
+        total = (await self._session.execute(stmt_count)).scalar() or 0
         results = [
             SearchResult(
                 note_id=row.note_id,
@@ -392,7 +393,7 @@ class TrigramSearchEngine:
     ) -> SearchPage:
         """ILIKE prefix search for short queries."""
         pattern = f"%{query}%"
-        total_count = func.count().over().label("total_count")
+        match_condition = (Note.title.ilike(pattern)) | (Note.content_text.ilike(pattern))
 
         stmt = (
             select(
@@ -400,27 +401,22 @@ class TrigramSearchEngine:
                 Note.title,
                 func.left(Note.content_text, self._SNIPPET_MAX_LENGTH).label("snippet"),
                 literal_column("1.0").label("score"),
-                total_count,
                 Note.source_created_at,
                 Note.source_updated_at,
             )
-            .where((Note.title.ilike(pattern)) | (Note.content_text.ilike(pattern)))
+            .where(match_condition)
             .order_by(Note.source_updated_at.desc())
             .limit(limit)
             .offset(offset)
         )
-
-        if notebook_name is not None:
-            stmt = stmt.where(Note.notebook_name == notebook_name)
-        if date_from is not None:
-            stmt = stmt.where(Note.source_updated_at >= date_from)
-        if date_to is not None:
-            stmt = stmt.where(Note.source_updated_at <= date_to)
+        stmt = _apply_note_filters(stmt, notebook_name, date_from, date_to)
 
         result = await self._session.execute(stmt)
         rows = result.fetchall()
 
-        total = rows[0].total_count if rows else 0
+        stmt_count = select(func.count()).select_from(Note).where(match_condition)
+        stmt_count = _apply_note_filters(stmt_count, notebook_name, date_from, date_to)
+        total = (await self._session.execute(stmt_count)).scalar() or 0
         results = [
             SearchResult(
                 note_id=row.note_id,
@@ -522,25 +518,16 @@ class SemanticSearchEngine:
         )
 
         # Apply optional filters in the inner subquery to reduce work
-        if notebook_name is not None:
-            inner = inner.where(Note.notebook_name == notebook_name)
-        if date_from is not None:
-            inner = inner.where(Note.source_updated_at >= date_from)
-        if date_to is not None:
-            inner = inner.where(Note.source_updated_at <= date_to)
-
+        inner = _apply_note_filters(inner, notebook_name, date_from, date_to)
         inner = inner.subquery("best_chunks")
 
         # Outer query: join back to Note for metadata, sort by distance, paginate
-        total_count = func.count().over().label("total_count")
-
         stmt = (
             select(
                 Note.synology_note_id.label("note_id"),
                 Note.title,
                 inner.c.chunk_text,
                 inner.c.cosine_distance,
-                total_count,
                 Note.source_created_at,
                 Note.source_updated_at,
             )
@@ -553,7 +540,12 @@ class SemanticSearchEngine:
         result = await self._session.execute(stmt)
         rows = result.fetchall()
 
-        total = rows[0].total_count if rows else 0
+        # Separate COUNT query: count distinct notes with embeddings
+        stmt_count = select(func.count(func.distinct(NoteEmbedding.note_id))).join(
+            Note, NoteEmbedding.note_id == Note.id
+        )
+        stmt_count = _apply_note_filters(stmt_count, notebook_name, date_from, date_to)
+        total = (await self._session.execute(stmt_count)).scalar() or 0
         results = []
         for rank, row in enumerate(rows):
             raw_score = round(1.0 - float(row.cosine_distance), 10)
@@ -1127,7 +1119,7 @@ class ExactMatchSearchEngine:
             return SearchPage(results=[], total=0)
 
         pattern = f"%{stripped}%"
-        total_count = func.count().over().label("total_count")
+        match_condition = (Note.title.ilike(pattern)) | (Note.content_text.ilike(pattern))
 
         # Use regexp_replace for case-insensitive highlighting
         # Escape regex metacharacters in user input to prevent regex injection
@@ -1145,27 +1137,23 @@ class ExactMatchSearchEngine:
                 Note.title,
                 highlighted_snippet,
                 literal_column("1.0").label("score"),
-                total_count,
                 Note.source_created_at,
                 Note.source_updated_at,
             )
-            .where((Note.title.ilike(pattern)) | (Note.content_text.ilike(pattern)))
+            .where(match_condition)
             .order_by(Note.source_updated_at.desc())
             .limit(limit)
             .offset(offset)
         )
-
-        if notebook_name is not None:
-            stmt = stmt.where(Note.notebook_name == notebook_name)
-        if date_from is not None:
-            stmt = stmt.where(Note.source_updated_at >= date_from)
-        if date_to is not None:
-            stmt = stmt.where(Note.source_updated_at <= date_to)
+        stmt = _apply_note_filters(stmt, notebook_name, date_from, date_to)
 
         result = await self._session.execute(stmt)
         rows = result.fetchall()
 
-        total = rows[0].total_count if rows else 0
+        # Separate COUNT query
+        stmt_count = select(func.count()).select_from(Note).where(match_condition)
+        stmt_count = _apply_note_filters(stmt_count, notebook_name, date_from, date_to)
+        total = (await self._session.execute(stmt_count)).scalar() or 0
         results = [
             SearchResult(
                 note_id=row.note_id,

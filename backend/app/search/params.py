@@ -37,7 +37,7 @@ DEFAULT_SEARCH_PARAMS: dict[str, float | int] = {
     "judge_min_results": 3,
     "judge_min_avg_score": 0.05,
     "judge_min_avg_score_ko": 0.05,
-    "judge_min_term_coverage": 0.5,
+    "judge_min_term_coverage": 0.6,
     "judge_confidence_threshold": 0.7,
 }
 

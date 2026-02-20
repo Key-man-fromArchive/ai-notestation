@@ -28,16 +28,25 @@ def _make_mock_row(note_id: int | str, title: str, snippet: str, score: float):
     row.score = score
     row.source_created_at = None
     row.source_updated_at = None
-    row.total_count = 0
     return row
 
 
-def _make_mock_session(rows: list | None = None):
-    """Build a mock AsyncSession whose execute() returns the given rows."""
+def _make_mock_session(rows: list | None = None, total: int = 0):
+    """Build a mock AsyncSession whose execute() returns rows then count.
+
+    First call returns fetchall() rows, second call returns scalar() total.
+    """
     session = AsyncMock()
+
+    # First execute → result rows
     result_mock = MagicMock()
     result_mock.fetchall.return_value = rows if rows is not None else []
-    session.execute = AsyncMock(return_value=result_mock)
+
+    # Second execute → count scalar
+    count_mock = MagicMock()
+    count_mock.scalar.return_value = total
+
+    session.execute = AsyncMock(side_effect=[result_mock, count_mock])
     return session
 
 
@@ -115,9 +124,7 @@ class TestSearchSuccess:
             _make_mock_row(1, "Python Guide", "Learn <b>Python</b> basics", 0.9),
             _make_mock_row(2, "Python Tips", "Advanced <b>Python</b> tips", 0.7),
         ]
-        rows[0].total_count = 2
-        rows[1].total_count = 2
-        session = _make_mock_session(rows)
+        session = _make_mock_session(rows, total=2)
         engine = FullTextSearchEngine(session)
 
         page = await engine.search("Python")
@@ -133,14 +140,14 @@ class TestSearchSuccess:
         assert page.total == 2
 
     @pytest.mark.asyncio
-    async def test_search_calls_session_execute(self):
-        """The search method calls session.execute exactly once."""
+    async def test_search_calls_session_execute_twice(self):
+        """The search method calls session.execute twice (query + count)."""
         session = _make_mock_session([])
         engine = FullTextSearchEngine(session)
 
         await engine.search("test")
 
-        session.execute.assert_awaited_once()
+        assert session.execute.await_count == 2
 
 
 # ---------------------------------------------------------------------------
@@ -212,21 +219,17 @@ class TestLimitOffset:
 
         await engine.search("test")
 
-        # Verify the SQL text contains LIMIT and OFFSET via the executed statement
-        call_args = session.execute.call_args
+        # First execute call is the main query, second is the count query
+        call_args = session.execute.call_args_list[0]
         stmt = call_args[0][0]
-        # The compiled SQL should include limit and offset
         compiled = str(stmt.compile(compile_kwargs={"literal_binds": False}))
-        # Check that LIMIT clause exists in the compiled SQL
         assert "LIMIT" in compiled.upper() or "limit" in compiled
 
     @pytest.mark.asyncio
     async def test_custom_limit(self):
         """Custom limit restricts the number of results."""
         rows = [_make_mock_row(i, f"Note {i}", f"Snippet {i}", 0.5) for i in range(5)]
-        for row in rows:
-            row.total_count = 5
-        session = _make_mock_session(rows)
+        session = _make_mock_session(rows, total=5)
         engine = FullTextSearchEngine(session)
 
         page = await engine.search("test", limit=5)
@@ -238,8 +241,7 @@ class TestLimitOffset:
     async def test_custom_offset(self):
         """Custom offset skips initial results."""
         rows = [_make_mock_row(10, "Offset Note", "Offset snippet", 0.3)]
-        rows[0].total_count = 1
-        session = _make_mock_session(rows)
+        session = _make_mock_session(rows, total=1)
         engine = FullTextSearchEngine(session)
 
         page = await engine.search("test", limit=10, offset=5)
@@ -266,9 +268,7 @@ class TestScoreSorting:
             _make_mock_row(1, "Good Match", "good <b>match</b>", 0.80),
             _make_mock_row(2, "Okay Match", "okay <b>match</b>", 0.50),
         ]
-        for row in rows:
-            row.total_count = 3
-        session = _make_mock_session(rows)
+        session = _make_mock_session(rows, total=3)
         engine = FullTextSearchEngine(session)
 
         page = await engine.search("match")
@@ -288,7 +288,7 @@ class TestScoreSorting:
 
         await engine.search("query")
 
-        call_args = session.execute.call_args
+        call_args = session.execute.call_args_list[0]
         stmt = call_args[0][0]
         compiled = str(stmt.compile(compile_kwargs={"literal_binds": False}))
         assert "ORDER BY" in compiled.upper() or "order by" in compiled
@@ -313,8 +313,7 @@ class TestSnippetGeneration:
                 0.8,
             ),
         ]
-        rows[0].total_count = 1
-        session = _make_mock_session(rows)
+        session = _make_mock_session(rows, total=1)
         engine = FullTextSearchEngine(session)
 
         page = await engine.search("highlighted")
@@ -332,7 +331,7 @@ class TestSnippetGeneration:
 
         await engine.search("test")
 
-        call_args = session.execute.call_args
+        call_args = session.execute.call_args_list[0]
         stmt = call_args[0][0]
         compiled = str(stmt.compile(compile_kwargs={"literal_binds": False}))
         assert "ts_headline" in compiled.lower()
@@ -352,8 +351,7 @@ class TestKoreanSearch:
         rows = [
             _make_mock_row(5, "연구 노트", "<b>연구</b> 결과 정리", 0.6),
         ]
-        rows[0].total_count = 1
-        session = _make_mock_session(rows)
+        session = _make_mock_session(rows, total=1)
         engine = FullTextSearchEngine(session)
 
         page = await engine.search("연구")
@@ -433,7 +431,7 @@ class TestBM25Scoring:
 
         await engine.search("test")
 
-        call_args = session.execute.call_args
+        call_args = session.execute.call_args_list[0]
         stmt = call_args[0][0]
         compiled = str(stmt.compile(compile_kwargs={"literal_binds": False}))
         assert "setweight" in compiled.lower()
@@ -446,7 +444,55 @@ class TestBM25Scoring:
 
         await engine.search("test")
 
-        call_args = session.execute.call_args
+        call_args = session.execute.call_args_list[0]
         stmt = call_args[0][0]
         compiled = str(stmt.compile(compile_kwargs={"literal_binds": False}))
         assert "to_tsquery" in compiled.lower()
+
+
+# ---------------------------------------------------------------------------
+# 11. Language-aware ts_config switching
+# ---------------------------------------------------------------------------
+
+
+class TestLanguageConfig:
+    """FTS uses 'english' config for English queries, 'simple' for Korean/mixed."""
+
+    @pytest.mark.asyncio
+    async def test_english_query_uses_english_config(self):
+        """An English-only query uses 'english' ts_config for stemming."""
+        session = _make_mock_session([])
+        engine = FullTextSearchEngine(session)
+
+        await engine.search("experiments")
+
+        call_args = session.execute.call_args_list[0]
+        stmt = call_args[0][0]
+        compiled = str(stmt.compile(compile_kwargs={"literal_binds": False}))
+        assert "'english'" in compiled
+
+    @pytest.mark.asyncio
+    async def test_korean_query_uses_simple_config(self):
+        """A Korean query uses 'simple' ts_config (preserves Korean tokens)."""
+        session = _make_mock_session([])
+        engine = FullTextSearchEngine(session)
+
+        await engine.search("연구")
+
+        call_args = session.execute.call_args_list[0]
+        stmt = call_args[0][0]
+        compiled = str(stmt.compile(compile_kwargs={"literal_binds": False}))
+        assert "'simple'" in compiled
+
+    @pytest.mark.asyncio
+    async def test_mixed_query_uses_simple_config(self):
+        """A mixed Korean+English query uses 'simple' ts_config."""
+        session = _make_mock_session([])
+        engine = FullTextSearchEngine(session)
+
+        await engine.search("연구 experiment")
+
+        call_args = session.execute.call_args_list[0]
+        stmt = call_args[0][0]
+        compiled = str(stmt.compile(compile_kwargs={"literal_binds": False}))
+        assert "'simple'" in compiled
