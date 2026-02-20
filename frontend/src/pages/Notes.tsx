@@ -174,11 +174,8 @@ export default function Notes() {
   // 현재 필터의 총 노트 수
   const totalNotes = data?.pages[0]?.total ?? 0
 
-  // 전체 노트 수 (노트북 카운트 합산 — 항상 전체 수 표시)
-  const allNotesCount = useMemo(() => {
-    if (!notebooksData?.items) return totalNotes
-    return notebooksData.items.reduce((sum, nb) => sum + nb.note_count, 0)
-  }, [notebooksData, totalNotes])
+  // 전체 노트 수 — Notes API의 total (노트북 미소속 포함)
+  const allNotesCount = totalNotes
 
   // 클라이언트 사이드 필터링
   const filteredNotes = useMemo(() => {
