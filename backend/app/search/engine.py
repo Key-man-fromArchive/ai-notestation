@@ -510,6 +510,7 @@ class SemanticSearchEngine:
             select(
                 NoteEmbedding.note_id,
                 NoteEmbedding.chunk_text,
+                NoteEmbedding.chunk_type,
                 cosine_distance.label("cosine_distance"),
             )
             .distinct(NoteEmbedding.note_id)

@@ -59,6 +59,9 @@ class Note(Base):
     local_modified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     remote_conflict_data: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
+    # AI-generated summary for summary embedding (Phase P2)
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     # Full-text search vector
     search_vector: Mapped[str | None] = mapped_column(TSVECTOR, nullable=True)
 
@@ -109,9 +112,13 @@ class NoteEmbedding(Base):
     chunk_index: Mapped[int] = mapped_column(Integer, default=0)
     chunk_text: Mapped[str] = mapped_column(Text)
     embedding: Mapped[list] = mapped_column(Vector(1536))  # OpenAI text-embedding-3-small
+    chunk_type: Mapped[str] = mapped_column(String(20), default="content", server_default="content")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    __table_args__ = (Index("idx_embeddings_note_id", "note_id"),)
+    __table_args__ = (
+        Index("idx_embeddings_note_id", "note_id"),
+        Index("idx_embeddings_chunk_type", "chunk_type"),
+    )
 
 
 class Setting(Base):

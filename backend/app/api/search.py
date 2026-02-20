@@ -100,6 +100,7 @@ class SearchResultResponse(BaseModel):
     snippet: str
     score: float
     search_type: str
+    chunk_type: str | None = None
     created_at: str | None = None
     updated_at: str | None = None
     match_explanation: MatchExplanationResponse | None = None
@@ -626,6 +627,20 @@ class IndexTriggerResponse(BaseModel):
     message: str
 
 
+def _get_ai_router_for_indexing():
+    """Try to instantiate an AIRouter for summary generation during indexing.
+
+    Returns None if no AI providers are configured.
+    """
+    try:
+        from app.ai_router.router import AIRouter
+
+        return AIRouter()
+    except Exception:
+        logger.debug("No AI router available for summary generation")
+        return None
+
+
 async def _run_index_background(state: IndexState, *, force: bool = False) -> None:
     settings = get_settings()
     api_key = state.api_key or settings.OPENAI_API_KEY
@@ -696,7 +711,11 @@ async def _run_index_background(state: IndexState, *, force: bool = False) -> No
             state.current_batch = i // batch_size + 1
             try:
                 async with async_session_factory() as session:
-                    indexer = NoteIndexer(session=session, embedding_service=embedding_service)
+                    indexer = NoteIndexer(
+                        session=session,
+                        embedding_service=embedding_service,
+                        ai_router=_get_ai_router_for_indexing(),
+                    )
                     for nid in batch:
                         try:
                             if force:

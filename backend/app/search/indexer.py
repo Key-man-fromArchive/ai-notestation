@@ -66,15 +66,20 @@ class NoteIndexer:
     Args:
         session: An async SQLAlchemy session for database operations.
         embedding_service: Service for generating vector embeddings from text.
+        ai_router: Optional AI router for generating note summaries.
+            When provided, a 2-3 sentence summary is generated per note
+            and embedded as a special ``chunk_type="summary"`` chunk.
     """
 
     def __init__(
         self,
         session: AsyncSession,
         embedding_service: EmbeddingService,
+        ai_router: object | None = None,
     ) -> None:
         self._session = session
         self._embedding_service = embedding_service
+        self._ai_router = ai_router
 
     # ------------------------------------------------------------------
     # Public API
@@ -83,9 +88,10 @@ class NoteIndexer:
     async def index_note(self, note_id: int) -> int:
         """Index a single note by generating vector embeddings.
 
-        The note's ``content_text`` is chunked and embedded via
-        :meth:`EmbeddingService.embed_chunks`. Each (chunk_text, embedding)
-        pair is stored as a :class:`NoteEmbedding` record.
+        Each source (main content, individual attachments, individual images)
+        is chunked and embedded separately with its own ``chunk_type``.
+        A contextual prefix with note metadata is prepended to each segment
+        to improve semantic retrieval (Anthropic "Contextual Retrieval").
 
         tsvector indexing is handled by a DB trigger and is not
         managed here.
@@ -101,41 +107,69 @@ class NoteIndexer:
             ValueError: If the note with the given ID does not exist.
         """
         note = await self._get_note(note_id)
+        prefix = self._build_context_prefix(note)
 
         # Use content_text, fall back to title for notes with no body
         text = (note.content_text or "").strip()
         if not text:
             text = (note.title or "").strip()
 
-        # Append extracted text from attachments (PDF/OCR) and images
-        pdf_text = await self._get_attachment_texts(note_id)
-        ocr_text = await self._get_image_texts(note)
+        # Build segments: list of (text, chunk_type) tuples
+        segments: list[tuple[str, str]] = []
 
-        extra = "\n\n---\n\n".join(filter(None, [pdf_text, ocr_text]))
-        if extra:
-            text = f"{text}\n\n---\n\n{extra}" if text else extra
+        if text:
+            segments.append((prefix + text if prefix else text, "content"))
 
-        if not text:
+        # Attachments — each file is a separate segment
+        for att_text, att_type in await self._get_attachment_segments(note_id):
+            segments.append((prefix + att_text if prefix else att_text, att_type))
+
+        # Images — each OCR/vision result is a separate segment
+        for img_text, img_type in await self._get_image_segments(note):
+            segments.append((prefix + img_text if prefix else img_text, img_type))
+
+        if not segments:
             logger.debug("Note %d has no content or title, skipping embedding", note_id)
             return 0
 
-        # Generate embeddings for each text chunk
-        chunks = await self._embedding_service.embed_chunks(text)
+        # Embed each segment separately, tracking chunk_type per record
+        chunk_index = 0
+        for segment_text, chunk_type in segments:
+            chunks = await self._embedding_service.embed_chunks(segment_text)
+            for chunk_text, embedding in chunks:
+                record = NoteEmbedding(
+                    note_id=note_id,
+                    chunk_index=chunk_index,
+                    chunk_text=chunk_text,
+                    embedding=embedding,
+                    chunk_type=chunk_type,
+                )
+                self._session.add(record)
+                chunk_index += 1
 
-        # Store each chunk as a NoteEmbedding record
-        for chunk_index, (chunk_text, embedding) in enumerate(chunks):
-            record = NoteEmbedding(
-                note_id=note_id,
-                chunk_index=chunk_index,
-                chunk_text=chunk_text,
-                embedding=embedding,
-            )
-            self._session.add(record)
+        # Generate and embed AI summary (if router available and not cached)
+        if self._ai_router and not note.summary:
+            summary = await self._generate_summary(note, text)
+            if summary:
+                note.summary = summary
+                summary_text = prefix + summary if prefix else summary
+                summary_chunks = await self._embedding_service.embed_chunks(summary_text)
+                for chunk_text, embedding in summary_chunks:
+                    self._session.add(
+                        NoteEmbedding(
+                            note_id=note_id,
+                            chunk_index=-1,
+                            chunk_text=chunk_text,
+                            embedding=embedding,
+                            chunk_type="summary",
+                        )
+                    )
+                    chunk_index += 1
 
         await self._session.flush()
 
-        logger.info("Indexed note %d: %d embeddings created", note_id, len(chunks))
-        return len(chunks)
+        logger.info("Indexed note %d: %d embeddings created", note_id, chunk_index)
+        return chunk_index
 
     async def index_notes(self, note_ids: list[int]) -> IndexResult:
         """Batch index multiple notes.
@@ -221,8 +255,70 @@ class NoteIndexer:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    async def _get_attachment_texts(self, note_id: int) -> str:
-        """Collect extracted PDF text from all completed attachments for a note."""
+    @staticmethod
+    def _build_context_prefix(note: Note) -> str:
+        """Build a metadata prefix to prepend to chunk text before embedding.
+
+        Anthropic "Contextual Retrieval" technique: attaching document-level
+        context (title, notebook, date) to each chunk improves semantic
+        search recall by up to 67%.
+
+        Returns:
+            A bracketed metadata string like ``[Note: X | Notebook: Y | Date: Z]\\n``,
+            or empty string if the note has no usable metadata.
+        """
+        parts: list[str] = []
+        if note.title:
+            parts.append(f"Note: {note.title}")
+        if note.notebook_name:
+            parts.append(f"Notebook: {note.notebook_name}")
+        if note.source_created_at:
+            parts.append(f"Date: {note.source_created_at.strftime('%Y-%m-%d')}")
+        if not parts:
+            return ""
+        return f"[{' | '.join(parts)}]\n"
+
+    async def _generate_summary(self, note: Note, text: str) -> str | None:
+        """Generate a 2-3 sentence AI summary for the note.
+
+        Returns:
+            Summary string, or None if generation fails or no AI router.
+        """
+        try:
+            from app.ai_router.prompts.note_summary import build_messages
+            from app.ai_router.schemas import AIRequest
+
+            # Simple language detection: if >15% of chars are CJK, use Korean
+            cjk_count = sum(1 for c in text[:500] if "\u4e00" <= c <= "\u9fff" or "\uac00" <= c <= "\ud7af")
+            lang = "ko" if cjk_count > len(text[:500]) * 0.15 else "en"
+
+            messages = build_messages(text, lang=lang)
+            request = AIRequest(messages=messages, temperature=0.3, max_tokens=300)
+            response = await self._ai_router.chat(request)
+            summary = (response.content or "").strip()
+            if summary:
+                logger.info("Generated summary for note %d (%d chars)", note.id, len(summary))
+                return summary
+        except Exception:
+            logger.warning("Failed to generate summary for note %d", note.id, exc_info=True)
+        return None
+
+    @staticmethod
+    def _detect_attachment_type(name: str | None) -> str:
+        """Map attachment filename to a chunk_type string."""
+        if not name:
+            return "file"
+        suffix = PurePosixPath(name).suffix.lower()
+        if suffix in (".hwp", ".hwpx"):
+            return "hwp"
+        if suffix == ".pdf":
+            return "pdf"
+        if suffix in (".docx", ".doc"):
+            return "docx"
+        return "file"
+
+    async def _get_attachment_segments(self, note_id: int) -> list[tuple[str, str]]:
+        """Return per-attachment ``(text, chunk_type)`` tuples."""
         stmt = select(NoteAttachment.extracted_text, NoteAttachment.name).where(
             NoteAttachment.note_id == note_id,
             NoteAttachment.extraction_status == "completed",
@@ -231,29 +327,18 @@ class NoteIndexer:
         result = await self._session.execute(stmt)
         rows = result.fetchall()
 
-        if not rows:
-            return ""
-
-        parts = []
+        segments: list[tuple[str, str]] = []
         for text, name in rows:
             if text and text.strip():
-                suffix = PurePosixPath(name).suffix.lower() if name else ""
-                if suffix in (".hwp", ".hwpx"):
-                    label = "HWP"
-                elif suffix == ".pdf":
-                    label = "PDF"
-                elif suffix in (".docx", ".doc"):
-                    label = "DOCX"
-                else:
-                    label = "FILE"
-                parts.append(f"[{label}: {name}]\n{text.strip()}")
+                chunk_type = self._detect_attachment_type(name)
+                segment_text = f"[{chunk_type.upper()}: {name}]\n{text.strip()}"
+                segments.append((segment_text, chunk_type))
+        return segments
 
-        return "\n\n---\n\n".join(parts)
-
-    async def _get_image_texts(self, note: Note) -> str:
-        """Collect OCR text and Vision descriptions from NoteImages."""
+    async def _get_image_segments(self, note: Note) -> list[tuple[str, str]]:
+        """Return per-image ``(text, chunk_type)`` tuples for OCR and Vision."""
         if not note.synology_note_id:
-            return ""
+            return []
 
         stmt = select(
             NoteImage.extracted_text,
@@ -266,19 +351,15 @@ class NoteIndexer:
         result = await self._session.execute(stmt)
         rows = result.fetchall()
 
-        if not rows:
-            return ""
-
-        parts = []
+        segments: list[tuple[str, str]] = []
         for ocr_text, vision_desc, name in rows:
             if ocr_text and ocr_text.strip():
                 cleaned = _clean_ocr_text(ocr_text)
                 if cleaned:
-                    parts.append(f"[OCR: {name}]\n{cleaned}")
+                    segments.append((f"[OCR: {name}]\n{cleaned}", "ocr"))
             if vision_desc and vision_desc.strip():
-                parts.append(f"[Vision: {name}]\n{vision_desc.strip()}")
-
-        return "\n\n---\n\n".join(parts)
+                segments.append((f"[Vision: {name}]\n{vision_desc.strip()}", "vision"))
+        return segments
 
     async def _get_note(self, note_id: int) -> Note:
         """Fetch a note by ID or raise ValueError.
