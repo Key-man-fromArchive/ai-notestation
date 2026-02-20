@@ -105,7 +105,7 @@ _SETTING_DESCRIPTIONS: dict[str, str] = {
     "search_params": "검색 알고리즘 파라미터 (RRF 가중치, 제목 부스트, 유사도 임계값)",
     "quality_gate_enabled": "AI 응답 품질 검증 활성화 (체크리스트 기반)",
     "quality_gate_auto_retry": "품질 미달 시 자동 재생성",
-    "ocr_engine": "OCR engine: ai_vision (cloud API) or paddleocr_vl (local CPU)",
+    "ocr_engine": "OCR engine: ai_vision (cloud API), tesseract (local CPU), or glm_ocr (ZhipuAI)",
     "vision_model": "Vision model for image description: glm-4.6v, glm-4.6v-flash, glm-4.5v, gpt-4o, etc.",
     "editor_width": "Editor width: compact, comfortable, wide, or full",
     "graph_settings": "그래프 기본 설정 (유사도, 연결 수, 노드 수, 전체 보기)",

@@ -1,4 +1,4 @@
-"""OCR service with pluggable engines: AI Vision (cloud) and PaddleOCR-VL (local)."""
+"""OCR service with pluggable engines: AI Vision (cloud), Tesseract (local), and GLM-OCR."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import asyncio
 import base64
 import logging
 import os
-import tempfile
+from io import BytesIO
 from pathlib import Path
 
 import httpx
@@ -43,74 +43,38 @@ class OCRResult(BaseModel):
     layout_visualization: list[str] | None = None  # engine/model id used
 
 
-class PaddleOCRVLEngine:
-    """Local PaddleOCR-VL engine (CPU, no API key needed).
+class TesseractEngine:
+    """Local Tesseract OCR engine (CPU, no API key needed).
 
-    Model weights (~1.8GB) are downloaded on first use and cached
-    in PADDLE_HOME (default: ~/.paddleocr).
+    Requires ``tesseract-ocr`` and language packs (e.g. ``tesseract-ocr-kor``)
+    to be installed via apt. Lightweight and fast on CPU (~1-3s per image).
+
+    NOTE: Text detection + recognition only. No layout/document structure
+    analysis (tables, columns, reading order). For layout-aware OCR, use
+    GLM-OCR or AI Vision instead.
     """
 
-    _pipeline = None  # Lazy singleton
-
-    # Use up to half the available cores for OCR to avoid starving
-    # the main event loop and other services.
-    _NUM_THREADS = max(1, (os.cpu_count() or 1) // 2)
-
-    @classmethod
-    def _get_pipeline(cls):
-        if cls._pipeline is None:
-            from paddleocr import PaddleOCRVL
-
-            logger.info("Loading PaddleOCR-VL pipeline (first call — downloading model if needed)...")
-            cls._pipeline = PaddleOCRVL(pipeline_version="v1")
-            logger.info("PaddleOCR-VL pipeline ready")
-        return cls._pipeline
+    # Map common locales to Tesseract lang codes.
+    # Multiple langs can be combined with '+' for mixed-language documents.
+    _DEFAULT_LANG = os.getenv("TESSERACT_LANG", "kor+eng")
 
     async def extract(self, image_bytes: bytes, mime_type: str) -> OCRResult:
-        """Run PaddleOCR-VL on image bytes.
+        """Run Tesseract OCR on image bytes."""
+        import pytesseract
+        from PIL import Image
 
-        PaddleOCR expects a file path, so we write bytes to a temp file.
-        Inference is CPU-bound, so we run it in a thread executor.
+        def _run_ocr(data: bytes) -> str:
+            img = Image.open(BytesIO(data))
+            # Convert to RGB if necessary (e.g. RGBA PNGs, palette GIFs)
+            if img.mode not in ("RGB", "L"):
+                img = img.convert("RGB")
+            text = pytesseract.image_to_string(img, lang=self._DEFAULT_LANG)
+            return text.strip()
 
-        ``import paddle`` forcibly sets ``OMP_NUM_THREADS=1``, limiting
-        CPU inference to a single core.  We override this before running
-        the model so that the VL inference can use multiple cores.
-        """
-        suffix_map = {
-            "image/png": ".png",
-            "image/jpeg": ".jpg",
-            "image/gif": ".gif",
-            "image/webp": ".webp",
-            "image/bmp": ".bmp",
-        }
-        suffix = suffix_map.get(mime_type, ".png")
-        num_threads = self._NUM_THREADS
-
-        def _run_ocr(data: bytes, ext: str) -> str:
-            # Override Paddle's OMP_NUM_THREADS=1 so the VL model
-            # uses multiple cores for inference.
-            os.environ["OMP_NUM_THREADS"] = str(num_threads)
-
-            pipeline = PaddleOCRVLEngine._get_pipeline()
-            with tempfile.NamedTemporaryFile(suffix=ext, delete=True) as tmp:
-                tmp.write(data)
-                tmp.flush()
-                result = pipeline.predict(tmp.name)
-                # result is a generator of dicts with "rec_text" or similar
-                texts = []
-                for item in result:
-                    if isinstance(item, dict):
-                        texts.append(item.get("rec_text", ""))
-                    elif isinstance(item, str):
-                        texts.append(item)
-                return "\n".join(texts).strip()
-
-        logger.info(
-            "Running OCR with PaddleOCR-VL (local, %d threads)", num_threads
-        )
-        text = await asyncio.to_thread(_run_ocr, image_bytes, suffix)
-        confidence = 0.9 if text else 0.0
-        return OCRResult(text=text, confidence=confidence, method="paddleocr-vl")
+        logger.info("Running OCR with Tesseract (local, lang=%s)", self._DEFAULT_LANG)
+        text = await asyncio.to_thread(_run_ocr, image_bytes)
+        confidence = 0.85 if text else 0.0
+        return OCRResult(text=text, confidence=confidence, method="tesseract")
 
 
 class GlmOcrEngine:
@@ -245,7 +209,7 @@ class OCRService:
 
     Engine selection is based on the ``ocr_engine`` setting:
     - ``"ai_vision"`` (default): cloud AI Vision models via AIRouter
-    - ``"paddleocr_vl"``: local PaddleOCR-VL on CPU
+    - ``"tesseract"``: local Tesseract OCR on CPU (fast, no layout analysis)
     - ``"glm_ocr"``: GLM-OCR via zai-sdk layout_parsing API
     """
 
@@ -254,11 +218,11 @@ class OCRService:
         from app.api.settings import _get_store
 
         store = _get_store()
-        return store.get("ocr_engine", "ai_vision")
-
-    # PaddleOCR-VL CPU inference can be extremely slow. If it doesn't
-    # finish within this timeout, fall back to the AI Vision cloud engine.
-    PADDLE_TIMEOUT_SECONDS = 120
+        engine = store.get("ocr_engine", "ai_vision")
+        # Migrate legacy setting
+        if engine == "paddleocr_vl":
+            return "tesseract"
+        return engine
 
     async def _external_extract(
         self, image_bytes: bytes, mime_type: str
@@ -284,9 +248,8 @@ class OCRService:
     ) -> OCRResult:
         """Extract text from image bytes using the configured engine.
 
-        When ``paddleocr_vl`` is selected, a timeout is applied.  If the
-        local engine times out or fails, the service automatically falls
-        back to the cloud AI Vision engine so the user still gets a result.
+        If the selected local engine (Tesseract) fails, the service
+        automatically falls back to the cloud AI Vision engine.
 
         Args:
             image_bytes: Raw image data.
@@ -323,26 +286,18 @@ class OCRService:
                     f"AI Vision error: {fallback_exc}"
                 ) from fallback_exc
 
-        if engine == "paddleocr_vl":
+        if engine == "tesseract":
             try:
-                return await asyncio.wait_for(
-                    PaddleOCRVLEngine().extract(image_bytes, mime_type),
-                    timeout=self.PADDLE_TIMEOUT_SECONDS,
-                )
-            except asyncio.TimeoutError:
-                logger.warning(
-                    "PaddleOCR-VL timed out after %ds, falling back to AI Vision",
-                    self.PADDLE_TIMEOUT_SECONDS,
-                )
+                return await TesseractEngine().extract(image_bytes, mime_type)
             except Exception as exc:
-                logger.warning("PaddleOCR-VL failed: %s — falling back to AI Vision", exc)
+                logger.warning("Tesseract failed: %s — falling back to AI Vision", exc)
 
             # Fallback to cloud AI Vision
             try:
                 return await self._ai_vision_extract(image_bytes, mime_type)
             except Exception as fallback_exc:
                 raise RuntimeError(
-                    f"PaddleOCR-VL and AI Vision both failed. "
+                    f"Tesseract and AI Vision both failed. "
                     f"AI Vision error: {fallback_exc}"
                 ) from fallback_exc
 

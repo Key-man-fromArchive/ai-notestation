@@ -1683,7 +1683,7 @@ function OcrEngineSection() {
         )}
       >
         <option value="ai_vision">{t('settings.ocrEngineAiVision')}</option>
-        <option value="paddleocr_vl">{t('settings.ocrEnginePaddleOcr')}</option>
+        <option value="tesseract">{t('settings.ocrEngineTesseract')}</option>
         <option value="glm_ocr">{t('settings.ocrEngineGlmOcr')}</option>
       </select>
     </div>

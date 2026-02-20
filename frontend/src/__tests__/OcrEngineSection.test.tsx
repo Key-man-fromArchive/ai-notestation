@@ -135,18 +135,18 @@ describe('OcrEngineSection', () => {
       const selects = screen.getAllByRole('combobox')
       // Find the select that has the OCR options
       const ocrSelect = selects.find(s =>
-        s.querySelector('option[value="paddleocr_vl"]')
+        s.querySelector('option[value="tesseract"]')
       )
       expect(ocrSelect).toBeTruthy()
       expect(ocrSelect!.querySelector('option[value="ai_vision"]')).toBeTruthy()
-      expect(ocrSelect!.querySelector('option[value="paddleocr_vl"]')).toBeTruthy()
+      expect(ocrSelect!.querySelector('option[value="tesseract"]')).toBeTruthy()
     })
   })
 
   it('reflects current engine from API', async () => {
     vi.mocked(api.apiClient.get).mockImplementation((path: string) => {
       if (path === '/settings/ocr_engine') {
-        return Promise.resolve({ key: 'ocr_engine', value: 'paddleocr_vl' })
+        return Promise.resolve({ key: 'ocr_engine', value: 'tesseract' })
       }
       if (path === '/settings') {
         return Promise.resolve({ settings: [] })
@@ -176,10 +176,10 @@ describe('OcrEngineSection', () => {
     await waitFor(() => {
       const selects = screen.getAllByRole('combobox')
       const ocrSelect = selects.find(s =>
-        s.querySelector('option[value="paddleocr_vl"]')
+        s.querySelector('option[value="tesseract"]')
       ) as HTMLSelectElement | undefined
       expect(ocrSelect).toBeTruthy()
-      expect(ocrSelect!.value).toBe('paddleocr_vl')
+      expect(ocrSelect!.value).toBe('tesseract')
     })
   })
 
@@ -192,14 +192,14 @@ describe('OcrEngineSection', () => {
 
     const selects = screen.getAllByRole('combobox')
     const ocrSelect = selects.find(s =>
-      s.querySelector('option[value="paddleocr_vl"]')
+      s.querySelector('option[value="tesseract"]')
     )!
-    await user.selectOptions(ocrSelect, 'paddleocr_vl')
+    await user.selectOptions(ocrSelect, 'tesseract')
 
     await waitFor(() => {
       expect(api.apiClient.put).toHaveBeenCalledWith(
         '/settings/ocr_engine',
-        { value: 'paddleocr_vl' },
+        { value: 'tesseract' },
       )
     })
   })

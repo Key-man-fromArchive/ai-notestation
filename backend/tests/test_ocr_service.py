@@ -1,10 +1,10 @@
-"""Tests for OCR service: engine selection, AI Vision, PaddleOCR-VL, file handling.
+"""Tests for OCR service: engine selection, AI Vision, Tesseract, file handling.
 
 Covers:
 - OCRResult model validation (3 tests)
 - Engine selection dispatch (4 tests)
 - AI Vision extraction with fallback (5 tests)
-- PaddleOCR-VL local engine (3 tests)
+- Tesseract local engine (3 tests)
 - File-based extraction (2 tests)
 """
 
@@ -15,7 +15,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from pydantic import ValidationError
 
-from app.services.ocr_service import OCRResult, OCRService, PaddleOCRVLEngine
+from app.services.ocr_service import OCRResult, OCRService, TesseractEngine
 
 
 # ---------------------------------------------------------------------------
@@ -32,7 +32,7 @@ class TestOCRResultModel:
         assert r.method == "gpt-4o"
 
     def test_empty_text(self):
-        r = OCRResult(text="", confidence=0.0, method="paddleocr-vl")
+        r = OCRResult(text="", confidence=0.0, method="tesseract")
         assert r.text == ""
         assert r.confidence == 0.0
 
@@ -57,11 +57,19 @@ class TestOCRServiceEngineSelection:
             assert engine == "ai_vision"
 
     @pytest.mark.asyncio
-    async def test_engine_paddleocr_vl(self):
+    async def test_engine_tesseract(self):
+        with patch("app.api.settings._get_store", return_value={"ocr_engine": "tesseract"}):
+            svc = OCRService()
+            engine = await svc._get_engine_setting()
+            assert engine == "tesseract"
+
+    @pytest.mark.asyncio
+    async def test_engine_legacy_migration(self):
+        # Test that paddleocr_vl setting migrates to tesseract
         with patch("app.api.settings._get_store", return_value={"ocr_engine": "paddleocr_vl"}):
             svc = OCRService()
             engine = await svc._get_engine_setting()
-            assert engine == "paddleocr_vl"
+            assert engine == "tesseract"
 
     @pytest.mark.asyncio
     async def test_dispatches_to_ai_vision(self):
@@ -76,15 +84,15 @@ class TestOCRServiceEngineSelection:
             assert result == expected
 
     @pytest.mark.asyncio
-    async def test_dispatches_to_paddleocr(self):
+    async def test_dispatches_to_tesseract(self):
         svc = OCRService()
-        expected = OCRResult(text="hello", confidence=0.9, method="paddleocr-vl")
+        expected = OCRResult(text="hello", confidence=0.9, method="tesseract")
         with (
-            patch.object(svc, "_get_engine_setting", new_callable=AsyncMock, return_value="paddleocr_vl"),
-            patch.object(PaddleOCRVLEngine, "extract", new_callable=AsyncMock, return_value=expected) as mock_paddle,
+            patch.object(svc, "_get_engine_setting", new_callable=AsyncMock, return_value="tesseract"),
+            patch.object(TesseractEngine, "extract", new_callable=AsyncMock, return_value=expected) as mock_tess,
         ):
             result = await svc.extract_text(b"fake-image", "image/png")
-            mock_paddle.assert_awaited_once()
+            mock_tess.assert_awaited_once()
             assert result == expected
 
 
@@ -184,50 +192,41 @@ class TestAIVisionExtract:
 
 
 # ---------------------------------------------------------------------------
-# TestPaddleOCRVLEngine
+# TestTesseractEngine
 # ---------------------------------------------------------------------------
 
-class TestPaddleOCRVLEngine:
-    """PaddleOCR-VL local engine tests."""
+class TestTesseractEngine:
+    """Tesseract local engine tests."""
 
     @pytest.mark.asyncio
     async def test_extract_success(self):
-        mock_pipeline = MagicMock()
-        mock_pipeline.predict.return_value = [
-            {"rec_text": "line1"},
-            {"rec_text": "line2"},
-        ]
+        mock_text = "line1\nline2"
 
-        with patch.object(PaddleOCRVLEngine, "_get_pipeline", return_value=mock_pipeline):
-            engine = PaddleOCRVLEngine()
+        with patch("pytesseract.image_to_string", return_value=mock_text):
+            engine = TesseractEngine()
             result = await engine.extract(b"fake-image-bytes", "image/png")
 
         assert result.text == "line1\nline2"
         assert result.confidence == 0.9
-        assert result.method == "paddleocr-vl"
+        assert result.method == "tesseract"
 
     @pytest.mark.asyncio
     async def test_empty_result(self):
-        mock_pipeline = MagicMock()
-        mock_pipeline.predict.return_value = []
-
-        with patch.object(PaddleOCRVLEngine, "_get_pipeline", return_value=mock_pipeline):
-            engine = PaddleOCRVLEngine()
+        with patch("pytesseract.image_to_string", return_value=""):
+            engine = TesseractEngine()
             result = await engine.extract(b"fake-image-bytes", "image/png")
 
         assert result.text == ""
         assert result.confidence == 0.0
 
     @pytest.mark.asyncio
-    async def test_string_items(self):
-        mock_pipeline = MagicMock()
-        mock_pipeline.predict.return_value = ["a", "b"]
-
-        with patch.object(PaddleOCRVLEngine, "_get_pipeline", return_value=mock_pipeline):
-            engine = PaddleOCRVLEngine()
+    async def test_whitespace_only(self):
+        with patch("pytesseract.image_to_string", return_value="   \n  \t  "):
+            engine = TesseractEngine()
             result = await engine.extract(b"fake-image-bytes", "image/png")
 
-        assert result.text == "a\nb"
+        assert result.text == ""
+        assert result.confidence == 0.0
 
 
 # ---------------------------------------------------------------------------

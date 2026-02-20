@@ -92,9 +92,9 @@ test.describe('Settings - Data Analysis Tab', () => {
     // Check for "OCR 엔진" section with select dropdown
     await expect(page.getByText(/OCR 엔진/).first()).toBeVisible()
 
-    // Look for OCR engine options (AI Vision, PaddleOCR, GLM OCR)
-    const ocrSelect = page.locator('select, [role="combobox"]').filter({ hasText: /AI Vision|PaddleOCR|GLM OCR/i })
-    const ocrText = page.getByText(/AI Vision|PaddleOCR|GLM OCR/i)
+    // Look for OCR engine options (AI Vision, Tesseract, GLM OCR)
+    const ocrSelect = page.locator('select, [role="combobox"]').filter({ hasText: /AI Vision|Tesseract|GLM OCR/i })
+    const ocrText = page.getByText(/AI Vision|Tesseract|GLM OCR/i)
 
     const ocrVisible = await ocrSelect.first().isVisible().catch(() => false) ||
                        await ocrText.first().isVisible().catch(() => false)

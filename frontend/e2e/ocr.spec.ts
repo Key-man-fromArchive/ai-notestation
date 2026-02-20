@@ -66,13 +66,13 @@ test.describe('OCR Settings', () => {
 
     // Find the select with OCR engine options
     const ocrSelect = page.locator('select').filter({
-      has: page.locator('option[value="paddleocr_vl"]'),
+      has: page.locator('option[value="tesseract"]'),
     })
     await expect(ocrSelect).toBeVisible()
 
     // Should have both options
     await expect(ocrSelect.locator('option[value="ai_vision"]')).toBeAttached()
-    await expect(ocrSelect.locator('option[value="paddleocr_vl"]')).toBeAttached()
+    await expect(ocrSelect.locator('option[value="tesseract"]')).toBeAttached()
   })
 
   test('changing OCR engine persists after reload', async ({ page }) => {
@@ -81,12 +81,12 @@ test.describe('OCR Settings', () => {
     await page.waitForLoadState('networkidle')
 
     const ocrSelect = page.locator('select').filter({
-      has: page.locator('option[value="paddleocr_vl"]'),
+      has: page.locator('option[value="tesseract"]'),
     })
     await expect(ocrSelect).toBeVisible({ timeout: 15000 })
 
-    // Change to PaddleOCR-VL
-    await ocrSelect.selectOption('paddleocr_vl')
+    // Change to Tesseract
+    await ocrSelect.selectOption('tesseract')
 
     // Wait for API call to complete
     await page.waitForTimeout(1000)
@@ -96,10 +96,10 @@ test.describe('OCR Settings', () => {
     await page.waitForLoadState('networkidle')
 
     const ocrSelectAfter = page.locator('select').filter({
-      has: page.locator('option[value="paddleocr_vl"]'),
+      has: page.locator('option[value="tesseract"]'),
     })
     await expect(ocrSelectAfter).toBeVisible({ timeout: 15000 })
-    await expect(ocrSelectAfter).toHaveValue('paddleocr_vl')
+    await expect(ocrSelectAfter).toHaveValue('tesseract')
 
     // Restore to default
     await ocrSelectAfter.selectOption('ai_vision')

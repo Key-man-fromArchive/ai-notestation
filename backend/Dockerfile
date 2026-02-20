@@ -8,7 +8,7 @@
 
 FROM python:3.12-slim
 
-# Install system dependencies required by asyncpg, lxml, and PaddleOCR (OpenCV)
+# Install system dependencies required by asyncpg, lxml, and Tesseract OCR
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         build-essential \
@@ -19,6 +19,11 @@ RUN apt-get update && \
         libglib2.0-0 \
         postgresql-client \
         antiword \
+        tesseract-ocr \
+        tesseract-ocr-kor \
+        tesseract-ocr-eng \
+        tesseract-ocr-jpn \
+        tesseract-ocr-chi-sim \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -28,11 +33,6 @@ COPY pyproject.toml .
 
 # Install Python dependencies (editable mode for development)
 RUN pip install --no-cache-dir -e ".[dev]"
-
-# Pin numpy<2.4 — PaddleOCR-VL crashes with numpy>=2.4 due to
-# "only 0-dimensional arrays can be converted to Python scalars"
-# See: https://github.com/PaddlePaddle/PaddleOCR/issues/17462
-RUN pip install --no-cache-dir "numpy<2.4"
 
 # Copy application code
 COPY . .

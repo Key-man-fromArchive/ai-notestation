@@ -2,7 +2,7 @@
 
 Covers:
 - GET /settings/ocr_engine default
-- PUT to paddleocr_vl
+- PUT to tesseract
 - Round-trip back to ai_vision
 - Settings cache reflection
 """
@@ -35,13 +35,13 @@ class TestOcrSettings:
         )
         assert resp.status_code == 200
         data = resp.json()
-        assert data["value"] in ("ai_vision", "paddleocr_vl")
+        assert data["value"] in ("ai_vision", "tesseract")
 
     @pytest.mark.asyncio
-    async def test_update_to_paddleocr(self, test_client, test_db):
+    async def test_update_to_tesseract(self, test_client, test_db):
         resp = await test_client.put(
             "/api/settings/ocr_engine",
-            json={"value": "paddleocr_vl"},
+            json={"value": "tesseract"},
             headers=make_auth_headers(),
         )
         assert resp.status_code == 200
@@ -52,14 +52,14 @@ class TestOcrSettings:
             "/api/settings/ocr_engine",
             headers=make_auth_headers(),
         )
-        assert get_resp.json()["value"] == "paddleocr_vl"
+        assert get_resp.json()["value"] == "tesseract"
 
     @pytest.mark.asyncio
     async def test_update_back_to_ai_vision(self, test_client, test_db):
-        # First change to paddleocr_vl
+        # First change to tesseract
         await test_client.put(
             "/api/settings/ocr_engine",
-            json={"value": "paddleocr_vl"},
+            json={"value": "tesseract"},
             headers=make_auth_headers(),
         )
         # Then change back
@@ -81,10 +81,10 @@ class TestOcrSettings:
         """Settings cache should reflect the updated value."""
         await test_client.put(
             "/api/settings/ocr_engine",
-            json={"value": "paddleocr_vl"},
+            json={"value": "tesseract"},
             headers=make_auth_headers(),
         )
 
         from app.api.settings import _get_store
         store = _get_store()
-        assert store.get("ocr_engine") == "paddleocr_vl"
+        assert store.get("ocr_engine") == "tesseract"
