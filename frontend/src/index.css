@@ -3,6 +3,8 @@
 
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   /* shadcn/ui 호환 디자인 토큰 (Light mode) */
   --color-background: oklch(100% 0 0);
@@ -62,7 +64,7 @@
 }
 
 * {
-  border-color: theme(colors.border);
+  border-color: var(--color-border);
 }
 
 html {
@@ -73,8 +75,8 @@ html {
 body {
   height: 100%;
   overflow: hidden;
-  background-color: theme(colors.background);
-  color: theme(colors.foreground);
+  background-color: var(--color-background);
+  color: var(--color-foreground);
   font-feature-settings: "rlig" 1, "calt" 1;
 }
 
