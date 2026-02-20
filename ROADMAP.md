@@ -215,6 +215,7 @@
   - P0 버그 3건: Semantic 중복 노트 (DISTINCT ON), tsquery 인젝션 (websearch_to_tsquery), ExactMatch regex 이스케이프
   - P1 개선 3건: RRF 페이지네이션 (merge-then-slice), Trigram 비활성화 (content에서 무용), JUDGE avg→max_score
   - P2 개선 4건: judge_min_term_coverage 0.6, English stemming (combined simple+english tsvector), count().over()→별도 COUNT, rrf_k=60 유지
+- **Foundation UX** (v2.1.0) — 사이드바 (접기/펼치기, 노트북/그래프/설정 네비게이션), 커맨드 팔레트 (Ctrl+K 글로벌 검색), 다크 모드 (Light/Dark/System 3옵션, useTheme 훅)
 
 ---
 

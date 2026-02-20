@@ -102,4 +102,4 @@ cd backend && alembic revision --autogenerate -m "description"  # create new
 - Branches: `main`, `phase/{N}-{feature}` (Git Worktree)
 - Backend: ruff (lint + format)
 - Frontend: ESLint + Prettier
-- UI: Light mode only
+- UI: Light/Dark/System theme (useTheme hook)
