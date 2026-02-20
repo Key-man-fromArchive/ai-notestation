@@ -39,7 +39,7 @@ bash install.sh        # Interactive setup. Enter NAS address and AI keys (or sk
 
 **AI Quality Gate** — Checklist-based self-verification. Rejects and regenerates AI responses that fail quality criteria.
 
-**3-Engine Hybrid OCR** — GLM-OCR → PaddleOCR → AI Vision automatic fallback chain. Dual pipeline for batch processing thousands of images. HWP/HWPX embedded image OCR.
+**3-Engine Hybrid OCR** — GLM-OCR → Tesseract (local) → AI Vision automatic fallback chain. Dual pipeline for batch processing thousands of images. HWP/HWPX embedded image OCR.
 
 **Knowledge Graph** — Force-directed visualization of note relationships. AI clustering discovers hidden connections across your collection.
 
@@ -138,7 +138,7 @@ Track notes, notebooks, sync status, and image analysis progress at a glance. OC
 ### Multimodal
 - **PDF Extraction** — PyMuPDF + GLM-OCR native PDF with 50-page chunk processing. Hybrid fallback.
 - **HWP/HWPX Extraction** — OpenHWP (Rust) text extraction + embedded image OCR.
-- **3-Engine Hybrid OCR** — GLM-OCR → PaddleOCR-VL (local CPU) → AI Vision (cloud). Automatic fallback chain.
+- **3-Engine Hybrid OCR** — GLM-OCR → Tesseract (local CPU, KOR/ENG/JPN/CHI) → AI Vision (cloud). Automatic fallback chain.
 - **Dual Pipeline Batch** — OCR (concurrency=1) and Vision description (concurrency=8) run as independent parallel pipelines. One failing doesn't block the other.
 - **Visual Search** — Extracted text and image descriptions are auto-indexed. Search images by their content.
 
@@ -182,7 +182,7 @@ Track notes, notebooks, sync status, and image analysis progress at a glance. OC
 | Database | PostgreSQL 16 + pgvector |
 | Search | tsvector + pg_trgm + pgvector + RRF |
 | AI | OpenAI, Anthropic, Google, ZhipuAI (auto-detected) |
-| OCR/Vision | GLM-OCR, PaddleOCR-VL, AI Vision (auto-fallback) |
+| OCR/Vision | GLM-OCR, Tesseract, AI Vision (auto-fallback) |
 | Auth | JWT + OAuth 2.0 (Google, OpenAI PKCE) |
 | Deploy | Docker Compose (3 containers) |
 

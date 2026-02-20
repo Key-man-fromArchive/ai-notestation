@@ -17,7 +17,7 @@
 | **검색** | Hybrid Search (FTS + Trigram + Semantic), RRF 병합, 12개 파라미터 튜닝 UI |
 | **AI** | 6개 태스크 (insight, search_qa, writing, spellcheck, template, summarize), SSE 스트리밍, AI 품질 게이트, 카테고리 인식 AI (프롬프트/힌트/부스트 자동 주입) |
 | **AI 프로바이더** | OpenAI, Anthropic, Google, ZhipuAI 자동 감지 + OAuth |
-| **멀티모달** | 3엔진 하이브리드 OCR (GLM-OCR → PaddleOCR-VL → AI Vision 자동 폴백), GLM-OCR 레이아웃 시각화, PDF 50페이지 청크 OCR, Vision 설명 생성, 듀얼 파이프라인 배치 분석, 캐시 기반 AI Insight 최적화, PDF AI 요약 삽입, **HWP/HWPX 텍스트 추출 + 내장 이미지 OCR** |
+| **멀티모달** | 3엔진 하이브리드 OCR (GLM-OCR → Tesseract → AI Vision 자동 폴백), GLM-OCR 레이아웃 시각화, PDF 50페이지 청크 OCR, Vision 설명 생성, 듀얼 파이프라인 배치 분석, 배치 분석 중단 기능, 이미지 중복 방지 + 자동 스킵, 캐시 기반 AI Insight 최적화, PDF AI 요약 삽입, **HWP/HWPX 텍스트 추출 + 내장 이미지 OCR** |
 | **에디터** | Tiptap 리치텍스트, 항상 편집 가능, 자동 저장 (3초/30초/이탈 시), 너비 4단계 조절, KaTeX 수식 렌더링, **드래그앤드롭 파일 업로드**, **저장 버튼 + 단축키**, **참고문헌 삽입 (PubMed/arXiv/URL)** |
 | **동기화** | Synology NoteStation 양방향 동기화, NSX 포맷 지원, 동기화 시 Notebook 테이블 자동 생성 + FK 연결 |
 | **백업** | 통합 백업 시스템 — DB 백업(임베딩·OCR·Vision·설정) + 네이티브 백업(노트·이미지·첨부) 병렬 생성, StreamingResponse 대용량 안전 다운로드, 설정 백업, **서버 직접 복원** (설정/네이티브/DB/전체) |
@@ -123,7 +123,7 @@
 - **핵심 아키텍처**:
   - `OCRService` — 3엔진 하이브리드 + 자동 폴백 체인:
     - 1차: GLM-OCR (ZhipuAI layout_parsing, 마크다운 출력, 레이아웃 시각화)
-    - 2차: PaddleOCR-VL (로컬 CPU, 120초 타임아웃)
+    - 2차: Tesseract (로컬 CPU, 한/영/일/중 지원, 레이아웃 인식 불가)
     - 3차: AI Vision 클라우드 (7개 모델 우선순위: glm-4.6v-flash → claude-sonnet-4-5)
   - `GlmOcrEngine` — 네이티브 PDF 지원 + 50페이지 단위 자동 청크 처리 (v1.6.0)
   - `PDFExtractor` — GLM-OCR 엔진 시 네이티브 PDF 경로, 실패 시 하이브리드 폴백
@@ -202,9 +202,14 @@
 - **무한 스크롤 수정** (v2.1.0) — 20개 이상 노트 자동 로딩 복구
 - **썸네일 이미지 인증** (v2.1.0) — NAS/NSX 이미지 로드 시 인증 토큰 추가
 - **Word 문서 지원** (v2.1.0) — .docx/.doc 텍스트 추출 + 검색 인덱싱
-- **labnote-box 하드웨어 어플라이언스** (v2.1.0) — ODROID H4 기반 Docker 5컨테이너 프로덕션 스택, Setup Wizard, On-device AI (ONNX Embedding + PaddleOCR-VL), [labnote-box repo](https://github.com/Key-man-fromArchive/labnote-box)
+- **labnote-box 하드웨어 어플라이언스** (v2.1.0) — ODROID H4 기반 Docker 5컨테이너 프로덕션 스택, Setup Wizard, On-device AI (ONNX Embedding + Tesseract OCR), [labnote-box repo](https://github.com/Key-man-fromArchive/labnote-box)
 - **Setup Guard 이미지 바이패스** (v2.1.0) — 서버 재시작 시 이미지 503 방지
 - **Setup Wizard JWT 수정** (v2.1.0) — get_current_user()와 호환되는 토큰 필드
+- **PaddleOCR-VL → Tesseract 교체** (v2.1.0) — CPU 55배 속도 향상 (60s → 1.1s/이미지), 한/영/일/중 지원, 레이아웃 인식 불가 명시
+- **배치 이미지 분석 중단** (v2.1.0) — 진행 중인 배치 OCR/Vision 분석을 UI에서 즉시 중단
+- **이미지 중복 방지 + 자동 스킵** (v2.1.0) — unique index (synology_note_id, file_path), 2KB 미만/GIF 자동 스킵
+- **노트 멀티 선택 + 배치 작업** (v2.1.0) — 체크박스 다중 선택, 배치 휴지통/이동, 우클릭 컨텍스트 메뉴
+- **노트북 편집/접근 모달** (v2.1.0) — 인라인 편집 → 모달 전환, 노트북별 접근 권한 관리
 - **E2E 테스트 안정화** (v2.1.0) — 65 failures → 0 failures (API 기반 auth setup)
 
 ---

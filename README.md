@@ -39,7 +39,7 @@ bash install.sh        # 대화형 설치. NAS 주소와 AI 키 입력 (Enter로
 
 **AI 품질 게이트** — 체크리스트 기반 자가 검증. 품질 기준 미달 시 자동 재생성.
 
-**3엔진 하이브리드 OCR** — GLM-OCR → PaddleOCR → AI Vision 자동 폴백 체인. 수천 장 이미지를 듀얼 파이프라인으로 배치 처리. HWP/HWPX 내장 이미지도 OCR.
+**3엔진 하이브리드 OCR** — GLM-OCR → Tesseract(로컬) → AI Vision 자동 폴백 체인. 수천 장 이미지를 듀얼 파이프라인으로 배치 처리. HWP/HWPX 내장 이미지도 OCR.
 
 **지식 그래프** — 노트 간 관계를 포스 레이아웃으로 시각화. AI 클러스터링이 숨겨진 연결을 발견.
 
@@ -138,7 +138,7 @@ TipTap 리치 에디터에 KaTeX 수식, 표, 코드 블록, 이미지 첨부를
 ### 멀티모달
 - **PDF 추출** — PyMuPDF + GLM-OCR 네이티브 PDF 50페이지 청크 처리. 하이브리드 폴백.
 - **HWP/HWPX 추출** — OpenHWP(Rust) 기반 텍스트 추출 + 내장 이미지 OCR.
-- **3엔진 하이브리드 OCR** — GLM-OCR → PaddleOCR-VL(로컬 CPU) → AI Vision(클라우드). 자동 폴백 체인.
+- **3엔진 하이브리드 OCR** — GLM-OCR → Tesseract(로컬 CPU, 한/영/일/중) → AI Vision(클라우드). 자동 폴백 체인.
 - **듀얼 파이프라인 배치** — OCR(동시성=1)과 Vision 설명 생성(동시성=8)이 독립 병렬 파이프라인으로 실행. 한쪽 실패해도 다른 쪽 계속.
 - **이미지 내용 검색** — 추출된 텍스트와 이미지 설명이 자동 인덱싱. 이미지 내용으로 검색 가능.
 
@@ -182,7 +182,7 @@ TipTap 리치 에디터에 KaTeX 수식, 표, 코드 블록, 이미지 첨부를
 | Database | PostgreSQL 16 + pgvector |
 | Search | tsvector + pg_trgm + pgvector + RRF |
 | AI | OpenAI, Anthropic, Google, ZhipuAI (자동 감지) |
-| OCR/Vision | GLM-OCR, PaddleOCR-VL, AI Vision (자동 폴백) |
+| OCR/Vision | GLM-OCR, Tesseract, AI Vision (자동 폴백) |
 | Auth | JWT + OAuth 2.0 (Google, OpenAI PKCE) |
 | Deploy | Docker Compose (3 containers) |
 
