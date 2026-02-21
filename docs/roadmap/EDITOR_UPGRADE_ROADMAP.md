@@ -2,33 +2,25 @@
 
 > TipTap 에디터를 연구 전자노트 전용 플랫폼으로 진화시키는 로드맵
 >
-> 작성일: 2026-02-14 | 최종 업데이트: 2026-02-21 | 현재 버전: v3.0.0
+> 작성일: 2026-02-14 | 최종 업데이트: 2026-02-21 | 현재 버전: v3.1.0
 
 ---
 
-## Current State (v3.0.0)
+## Current State (v3.1.0)
 
-**18 official extensions + 2 custom extensions**
+**18 official extensions + 5 custom extensions** (all tiptap ^2.27.2 ✅)
 
 | Category | Extensions | Version |
 |----------|-----------|---------|
-| Core | StarterKit (Bold, Italic, Strike, Code, Heading, BulletList, OrderedList, Blockquote, HorizontalRule, History) | ^2.2.4 ⚠️ |
-| Formatting | Underline, TextStyle, Color, Highlight (multicolor) | ^2.2.4 ⚠️ |
-| Structure | Table (resizable) + Row/Cell/Header, Link, Placeholder | ^2.2.4 / ^2.27.2 혼재 ⚠️ |
+| Core | StarterKit (Bold, Italic, Strike, Code, Heading, BulletList, OrderedList, Blockquote, HorizontalRule, History) | ^2.27.2 ✅ |
+| Formatting | Underline, TextStyle, Color, Highlight (multicolor) | ^2.27.2 ✅ |
+| Structure | Table (resizable) + Row/Cell/Header, Link, Placeholder | ^2.27.2 ✅ |
 | Editing | Typography, TaskList + TaskItem, CodeBlockLowlight, CharacterCount | ^2.27.2 ✅ |
-| Media | Custom NoteStationImage (S/M/L/Fit sizing, alignment, bubble menu, context menu, viewer modal) | ^2.2.4 ⚠️ |
-| Research | HandwritingBlock (tldraw + AI OCR/Math recognition) | custom |
+| Media | Custom NoteStationImage (S/M/L/Fit sizing, alignment, bubble menu, context menu, viewer modal) | ^2.27.2 ✅ |
+| Research | HandwritingBlock (tldraw + AI OCR/Math), ExperimentHeader, StatusChip, Signature | custom |
 | Search | SearchAndReplace (custom, Ctrl+H) | custom |
+| AI | SpellCheck (inline wavy underlines, click-to-fix panel) | custom |
 | UX | Multi-tab, Split view, Outline panel, Zen mode, Auto-save (3s debounce) | — |
-
-### Version Mismatch (해결 필요)
-
-| ^2.2.4 (구버전, 12개) | ^2.27.2 (최신, 6개) |
-|---|---|
-| starter-kit, react, image, link, color, highlight, text-style, underline, table, table-cell, table-header, table-row | character-count, code-block-lowlight, placeholder, task-item, task-list, typography |
-
-> ⚠️ 25단계 마이너 버전 차이. peer dep 충돌으로 Docker 빌드 실패 경험 (2026-02-21 hotfix).
-> `tiptap-extension-resize-image` 도입 시도 → 노드명 불일치(`imageResize` vs `image`)로 기존 노트 이미지 전부 깨짐 → 롤백 (7255b15).
 
 ---
 
@@ -50,7 +42,7 @@
 
 ---
 
-## Phase E-0: Version Unification (버전 통일) ← NEXT
+## ~~Phase E-0: Version Unification (버전 통일)~~ ✅ COMPLETED (76f0492)
 **Priority**: Critical | **Complexity**: Low-Medium | **Duration**: 1-2 days
 
 모든 tiptap 패키지를 ^2.27.2로 통일. 혼합 버전 peer dep 충돌 제거. Phase 2~4의 전제조건.
@@ -91,15 +83,15 @@
 
 ### 완료 기준
 
-- [ ] 12개 패키지 모두 ^2.27.2
-- [ ] `npm run build` 성공
-- [ ] Docker `docker compose up -d --build frontend` 성공
+- [x] 12개 패키지 모두 ^2.27.2
+- [x] `npm run build` 성공
+- [x] Docker `docker compose up -d --build frontend` 성공
 - [ ] 기존 노트 이미지/테이블/링크 정상 렌더링
 - [ ] BubbleMenu, ContextMenu, ViewerModal 정상 동작
 
 ---
 
-## Phase 2: Research-Specific Custom Nodes
+## ~~Phase 2: Research-Specific Custom Nodes~~ ✅ COMPLETED (76f0492)
 **Priority**: High | **Complexity**: Medium | **Duration**: 2 weeks
 
 LabNote AI의 핵심 차별화. 연구 전자노트에 특화된 커스텀 노드 3종.
@@ -241,22 +233,16 @@ frontend/
 - Comments 데이터: 별도 JSON 저장 (노트 본문과 분리)
 - Backend: `POST /api/notes/{id}/comments` 엔드포인트 추가
 
-### 3.2 Grammar & Spell Check
-`tiptap-languagetool` integration or custom AI-based
+### ~~3.2 Grammar & Spell Check~~ ✅ COMPLETED (41f29f3)
+AI-based (Option B) 구현 완료. 기존 AI Router + 새 `spellcheck_inline` 프롬프트.
 
-**Option A: LanguageTool** (self-hosted)
-- Docker 컨테이너 추가 (languagetool-server)
-- 실시간 밑줄 표시 (red: spelling, blue: grammar)
-- 클릭하면 수정 제안
-
-**Option B: AI-based** (기존 AI Router 활용) ← **Recommended**
-- 기존 spellcheck 프롬프트 연동 (`ai_router/prompts/spellcheck/`)
-- 단락 단위 비동기 검사
-- 인라인 Decoration으로 오류 표시
-- 클릭 시 AI 수정 제안 + 원클릭 적용
-- 과학 용어 사전 (사용자 추가 가능)
-
-**연구 노트 가치**: 긴 실험 보고서 오타·문법 오류 자동 감지, 논문 드래프트 품질 ↑
+**구현 내용**:
+- `SpellCheck.ts` TipTap extension — ProseMirror Decoration (wavy underlines)
+- `SpellCheckPanel.tsx` — 에러 목록, 개별 수정/무시/전체 수정, 네비게이션
+- `spellcheck_inline.py` — 구조화 JSON 응답 프롬프트 (`{errors: [{original, corrected, type, explanation}]}`)
+- 3종 에러 타입: 빨강(spelling), 파랑(grammar), 노랑(expression)
+- SSE 스트리밍으로 검사, 에디터 toolbar 버튼으로 토글
+- Light/Dark 테마 대응, en/ko i18n
 
 ### 3.3 Mention / Reference
 `@tiptap/extension-mention`
@@ -269,29 +255,21 @@ frontend/
 
 ### Phase 3 Deliverables
 ```
-frontend/
-└── src/
-    ├── extensions/
-    │   ├── Comment/
-    │   │   ├── CommentMark.ts             # Mark definition
-    │   │   └── CommentThread.tsx          # Thread UI
-    │   └── Mention/
-    │       ├── MentionExtension.ts        # Mention node
-    │       └── MentionSuggestion.tsx      # Autocomplete popup
-    ├── components/editor/
-    │   ├── CommentSidebar.tsx             # NEW: 코멘트 사이드바
-    │   └── SpellCheckDecoration.tsx       # NEW: AI 맞춤법 데코레이션
-    └── hooks/
-        ├── useComments.ts                 # Comment CRUD
-        └── useSpellCheck.ts              # AI spellcheck integration
+# 3.2 SpellCheck (✅ Done)
+frontend/src/extensions/SpellCheck.ts              # TipTap extension + ProseMirror decorations
+frontend/src/components/editor/SpellCheckPanel.tsx  # Panel UI (error list, fix/dismiss)
+backend/app/ai_router/prompts/spellcheck_inline.py # Structured JSON prompt
 
-backend/
-└── app/
-    ├── api/
-    │   └── comments.py                   # NEW: Comment endpoints
-    ├── models.py                         # NoteComment model
-    └── migrations/
-        └── versions/030_note_comments.py # NEW: comments table
+# 3.1 Comments (TODO)
+frontend/src/extensions/Comment/CommentMark.ts     # Mark definition
+frontend/src/extensions/Comment/CommentThread.tsx   # Thread UI
+frontend/src/components/editor/CommentSidebar.tsx   # 코멘트 사이드바
+frontend/src/hooks/useComments.ts                   # Comment CRUD
+backend/app/api/comments.py                         # Comment endpoints
+
+# 3.3 Mentions (TODO)
+frontend/src/extensions/Mention/MentionExtension.ts   # Mention node
+frontend/src/extensions/Mention/MentionSuggestion.tsx  # Autocomplete popup
 ```
 
 ---
@@ -430,8 +408,8 @@ Phase 2.3 Signature ─── (needs Member system) ──→ Phase 3.3 Mention
 | Phase | Duration | Milestone | Status |
 |-------|----------|-----------|--------|
 | **Phase 1**: Core Power-ups | 1 week | v3.0.0 — Typography, Search/Replace, TaskList, CodeBlock | ✅ Done |
-| **Phase E-0**: Version Unification | 1-2 days | v3.1.0 — All tiptap ^2.27.2, peer dep 정리 | ⬅️ Next |
-| **Phase 2**: Research Nodes | 2 weeks | v3.2.0 — ExperimentHeader, StatusChip, Signature | Planned |
-| **Phase 3**: Review & Quality | 2 weeks | v3.3.0 — Comments, AI SpellCheck, Mentions | Planned |
+| **Phase E-0**: Version Unification | 1-2 days | v3.1.0 — All tiptap ^2.27.2, peer dep 정리 | ✅ Done |
+| **Phase 2**: Research Nodes | 2 weeks | v3.1.0 — ExperimentHeader, StatusChip, Signature | ✅ Done |
+| **Phase 3**: Review & Quality | 2 weeks | v3.2.0 — Comments, AI SpellCheck, Mentions | 🔶 3.2 Done |
 | **Phase 4**: Collaboration | 3-4 weeks | v4.0.0 — Y.js real-time, Awareness, Offline | Planned |
 | **Total** | ~8-9 weeks | | |
