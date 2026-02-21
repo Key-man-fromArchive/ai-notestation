@@ -227,7 +227,7 @@ class SyncService:
         if not local_modified:
             return 0
 
-        from app.utils.note_utils import inline_local_file_images, restore_nas_image_urls
+        from app.utils.note_utils import inline_local_file_images, restore_nas_image_urls, strip_comment_marks
 
         # Build reverse notebook map (name → NAS object_id) for creating new notes
         notebook_map = await self._fetch_notebook_map()
@@ -237,7 +237,7 @@ class SyncService:
         for note in local_modified:
             try:
                 # Convert local image URLs before pushing to NAS
-                push_content = note.content_html or ""
+                push_content = strip_comment_marks(note.content_html or "")
                 logger.info(
                     "_push %s: before — nas-images=%d, images=%d, files=%d, placeholders=%d",
                     note.synology_note_id,

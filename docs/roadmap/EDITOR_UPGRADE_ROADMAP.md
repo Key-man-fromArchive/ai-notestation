@@ -210,29 +210,18 @@ frontend/
 
 팀 리뷰 워크플로와 텍스트 품질 보장.
 
-### 3.1 Inline Comments / Review
-`tiptap-comment-extension` (community) or custom Mark + sidebar
+### ~~3.1 Inline Comments / Review~~ ✅ COMPLETED
+Custom `CommentMark` (TipTap Mark) + CommentPanel + Backend API 구현 완료.
 
-```
-선택한 텍스트에 코멘트를 달면
-[highlighted text](💬 3 comments)  ──→  │ Comment sidebar │
-                                        │ Prof. Lee: 수정 │
-                                        │ Kim: 확인했음   │
-                                        │ + Reply...      │
-```
-
-**Features**:
-- 텍스트 범위 선택 → 코멘트 추가
-- 오른쪽 사이드 패널에 스레드 표시
-- Resolve / Reopen
-- 코멘트 시 알림 (future: 멤버 시스템 연동)
-- 코멘트 수 badge (toolbar)
-- 코멘트 모드 toggle (코멘트 하이라이트 on/off)
-
-**Architecture**:
-- `Comment` Mark: 텍스트에 comment ID 마킹
-- Comments 데이터: 별도 JSON 저장 (노트 본문과 분리)
-- Backend: `POST /api/notes/{id}/comments` 엔드포인트 추가
+**구현 내용**:
+- `CommentMark.ts` — TipTap Mark extension, `data-comment-id` 속성, `setComment()`/`unsetComment()` commands
+- `CommentPanel.tsx` — SpellCheckPanel 패턴, 코멘트 추가/해결/삭제, 클릭 네비게이션
+- `useComments.ts` — TanStack Query CRUD hook (4 mutations)
+- `comments.py` — 4 endpoints: GET list, POST create, PATCH resolve, DELETE
+- `note_comments` DB 테이블 (migration 030)
+- NAS push 시 `strip_comment_marks()` 자동 제거
+- 다크모드 + amber/yellow 하이라이트 스타일
+- Ctrl+Shift+M 단축키
 
 ### ~~3.2 Grammar & Spell Check~~ ✅ COMPLETED (41f29f3)
 AI-based (Option B) 구현 완료. 기존 AI Router + 새 `spellcheck_inline` 프롬프트.
@@ -266,12 +255,13 @@ frontend/src/extensions/SpellCheck.ts              # TipTap extension + ProseMir
 frontend/src/components/editor/SpellCheckPanel.tsx  # Panel UI (error list, fix/dismiss)
 backend/app/ai_router/prompts/spellcheck_inline.py # Structured JSON prompt
 
-# 3.1 Comments (TODO)
-frontend/src/extensions/Comment/CommentMark.ts     # Mark definition
-frontend/src/extensions/Comment/CommentThread.tsx   # Thread UI
-frontend/src/components/editor/CommentSidebar.tsx   # 코멘트 사이드바
-frontend/src/hooks/useComments.ts                   # Comment CRUD
-backend/app/api/comments.py                         # Comment endpoints
+# 3.1 Comments (✅ Done)
+frontend/src/extensions/Comments/CommentMark.ts        # TipTap Mark extension (data-comment-id)
+frontend/src/components/editor/CommentPanel.tsx         # Panel UI (add/resolve/delete, navigation)
+frontend/src/hooks/useComments.ts                       # TanStack Query CRUD hook
+backend/app/api/comments.py                             # 4 endpoints (list/create/resolve/delete)
+backend/migrations/versions/030_add_note_comments.py    # DB migration
+backend/app/utils/note_utils.py                         # strip_comment_marks() for NAS push
 
 # 3.3 Mentions (✅ Done)
 frontend/src/extensions/Mention/MemberMention.ts       # @member Mention extension
@@ -418,6 +408,6 @@ Phase 2.3 Signature ─── (needs Member system) ──→ Phase 3.3 Mention
 | **Phase 1**: Core Power-ups | 1 week | v3.0.0 — Typography, Search/Replace, TaskList, CodeBlock | ✅ Done |
 | **Phase E-0**: Version Unification | 1-2 days | v3.1.0 — All tiptap ^2.27.2, peer dep 정리 | ✅ Done |
 | **Phase 2**: Research Nodes | 2 weeks | v3.1.0 — ExperimentHeader, StatusChip, Signature | ✅ Done |
-| **Phase 3**: Review & Quality | 2 weeks | v3.2.0 — Comments, AI SpellCheck, Mentions | 🔶 3.2+3.3 Done |
+| **Phase 3**: Review & Quality | 2 weeks | v3.2.0 — Comments, AI SpellCheck, Mentions | ✅ Done |
 | **Phase 4**: Collaboration | 3-4 weeks | v4.0.0 — Y.js real-time, Awareness, Offline | Planned |
 | **Total** | ~8-9 weeks | | |

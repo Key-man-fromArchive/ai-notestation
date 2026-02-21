@@ -57,6 +57,8 @@ import {
   PenLine,
   Search,
   SpellCheck2,
+  MessageSquare,
+  Info,
 } from 'lucide-react'
 import { HandwritingBlock } from '@/extensions/HandwritingBlock'
 import { ExperimentHeader } from '@/extensions/ExperimentHeader'
@@ -66,11 +68,13 @@ import { SearchAndReplace } from '@/extensions/SearchAndReplace'
 import { SpellCheck } from '@/extensions/SpellCheck'
 import { MemberMention } from '@/extensions/Mention/MemberMention'
 import { NoteMention } from '@/extensions/Mention/NoteMention'
+import { CommentMark } from '@/extensions/Comments/CommentMark'
 import { ImageBubbleMenu } from '@/components/editor/ImageBubbleMenu'
 import { ImageContextMenu } from '@/components/editor/ImageContextMenu'
 import { ImageViewerModal } from '@/components/editor/ImageViewerModal'
 import { SearchReplacePanel } from '@/components/editor/SearchReplacePanel'
 import { SpellCheckPanel } from '@/components/editor/SpellCheckPanel'
+import { CommentPanel } from '@/components/editor/CommentPanel'
 
 const lowlight = createLowlight(common)
 
@@ -206,6 +210,7 @@ export const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(function
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [showSearchReplace, setShowSearchReplace] = useState(false)
   const [showSpellCheck, setShowSpellCheck] = useState(false)
+  const [showComments, setShowComments] = useState(false)
   const [viewerSrc, setViewerSrc] = useState<string | null>(null)
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; src: string } | null>(null)
 
@@ -250,6 +255,7 @@ export const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(function
       SpellCheck,
       MemberMention,
       NoteMention,
+      CommentMark,
     ],
     [t]
   )
@@ -355,7 +361,7 @@ export const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(function
     }
   }, [editor, markDirty])
 
-  // Ctrl+S for manual save, Ctrl+H for search & replace
+  // Ctrl+S for manual save, Ctrl+H for search & replace, Ctrl+Shift+M for comments
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
@@ -365,6 +371,10 @@ export const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(function
       if ((e.ctrlKey || e.metaKey) && e.key === 'h') {
         e.preventDefault()
         setShowSearchReplace(v => !v)
+      }
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'M') {
+        e.preventDefault()
+        setShowComments(v => !v)
       }
     }
     document.addEventListener('keydown', handler)
@@ -721,6 +731,15 @@ export const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(function
           <SpellCheck2 className={iconSize} />
         </ToolbarBtn>
 
+        {/* Comments */}
+        <ToolbarBtn
+          onClick={() => setShowComments(v => !v)}
+          active={showComments}
+          title={`${t('comments.title', 'Comments')} (Ctrl+Shift+M)`}
+        >
+          <MessageSquare className={iconSize} />
+        </ToolbarBtn>
+
         <ToolbarSep />
 
         {/* Color picker */}
@@ -739,7 +758,7 @@ export const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(function
           />
         </label>
 
-        {/* Keyboard shortcuts — pushed to the right */}
+        {/* Help & Shortcuts — pushed to the right */}
         <div className="relative ml-auto" ref={shortcutsRef}>
           <button
             type="button"
@@ -755,29 +774,83 @@ export const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(function
             <span className="hidden sm:inline">{t('notes.shortcuts.title', 'Keyboard Shortcuts')}</span>
           </button>
           {showShortcuts && (
-            <div className="absolute right-0 top-full mt-1.5 z-50 w-72 rounded-lg border border-border bg-popover p-4 shadow-lg">
-              <h4 className="text-sm font-semibold text-foreground mb-3">{t('notes.shortcuts.title', 'Keyboard Shortcuts')}</h4>
-              <div className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1.5 text-sm">
-                {[
-                  ['Ctrl+S', t('notes.shortcuts.save', 'Save')],
-                  ['Ctrl+Z', t('notes.shortcuts.undo', 'Undo')],
-                  ['Ctrl+Shift+Z', t('notes.shortcuts.redo', 'Redo')],
-                  ['Ctrl+B', t('notes.shortcuts.bold', 'Bold')],
-                  ['Ctrl+I', t('notes.shortcuts.italic', 'Italic')],
-                  ['Ctrl+U', t('notes.shortcuts.underline', 'Underline')],
-                  ['Ctrl+Shift+S', t('notes.shortcuts.strikethrough', 'Strikethrough')],
-                  ['Ctrl+E', t('notes.shortcuts.code', 'Inline Code')],
-                  ['Ctrl+K', t('notes.shortcuts.link', 'Link')],
-                  ['Ctrl+Alt+1', t('notes.shortcuts.heading1', 'Heading 1')],
-                  ['Ctrl+Alt+2', t('notes.shortcuts.heading2', 'Heading 2')],
-                  ['Ctrl+Alt+3', t('notes.shortcuts.heading3', 'Heading 3')],
-                  ['Ctrl+H', t('notes.shortcuts.searchReplace', 'Search & Replace')],
-                ].map(([key, label]) => (
-                  <Fragment key={key}>
-                    <span className="text-muted-foreground">{label}</span>
-                    <kbd className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-mono text-[11px]">{key}</kbd>
-                  </Fragment>
-                ))}
+            <div className="absolute right-0 top-full mt-1.5 z-50 w-80 rounded-lg border border-border bg-popover shadow-lg max-h-[70vh] overflow-y-auto">
+              {/* Keyboard shortcuts */}
+              <div className="p-4 pb-3">
+                <h4 className="text-sm font-semibold text-foreground mb-3">{t('notes.shortcuts.title', 'Keyboard Shortcuts')}</h4>
+                <div className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1.5 text-sm">
+                  {[
+                    ['Ctrl+S', t('notes.shortcuts.save', 'Save')],
+                    ['Ctrl+Z', t('notes.shortcuts.undo', 'Undo')],
+                    ['Ctrl+Shift+Z', t('notes.shortcuts.redo', 'Redo')],
+                    ['Ctrl+B', t('notes.shortcuts.bold', 'Bold')],
+                    ['Ctrl+I', t('notes.shortcuts.italic', 'Italic')],
+                    ['Ctrl+U', t('notes.shortcuts.underline', 'Underline')],
+                    ['Ctrl+Shift+S', t('notes.shortcuts.strikethrough', 'Strikethrough')],
+                    ['Ctrl+E', t('notes.shortcuts.code', 'Inline Code')],
+                    ['Ctrl+K', t('notes.shortcuts.link', 'Link')],
+                    ['Ctrl+Alt+1', t('notes.shortcuts.heading1', 'Heading 1')],
+                    ['Ctrl+Alt+2', t('notes.shortcuts.heading2', 'Heading 2')],
+                    ['Ctrl+Alt+3', t('notes.shortcuts.heading3', 'Heading 3')],
+                    ['Ctrl+H', t('notes.shortcuts.searchReplace', 'Search & Replace')],
+                    ['Ctrl+Shift+M', t('comments.title', 'Comments')],
+                  ].map(([key, label]) => (
+                    <Fragment key={key}>
+                      <span className="text-muted-foreground">{label}</span>
+                      <kbd className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-mono text-[11px]">{key}</kbd>
+                    </Fragment>
+                  ))}
+                </div>
+              </div>
+
+              {/* Feature guide */}
+              <div className="border-t border-border p-4 pt-3">
+                <h4 className="text-sm font-semibold text-foreground mb-2.5 flex items-center gap-1.5">
+                  <Info className="h-3.5 w-3.5" />
+                  {t('notes.featureGuide.title', 'Feature Guide')}
+                </h4>
+                <div className="flex flex-col gap-2.5 text-xs">
+                  {/* Comments */}
+                  <div className="flex gap-2">
+                    <MessageSquare className="h-3.5 w-3.5 text-amber-500 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-medium text-foreground">{t('comments.title', 'Comments')}</p>
+                      <p className="text-muted-foreground mt-0.5">
+                        {t('notes.featureGuide.comments', 'Select text → open Comments panel → type your comment → Add. Click a comment to jump to highlighted text. Resolve or delete when done.')}
+                      </p>
+                    </div>
+                  </div>
+                  {/* SpellCheck */}
+                  <div className="flex gap-2">
+                    <SpellCheck2 className="h-3.5 w-3.5 text-blue-500 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-medium text-foreground">{t('spellCheck.title', 'AI Spell Check')}</p>
+                      <p className="text-muted-foreground mt-0.5">
+                        {t('notes.featureGuide.spellCheck', 'Open panel → Start Check. AI analyzes text for spelling, grammar, and expression errors. Click Fix to apply, Dismiss to skip.')}
+                      </p>
+                    </div>
+                  </div>
+                  {/* Search & Replace */}
+                  <div className="flex gap-2">
+                    <Search className="h-3.5 w-3.5 text-green-500 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-medium text-foreground">{t('notes.shortcuts.searchReplace', 'Search & Replace')}</p>
+                      <p className="text-muted-foreground mt-0.5">
+                        {t('notes.featureGuide.searchReplace', 'Ctrl+H to open. Type a keyword to highlight all matches. Supports regex and case-sensitive modes.')}
+                      </p>
+                    </div>
+                  </div>
+                  {/* Mentions */}
+                  <div className="flex gap-2">
+                    <PenLine className="h-3.5 w-3.5 text-purple-500 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-medium text-foreground">{t('notes.featureGuide.mentions', 'Mentions')}</p>
+                      <p className="text-muted-foreground mt-0.5">
+                        {t('notes.featureGuide.mentionsDesc', 'Type @ to mention a team member, # to reference another note. Select from the dropdown.')}
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -797,6 +870,15 @@ export const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(function
         <SpellCheckPanel
           editor={editor}
           onClose={() => setShowSpellCheck(false)}
+        />
+      )}
+
+      {/* Comments panel */}
+      {showComments && editor && (
+        <CommentPanel
+          editor={editor}
+          noteId={noteId}
+          onClose={() => setShowComments(false)}
         />
       )}
 

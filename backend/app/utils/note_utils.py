@@ -455,3 +455,20 @@ def extract_first_image_url(html: str | None) -> str | None:
         if src.startswith(("/api/images/", "/api/nas-images/", "/api/files/")):
             return src
     return None
+
+
+# Regex to match comment mark spans: <span ... data-comment-id="..." ...>...</span>
+_COMMENT_MARK_RE = re.compile(
+    r'<span[^>]*\bdata-comment-id="[^"]*"[^>]*>(.*?)</span>',
+    re.DOTALL,
+)
+
+
+def strip_comment_marks(html: str) -> str:
+    """Remove inline comment mark spans, preserving their inner content.
+
+    Used when pushing to NAS so NoteStation doesn't see comment markup.
+    """
+    if not html or "data-comment-id" not in html:
+        return html
+    return _COMMENT_MARK_RE.sub(r'\1', html)

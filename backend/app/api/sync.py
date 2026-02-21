@@ -496,10 +496,10 @@ async def push_note(
                         )
 
         from app.synology_gateway.notestation import NoteStationService
-        from app.utils.note_utils import inline_local_file_images, restore_nas_image_urls
+        from app.utils.note_utils import inline_local_file_images, restore_nas_image_urls, strip_comment_marks
 
         # Convert local images: /api/files/ -> data URI, /api/images/ -> NAS ref
-        push_content = note.content_html or ""
+        push_content = strip_comment_marks(note.content_html or "")
         logger.info(
             "push_note %s: before transforms — nas-images=%d, images=%d, files=%d, placeholders=%d",
             note_id,

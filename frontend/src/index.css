@@ -430,6 +430,37 @@ textarea {
   color: oklch(80% 0.1 295);
 }
 
+/* Inline comment highlights */
+.tiptap .comment-highlight {
+  background: oklch(92% 0.08 90 / 0.6);
+  border-bottom: 2px solid oklch(75% 0.12 90);
+  cursor: pointer;
+}
+
+.tiptap .comment-highlight:hover {
+  background: oklch(88% 0.1 90 / 0.8);
+}
+
+.dark .tiptap .comment-highlight {
+  background: oklch(40% 0.06 90 / 0.4);
+  border-bottom-color: oklch(55% 0.1 90);
+}
+
+.dark .tiptap .comment-highlight:hover {
+  background: oklch(45% 0.08 90 / 0.5);
+}
+
+/* Resolved comment — dimmed highlight */
+.tiptap .comment-highlight-resolved {
+  background: oklch(95% 0.02 90 / 0.3);
+  border-bottom: 1px dashed oklch(80% 0.04 90);
+}
+
+.dark .tiptap .comment-highlight-resolved {
+  background: oklch(30% 0.02 90 / 0.2);
+  border-bottom-color: oklch(45% 0.04 90);
+}
+
 /* 애니메이션 줄이기 선호 사용자 지원 */
 @media (prefers-reduced-motion: reduce) {
   *,
