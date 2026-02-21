@@ -35,10 +35,15 @@ DEFAULT_SEARCH_PARAMS: dict[str, float | int] = {
     # Adaptive search strategy (post-retrieval judge)
     "adaptive_enabled": 1,
     "judge_min_results": 3,
-    "judge_min_avg_score": 0.05,
-    "judge_min_avg_score_ko": 0.05,
+    "judge_min_avg_score": 0.15,
+    "judge_min_avg_score_ko": 0.20,
     "judge_min_term_coverage": 0.6,
     "judge_confidence_threshold": 0.7,
+    # FTS snippet (ts_headline)
+    "snippet_max_words": 35,
+    "snippet_min_words": 15,
+    # Semantic
+    "semantic_min_similarity": 0.3,
 }
 
 

@@ -56,9 +56,7 @@ class EmbeddingService:
         self._local_url: str | None = os.environ.get("EMBEDDING_SERVICE_URL") or None
 
         if self._local_url:
-            logger.info(
-                "EmbeddingService: local mode enabled (%s)", self._local_url
-            )
+            logger.info("EmbeddingService: local mode enabled (%s)", self._local_url)
             self._client = None
             self._encoding = None
         else:
@@ -158,8 +156,8 @@ class EmbeddingService:
     @staticmethod
     def _chunk_text_by_chars(
         text: str,
-        chunk_size: int = 2000,
-        overlap: int = 200,
+        chunk_size: int = 1000,
+        overlap: int = 100,
     ) -> list[str]:
         """Character-based chunker used as a fallback in local mode.
 
@@ -168,10 +166,10 @@ class EmbeddingService:
         text : str
             The input text to split.
         chunk_size : int
-            Maximum number of characters per chunk (default: 2000).
+            Maximum number of characters per chunk (default: 1000).
         overlap : int
             Number of overlapping characters between consecutive chunks
-            (default: 200).
+            (default: 100).
         """
         if len(text) <= chunk_size:
             return [text]
@@ -277,6 +275,4 @@ class EmbeddingService:
             raise EmbeddingError(str(exc)) from exc
         except (KeyError, ValueError) as exc:
             logger.error("Local embedding response parse error: %s", exc)
-            raise EmbeddingError(
-                f"Unexpected response from local embedding service: {exc}"
-            ) from exc
+            raise EmbeddingError(f"Unexpected response from local embedding service: {exc}") from exc

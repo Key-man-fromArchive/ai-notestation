@@ -36,7 +36,7 @@ interface JudgeInfo {
   skip_reason: string | null
   confidence: number
   fts_result_count?: number
-  fts_avg_score?: number
+  fts_best_score?: number
   term_coverage?: number
 }
 

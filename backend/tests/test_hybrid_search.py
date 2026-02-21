@@ -91,8 +91,8 @@ class TestRRFMergeBasic:
         assert merged_ids == {"1", "2", "3", "4"}
         assert all(r.search_type == "hybrid" for r in merged)
 
-    def test_rrf_merge_score_calculation_default_weights(self):
-        """RRF score with default weights (1.0) is sum(1/(k+rank)).
+    def test_rrf_merge_score_calculation_equal_weights(self):
+        """RRF score with equal weights (1.0) is sum(1/(k+rank)).
 
         With k=60, fts_weight=1.0, semantic_weight=1.0:
           note_id=1: rank 0 in FTS -> score = 1.0 * 1/(60+0) = 1/60
@@ -107,7 +107,13 @@ class TestRRFMergeBasic:
             _sr(3, score=0.7, search_type="semantic"),
         ]
 
-        merged = HybridSearchEngine.rrf_merge(fts_results, semantic_results, k=60)
+        merged = HybridSearchEngine.rrf_merge(
+            fts_results,
+            semantic_results,
+            k=60,
+            fts_weight=1.0,
+            semantic_weight=1.0,
+        )
 
         scores_by_id = {r.note_id: r.score for r in merged}
         assert scores_by_id["1"] == pytest.approx(1 / 60, abs=1e-10)
@@ -125,8 +131,11 @@ class TestRRFMergeBasic:
         semantic_results = [_sr(2, score=0.7, search_type="semantic")]
 
         merged = HybridSearchEngine.rrf_merge(
-            fts_results, semantic_results, k=60,
-            fts_weight=0.7, semantic_weight=0.3,
+            fts_results,
+            semantic_results,
+            k=60,
+            fts_weight=0.7,
+            semantic_weight=0.3,
         )
 
         scores_by_id = {r.note_id: r.score for r in merged}
@@ -145,15 +154,21 @@ class TestRRFMergeDuplicates:
     def test_duplicate_note_id_scores_summed(self):
         """When a note appears in both FTS and semantic, RRF scores are summed."""
         fts_results = [
-            _sr(1, "Note A", "fts snippet", 0.9, "fts"),   # rank 0
-            _sr(2, "Note B", "fts snippet", 0.8, "fts"),   # rank 1
+            _sr(1, "Note A", "fts snippet", 0.9, "fts"),  # rank 0
+            _sr(2, "Note B", "fts snippet", 0.8, "fts"),  # rank 1
         ]
         semantic_results = [
             _sr(1, "Note A", "semantic snippet", 0.7, "semantic"),  # rank 0
             _sr(3, "Note C", "semantic snippet", 0.6, "semantic"),  # rank 1
         ]
 
-        merged = HybridSearchEngine.rrf_merge(fts_results, semantic_results, k=60)
+        merged = HybridSearchEngine.rrf_merge(
+            fts_results,
+            semantic_results,
+            k=60,
+            fts_weight=1.0,
+            semantic_weight=1.0,
+        )
 
         # note_id=1 appears in both: FTS rank 0 + semantic rank 0
         # score = 1/(60+0) + 1/(60+0) = 2/60
@@ -191,7 +206,13 @@ class TestRRFMergeOneSide:
             _sr(2, score=0.8, search_type="fts"),
         ]
 
-        merged = HybridSearchEngine.rrf_merge(fts_results, [], k=60)
+        merged = HybridSearchEngine.rrf_merge(
+            fts_results,
+            [],
+            k=60,
+            fts_weight=1.0,
+            semantic_weight=1.0,
+        )
 
         assert len(merged) == 2
         assert all(r.search_type == "hybrid" for r in merged)
@@ -205,7 +226,13 @@ class TestRRFMergeOneSide:
             _sr(3, score=0.7, search_type="semantic"),
         ]
 
-        merged = HybridSearchEngine.rrf_merge([], semantic_results, k=60)
+        merged = HybridSearchEngine.rrf_merge(
+            [],
+            semantic_results,
+            k=60,
+            fts_weight=1.0,
+            semantic_weight=1.0,
+        )
 
         assert len(merged) == 1
         assert merged[0].search_type == "hybrid"
@@ -239,8 +266,8 @@ class TestRRFMergeSorting:
     def test_sorted_by_rrf_score_descending(self):
         """Results with higher RRF scores appear first."""
         fts_results = [
-            _sr(1, score=0.9, search_type="fts"),   # rank 0 -> 1/60
-            _sr(2, score=0.8, search_type="fts"),   # rank 1 -> 1/61
+            _sr(1, score=0.9, search_type="fts"),  # rank 0 -> 1/60
+            _sr(2, score=0.8, search_type="fts"),  # rank 1 -> 1/61
         ]
         semantic_results = [
             _sr(2, score=0.7, search_type="semantic"),  # rank 0 -> 1/60
@@ -538,14 +565,17 @@ class TestAdaptiveDisabled:
 
         hybrid = HybridSearchEngine(fts_engine=fts_engine, semantic_engine=sem_engine)
 
-        with patch("app.search.judge.get_search_params", return_value={
-            "adaptive_enabled": 0,
-            "judge_min_results": 3,
-            "judge_min_avg_score": 0.1,
-            "judge_min_avg_score_ko": 0.08,
-            "judge_min_term_coverage": 0.5,
-            "judge_confidence_threshold": 0.7,
-        }):
+        with patch(
+            "app.search.judge.get_search_params",
+            return_value={
+                "adaptive_enabled": 0,
+                "judge_min_results": 3,
+                "judge_min_avg_score": 0.1,
+                "judge_min_avg_score_ko": 0.08,
+                "judge_min_term_coverage": 0.5,
+                "judge_confidence_threshold": 0.7,
+            },
+        ):
             page = await hybrid.search("research", limit=20)
 
         # Semantic should have been called (adaptive disabled = always hybrid)
@@ -646,8 +676,11 @@ class TestWeightedRRFDuplicates:
         semantic_results = [_sr(1, "Note A", "sem", 0.7, "semantic")]  # rank 0
 
         merged = HybridSearchEngine.rrf_merge(
-            fts_results, semantic_results, k=60,
-            fts_weight=0.7, semantic_weight=0.3,
+            fts_results,
+            semantic_results,
+            k=60,
+            fts_weight=0.7,
+            semantic_weight=0.3,
         )
 
         assert len(merged) == 1
@@ -665,7 +698,7 @@ class TestJudgeInfoMetrics:
 
     @pytest.mark.asyncio
     async def test_judge_info_has_quality_metrics(self):
-        """JudgeInfo includes fts_result_count, fts_avg_score, term_coverage."""
+        """JudgeInfo includes fts_result_count, fts_best_score, term_coverage."""
         fts_results = [
             _sr(1, "Note A", "<b>test</b> snippet", 0.5, "fts"),
             _sr(2, "Note B", "<b>test</b> data", 0.3, "fts"),
@@ -679,6 +712,6 @@ class TestJudgeInfoMetrics:
 
         assert page.judge_info is not None
         assert page.judge_info.fts_result_count is not None
-        assert page.judge_info.fts_avg_score is not None
+        assert page.judge_info.fts_best_score is not None
         assert page.judge_info.term_coverage is not None
         assert page.judge_info.fts_result_count == 2

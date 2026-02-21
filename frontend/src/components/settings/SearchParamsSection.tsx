@@ -24,6 +24,9 @@ interface SearchParams {
   judge_min_avg_score_ko: number
   judge_min_term_coverage: number
   judge_confidence_threshold: number
+  snippet_max_words: number
+  snippet_min_words: number
+  semantic_min_similarity: number
 }
 
 interface SearchParamsResponse {
@@ -47,10 +50,13 @@ const DEFAULT_PARAMS: SearchParams = {
   unified_trigram_weight: 0.0,
   adaptive_enabled: 1,
   judge_min_results: 3,
-  judge_min_avg_score: 0.05,
-  judge_min_avg_score_ko: 0.05,
+  judge_min_avg_score: 0.15,
+  judge_min_avg_score_ko: 0.20,
   judge_min_term_coverage: 0.6,
   judge_confidence_threshold: 0.7,
+  snippet_max_words: 35,
+  snippet_min_words: 15,
+  semantic_min_similarity: 0.3,
 }
 
 export function SearchParamsSection() {

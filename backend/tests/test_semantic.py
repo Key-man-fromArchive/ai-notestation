@@ -28,6 +28,7 @@ def _make_mock_row(
     title: str,
     chunk_text: str,
     cosine_distance: float,
+    chunk_type: str = "original",
 ):
     """Build a mock SQLAlchemy row result for semantic search.
 
@@ -38,6 +39,7 @@ def _make_mock_row(
     row.note_id = str(note_id) if isinstance(note_id, int) else note_id
     row.title = title
     row.chunk_text = chunk_text
+    row.chunk_type = chunk_type
     row.cosine_distance = cosine_distance
     row.source_created_at = None
     row.source_updated_at = None
@@ -45,12 +47,22 @@ def _make_mock_row(
     return row
 
 
-def _make_mock_session(rows: list | None = None):
-    """Build a mock AsyncSession whose execute() returns the given rows."""
+def _make_mock_session(rows: list | None = None, total: int | None = None):
+    """Build a mock AsyncSession whose execute() returns the given rows.
+
+    First call returns rows (data query), second call returns a scalar count.
+    """
+    actual_rows = rows if rows is not None else []
+    count = total if total is not None else len(actual_rows)
+
+    data_result = MagicMock()
+    data_result.fetchall.return_value = actual_rows
+
+    count_result = MagicMock()
+    count_result.scalar.return_value = count
+
     session = AsyncMock()
-    result_mock = MagicMock()
-    result_mock.fetchall.return_value = rows if rows is not None else []
-    session.execute = AsyncMock(return_value=result_mock)
+    session.execute = AsyncMock(side_effect=[data_result, count_result])
     return session
 
 
@@ -63,9 +75,7 @@ def _make_mock_embedding_service(
     if embed_side_effect is not None:
         service.embed_text = AsyncMock(side_effect=embed_side_effect)
     else:
-        service.embed_text = AsyncMock(
-            return_value=embed_return if embed_return is not None else FAKE_EMBEDDING
-        )
+        service.embed_text = AsyncMock(return_value=embed_return if embed_return is not None else FAKE_EMBEDDING)
     return service
 
 
@@ -113,14 +123,14 @@ class TestSemanticSearchSuccess:
 
     @pytest.mark.asyncio
     async def test_search_calls_session_execute(self):
-        """The search method calls session.execute exactly once for a valid query."""
+        """The search method calls session.execute twice (data + count) for a valid query."""
         session = _make_mock_session([])
         embedding_service = _make_mock_embedding_service()
         engine = SemanticSearchEngine(session, embedding_service)
 
         await engine.search("test query")
 
-        session.execute.assert_awaited_once()
+        assert session.execute.await_count == 2
 
 
 # ---------------------------------------------------------------------------
@@ -198,7 +208,8 @@ class TestLimitOffset:
 
         await engine.search("test")
 
-        call_args = session.execute.call_args
+        # First execute call is the data query (with LIMIT)
+        call_args = session.execute.call_args_list[0]
         stmt = call_args[0][0]
         compiled = str(stmt.compile(compile_kwargs={"literal_binds": False}))
         assert "LIMIT" in compiled.upper() or "limit" in compiled
@@ -206,10 +217,7 @@ class TestLimitOffset:
     @pytest.mark.asyncio
     async def test_custom_limit(self):
         """Custom limit restricts the number of results."""
-        rows = [
-            _make_mock_row(i, f"Note {i}", f"Chunk text for note {i}", 0.1 * i)
-            for i in range(5)
-        ]
+        rows = [_make_mock_row(i, f"Note {i}", f"Chunk text for note {i}", 0.1 * i) for i in range(5)]
         for row in rows:
             row.total_count = 5
         session = _make_mock_session(rows)
@@ -339,9 +347,7 @@ class TestEmbeddingErrorHandling:
     async def test_embedding_error_returns_empty_list(self):
         """When EmbeddingService raises EmbeddingError, search returns SearchPage with empty results."""
         session = _make_mock_session()
-        embedding_service = _make_mock_embedding_service(
-            embed_side_effect=EmbeddingError("API rate limit exceeded")
-        )
+        embedding_service = _make_mock_embedding_service(embed_side_effect=EmbeddingError("API rate limit exceeded"))
         engine = SemanticSearchEngine(session, embedding_service)
 
         page = await engine.search("test query")
@@ -399,7 +405,8 @@ class TestNotesJoin:
 
         await engine.search("test")
 
-        call_args = session.execute.call_args
+        # First execute call is the data query
+        call_args = session.execute.call_args_list[0]
         stmt = call_args[0][0]
         compiled = str(stmt.compile(compile_kwargs={"literal_binds": False}))
         # The SQL should reference both tables with a JOIN
@@ -417,7 +424,8 @@ class TestNotesJoin:
 
         await engine.search("vector search")
 
-        call_args = session.execute.call_args
+        # First execute call is the data query
+        call_args = session.execute.call_args_list[0]
         stmt = call_args[0][0]
         compiled = str(stmt.compile(compile_kwargs={"literal_binds": False}))
         # pgvector cosine distance operator <=>

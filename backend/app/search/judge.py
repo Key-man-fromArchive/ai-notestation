@@ -27,7 +27,7 @@ class JudgeDecision:
         reason: Human-readable explanation of the decision.
         confidence: 0-1 confidence in the decision.
         fts_result_count: Number of FTS results evaluated.
-        avg_score: Average FTS score of the results.
+        best_score: Best (max) FTS score among the results.
         term_coverage: Fraction of query morphemes found in FTS snippets.
     """
 
@@ -35,7 +35,7 @@ class JudgeDecision:
     reason: str
     confidence: float
     fts_result_count: int
-    avg_score: float
+    best_score: float
     term_coverage: float
 
 
@@ -55,7 +55,7 @@ class SearchJudge:
     ) -> JudgeDecision:
         """Evaluate FTS results and decide if semantic search is needed.
 
-        Uses max_score (best FTS hit) instead of avg_score to avoid
+        Uses max_score (best FTS hit) instead of average to avoid
         penalizing queries where one strong match exists alongside weaker ones.
         Formula: quality = 0.4 * max_score_factor + 0.6 * coverage_factor
 
@@ -75,7 +75,7 @@ class SearchJudge:
                 reason="adaptive disabled",
                 confidence=1.0,
                 fts_result_count=len(fts_results),
-                avg_score=0.0,
+                best_score=0.0,
                 term_coverage=0.0,
             )
 
@@ -97,7 +97,7 @@ class SearchJudge:
                 reason="no FTS results",
                 confidence=1.0,
                 fts_result_count=0,
-                avg_score=0.0,
+                best_score=0.0,
                 term_coverage=0.0,
             )
             self._log(analysis, decision)
@@ -133,7 +133,7 @@ class SearchJudge:
             reason=reason,
             confidence=quality,
             fts_result_count=result_count,
-            avg_score=max_score,
+            best_score=max_score,
             term_coverage=term_coverage,
         )
         self._log(analysis, decision)
@@ -164,13 +164,13 @@ class SearchJudge:
     def _log(analysis: QueryAnalysis, decision: JudgeDecision) -> None:
         logger.info(
             "SearchJudge: query=%r lang=%s → semantic=%s reason=%r confidence=%.2f "
-            "fts_count=%d avg_score=%.3f coverage=%.2f",
+            "fts_count=%d best_score=%.3f coverage=%.2f",
             analysis.original,
             analysis.language,
             decision.should_run_semantic,
             decision.reason,
             decision.confidence,
             decision.fts_result_count,
-            decision.avg_score,
+            decision.best_score,
             decision.term_coverage,
         )

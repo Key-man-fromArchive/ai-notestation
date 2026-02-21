@@ -115,7 +115,7 @@ class JudgeInfoResponse(BaseModel):
     skip_reason: str | None = None
     confidence: float = 0.0
     fts_result_count: int | None = None
-    fts_avg_score: float | None = None
+    fts_best_score: float | None = None
     term_coverage: float | None = None
 
 class SearchResponse(BaseModel):
@@ -360,6 +360,7 @@ async def search(
                 snippet=r.snippet,
                 score=r.score,
                 search_type=r.search_type,
+                chunk_type=r.chunk_type,
                 created_at=r.created_at,
                 updated_at=r.updated_at,
                 match_explanation=MatchExplanationResponse(
@@ -387,7 +388,7 @@ async def search(
             skip_reason=page.judge_info.skip_reason,
             confidence=page.judge_info.confidence,
             fts_result_count=page.judge_info.fts_result_count,
-            fts_avg_score=page.judge_info.fts_avg_score,
+            fts_best_score=page.judge_info.fts_best_score,
             term_coverage=page.judge_info.term_coverage,
         ) if page.judge_info else None,
     )
@@ -511,6 +512,7 @@ async def refine_search(
                 snippet=r.snippet,
                 score=r.score,
                 search_type=r.search_type,
+                chunk_type=r.chunk_type,
                 created_at=r.created_at,
                 updated_at=r.updated_at,
                 match_explanation=MatchExplanationResponse(
@@ -544,7 +546,7 @@ async def refine_search(
             skip_reason=page.judge_info.skip_reason,
             confidence=page.judge_info.confidence,
             fts_result_count=page.judge_info.fts_result_count,
-            fts_avg_score=page.judge_info.fts_avg_score,
+            fts_best_score=page.judge_info.fts_best_score,
             term_coverage=page.judge_info.term_coverage,
         )
         if page.judge_info

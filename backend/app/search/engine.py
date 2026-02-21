@@ -91,6 +91,7 @@ class SearchResult(BaseModel):
     snippet: str
     score: float
     search_type: str = Field(default="fts")
+    chunk_type: str | None = None
     created_at: str | None = None
     updated_at: str | None = None
     match_explanation: MatchExplanation | None = None
@@ -104,7 +105,7 @@ class JudgeInfo(BaseModel):
     skip_reason: str | None = None
     confidence: float = 0.0
     fts_result_count: int | None = None
-    fts_avg_score: float | None = None
+    fts_best_score: float | None = None
     term_coverage: float | None = None
 
 
@@ -185,11 +186,16 @@ class FullTextSearchEngine:
         score = (params["title_weight"] * title_rank + params["content_weight"] * content_rank).label("score")
 
         # ts_headline generates a highlighted snippet from content_text
+        headline_opts = (
+            f"StartSel=<b>, StopSel=</b>, "
+            f"MaxWords={int(params.get('snippet_max_words', 35))}, "
+            f"MinWords={int(params.get('snippet_min_words', 15))}"
+        )
         headline = func.ts_headline(
             ts_config,
             Note.content_text,
             tsquery,
-            literal_column("'StartSel=<b>, StopSel=</b>, MaxWords=35, MinWords=15'"),
+            literal_column(f"'{headline_opts}'"),
         ).label("snippet")
 
         match_condition = Note.search_vector.op("@@")(tsquery)
@@ -441,6 +447,9 @@ class TrigramSearchEngine:
         return SearchPage(results=results, total=total)
 
 
+_CONTEXT_PREFIX_RE = re.compile(r"^\[.*?\]\n")
+
+
 class SemanticSearchEngine:
     """pgvector-based semantic search engine using cosine similarity.
 
@@ -502,6 +511,9 @@ class SemanticSearchEngine:
         if not query_embedding:
             return SearchPage(results=[], total=0)
 
+        params = get_search_params()
+        max_distance = 1.0 - float(params.get("semantic_min_similarity", 0.3))
+
         # Build cosine distance expression: embedding <=> :query_vector
         cosine_distance = NoteEmbedding.embedding.cosine_distance(query_embedding)
 
@@ -513,6 +525,7 @@ class SemanticSearchEngine:
                 NoteEmbedding.chunk_type,
                 cosine_distance.label("cosine_distance"),
             )
+            .where(cosine_distance <= max_distance)
             .distinct(NoteEmbedding.note_id)
             .join(Note, NoteEmbedding.note_id == Note.id)
             .order_by(NoteEmbedding.note_id, cosine_distance.asc())
@@ -528,6 +541,7 @@ class SemanticSearchEngine:
                 Note.synology_note_id.label("note_id"),
                 Note.title,
                 inner.c.chunk_text,
+                inner.c.chunk_type,
                 inner.c.cosine_distance,
                 Note.source_created_at,
                 Note.source_updated_at,
@@ -541,22 +555,27 @@ class SemanticSearchEngine:
         result = await self._session.execute(stmt)
         rows = result.fetchall()
 
-        # Separate COUNT query: count distinct notes with embeddings
-        stmt_count = select(func.count(func.distinct(NoteEmbedding.note_id))).join(
-            Note, NoteEmbedding.note_id == Note.id
+        # COUNT query: count distinct notes within similarity threshold
+        stmt_count = (
+            select(func.count(func.distinct(NoteEmbedding.note_id)))
+            .join(Note, NoteEmbedding.note_id == Note.id)
+            .where(cosine_distance <= max_distance)
         )
         stmt_count = _apply_note_filters(stmt_count, notebook_name, date_from, date_to)
         total = (await self._session.execute(stmt_count)).scalar() or 0
         results = []
         for rank, row in enumerate(rows):
             raw_score = round(1.0 - float(row.cosine_distance), 10)
+            snippet = self._make_snippet(row.chunk_text)
+            snippet = self._highlight_terms(snippet, analysis)
             results.append(
                 SearchResult(
                     note_id=row.note_id,
                     title=row.title,
-                    snippet=self._truncate_snippet(row.chunk_text),
+                    snippet=snippet,
                     score=raw_score,
                     search_type="semantic",
+                    chunk_type=row.chunk_type,
                     created_at=_dt_to_iso(row.source_created_at),
                     updated_at=_dt_to_iso(row.source_updated_at),
                     match_explanation=MatchExplanation(
@@ -568,26 +587,29 @@ class SemanticSearchEngine:
                                 rrf_score=raw_score,
                             ),
                         ],
-                        matched_terms=[],
+                        matched_terms=_extract_matched_terms(snippet),
                         combined_score=raw_score,
                     ),
                 )
             )
         return SearchPage(results=results, total=total)
 
-    def _truncate_snippet(self, text: str) -> str:
-        """Truncate chunk_text to at most _SNIPPET_MAX_LENGTH characters.
+    def _make_snippet(self, text: str) -> str:
+        """Strip context prefix and truncate for display."""
+        cleaned = _CONTEXT_PREFIX_RE.sub("", text)
+        if len(cleaned) <= self._SNIPPET_MAX_LENGTH:
+            return cleaned
+        return cleaned[: self._SNIPPET_MAX_LENGTH] + "..."
 
-        Args:
-            text: The chunk text to truncate.
-
-        Returns:
-            The text as-is if shorter than the limit, otherwise truncated
-            with a trailing '...' ellipsis.
-        """
-        if len(text) <= self._SNIPPET_MAX_LENGTH:
+    @staticmethod
+    def _highlight_terms(text: str, analysis: QueryAnalysis) -> str:
+        """Add <b> highlighting for query morphemes in semantic snippet."""
+        if not analysis.morphemes:
             return text
-        return text[: self._SNIPPET_MAX_LENGTH] + "..."
+        for morpheme in analysis.morphemes:
+            pattern = re.compile(re.escape(morpheme), re.IGNORECASE)
+            text = pattern.sub(lambda m: f"<b>{m.group()}</b>", text)
+        return text
 
 
 # @TASK P2-T2.5 - Hybrid search engine (RRF merge)
@@ -599,14 +621,11 @@ class HybridSearchEngine:
     their results using Weighted Reciprocal Rank Fusion (RRF) with
     dynamic k parameter based on query analysis.
 
-    Weight table by query type:
-    | Query Type       | k  | FTS Weight | Semantic Weight |
-    |-----------------|----|-----------:|----------------:|
-    | Korean single   | 40 |       0.70 |            0.30 |
-    | Korean multi    | 60 |       0.55 |            0.45 |
-    | English single  | 50 |       0.65 |            0.35 |
-    | Mixed           | 60 |       0.50 |            0.50 |
-    | Default         | 60 |       0.60 |            0.40 |
+    RRF weights are language-aware:
+    - Korean/Mixed: ``fts_weight_korean`` / ``semantic_weight_korean`` (default 0.7/0.3)
+    - English/Default: ``fts_weight`` / ``semantic_weight`` (default 0.6/0.4)
+
+    All weights are configurable at runtime via search params.
 
     Args:
         fts_engine: A FullTextSearchEngine instance.
@@ -678,7 +697,7 @@ class HybridSearchEngine:
                 skip_reason=decision.reason,
                 confidence=decision.confidence,
                 fts_result_count=decision.fts_result_count,
-                fts_avg_score=decision.avg_score,
+                fts_best_score=decision.best_score,
                 term_coverage=decision.term_coverage,
             )
             # Slice FTS results for requested page
@@ -712,7 +731,7 @@ class HybridSearchEngine:
             skip_reason=decision.reason,
             confidence=decision.confidence,
             fts_result_count=decision.fts_result_count,
-            fts_avg_score=decision.avg_score,
+            fts_best_score=decision.best_score,
             term_coverage=decision.term_coverage,
         )
         return SearchPage(results=sliced, total=total, judge_info=judge_info)
@@ -799,8 +818,8 @@ class HybridSearchEngine:
         fts_results: list[SearchResult],
         semantic_results: list[SearchResult],
         k: int = 60,
-        fts_weight: float = 1.0,
-        semantic_weight: float = 1.0,
+        fts_weight: float = 0.6,
+        semantic_weight: float = 0.4,
     ) -> list[SearchResult]:
         """Merge FTS and semantic results using Weighted Reciprocal Rank Fusion.
 
@@ -813,8 +832,8 @@ class HybridSearchEngine:
             fts_results: Results from full-text search, ordered by relevance.
             semantic_results: Results from semantic search, ordered by relevance.
             k: RRF smoothing parameter (default 60).
-            fts_weight: Weight multiplier for FTS RRF scores (default 1.0).
-            semantic_weight: Weight multiplier for semantic RRF scores (default 1.0).
+            fts_weight: Weight multiplier for FTS RRF scores (default 0.6).
+            semantic_weight: Weight multiplier for semantic RRF scores (default 0.4).
 
         Returns:
             A deduplicated list of SearchResult sorted by weighted RRF score descending,

@@ -427,9 +427,9 @@ export default function Search() {
                   )}
                   title={
                     judgeInfo.strategy === 'fts_only'
-                      ? `FTS sufficient (${judgeInfo.fts_result_count ?? 0} results, avg score ${(judgeInfo.fts_avg_score ?? 0).toFixed(2)}, coverage ${((judgeInfo.term_coverage ?? 0) * 100).toFixed(0)}%)`
+                      ? `FTS sufficient (${judgeInfo.fts_result_count ?? 0} results, best score ${(judgeInfo.fts_best_score ?? 0).toFixed(2)}, coverage ${((judgeInfo.term_coverage ?? 0) * 100).toFixed(0)}%)`
                       : judgeInfo.strategy === 'hybrid'
-                      ? `FTS insufficient (${judgeInfo.fts_result_count ?? 0} results, avg score ${(judgeInfo.fts_avg_score ?? 0).toFixed(2)}) → Semantic boost`
+                      ? `FTS insufficient (${judgeInfo.fts_result_count ?? 0} results, best score ${(judgeInfo.fts_best_score ?? 0).toFixed(2)}) → Semantic boost`
                       : judgeInfo.skip_reason || undefined
                   }
                 >
