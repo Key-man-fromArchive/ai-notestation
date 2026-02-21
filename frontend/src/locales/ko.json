@@ -1393,5 +1393,13 @@
     "view": "이미지 보기",
     "download": "다운로드",
     "openInNewTab": "새 탭에서 열기"
+  },
+  "notifications": {
+    "title": "알림",
+    "noNotifications": "알림 없음",
+    "allCaughtUp": "모든 알림을 확인했습니다!",
+    "markAllRead": "모두 읽음 표시",
+    "commentedOn": "님이 댓글을 남겼습니다:",
+    "mentionedYouIn": "님이 회원님을 언급했습니다:"
   }
 }

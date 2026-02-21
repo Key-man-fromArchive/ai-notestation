@@ -618,3 +618,28 @@ class NoteComment(Base):
     __table_args__ = (
         Index("idx_note_comments_note_id", "note_id"),
     )
+
+
+class Notification(Base):
+    """Notification for comment or mention events."""
+
+    __tablename__ = "notifications"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
+    notification_type: Mapped[str] = mapped_column(String(50))  # 'comment_added', 'mention'
+    actor_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    actor_name: Mapped[str] = mapped_column(String(255))
+    note_id: Mapped[int] = mapped_column(Integer, ForeignKey("notes.id", ondelete="CASCADE"))
+    note_title: Mapped[str] = mapped_column(String(500))
+    synology_note_id: Mapped[str] = mapped_column(String(255))
+    comment_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    is_read: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index("idx_notifications_user_id", "user_id"),
+        Index("idx_notifications_user_read", "user_id", "is_read"),
+    )

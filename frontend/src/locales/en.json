@@ -1393,5 +1393,13 @@
     "view": "View image",
     "download": "Download",
     "openInNewTab": "Open in new tab"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "noNotifications": "No notifications",
+    "allCaughtUp": "You're all caught up!",
+    "markAllRead": "Mark all as read",
+    "commentedOn": "commented on",
+    "mentionedYouIn": "mentioned you in"
   }
 }

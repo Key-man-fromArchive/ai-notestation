@@ -33,7 +33,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.database import async_session_factory, get_db
-from app.models import Note, NoteAttachment, NoteImage
+from app.models import Note, NoteAttachment, NoteImage, User
 from app.services.activity_log import get_trigger_name, log_activity
 from app.services.auth_service import get_current_user
 from app.services.related_notes import RelatedNotesService
@@ -1103,6 +1103,15 @@ async def create_note(
     db.add(note)
     await db.flush()
 
+    # Mention notifications for new note
+    from app.services.notification_service import create_mention_notifications
+
+    user = await db.get(User, current_user["user_id"])
+    await create_mention_notifications(
+        db, note.id, None, content_html,
+        current_user["user_id"], user.name if user else "Unknown",
+    )
+
     await log_activity(
         "note", "completed",
         message=f"노트 생성: {payload.title}",
@@ -1138,6 +1147,8 @@ async def update_note(
             detail=f"Note not found: {note_id}",
         )
 
+    old_html = note.content_html if payload.content is not None else None
+
     if payload.title is not None:
         note.title = payload.title
     if payload.content is not None:
@@ -1156,6 +1167,16 @@ async def update_note(
     note.local_modified_at = now
     if note.sync_status == "synced":
         note.sync_status = "local_modified"
+
+    # Mention notifications (diff-based)
+    if payload.content is not None:
+        from app.services.notification_service import create_mention_notifications
+
+        user = await db.get(User, current_user["user_id"])
+        await create_mention_notifications(
+            db, note.id, old_html, note.content_html,
+            current_user["user_id"], user.name if user else "Unknown",
+        )
 
     await log_activity(
         "note", "completed",

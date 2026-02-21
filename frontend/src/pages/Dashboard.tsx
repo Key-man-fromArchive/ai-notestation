@@ -26,6 +26,7 @@ import { useTimezone } from '@/hooks/useTimezone'
 import { useTranslation } from 'react-i18next'
 import { useRediscovery } from '@/hooks/useRediscovery'
 import { useImageAnalysisStats } from '@/hooks/useImageAnalysisStats'
+import { NotificationSection } from '@/components/dashboard/NotificationSection'
 
 interface Note {
   note_id: string
@@ -359,6 +360,9 @@ export default function Dashboard() {
           />
         )}
       </div>
+
+      {/* 알림 */}
+      <NotificationSection />
 
       {/* 오늘의 재발견 */}
       {rediscoveryData && rediscoveryData.items.length > 0 && (

@@ -102,6 +102,15 @@ async def create_comment(
         content=body.content,
     )
     db.add(comment)
+    await db.flush()
+
+    # Notify note owner about the new comment
+    from app.services.notification_service import create_comment_notification
+
+    await create_comment_notification(
+        db, note_pk, current_user["user_id"], user_name, body.comment_id
+    )
+
     await db.commit()
     await db.refresh(comment)
     return _serialize_comment(comment)

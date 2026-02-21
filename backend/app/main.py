@@ -142,6 +142,7 @@ from app.api.groups import router as groups_router
 from app.api.setup import router as setup_router
 from app.api.handwriting import router as handwriting_router
 from app.api.comments import router as comments_router
+from app.api.notifications import router as notifications_router
 
 app.include_router(nsx_router, prefix="/api")
 app.include_router(backup_router, prefix="/api")
@@ -164,6 +165,7 @@ app.include_router(groups_router, prefix="/api")
 app.include_router(setup_router, prefix="/api")
 app.include_router(handwriting_router, prefix="/api")
 app.include_router(comments_router, prefix="/api")
+app.include_router(notifications_router, prefix="/api")
 
 
 @app.get("/api/health", tags=["health"])
