@@ -1,85 +1,101 @@
 # Editor Upgrade Roadmap
 
-> TipTap 에디터를 연구 전자노트 전용 플랫폼으로 진화시키는 4-Phase 로드맵
-
-## Current State (v2.1.0)
-
-**15 official extensions + 2 custom extensions**
-
-| Category | Extensions |
-|----------|-----------|
-| Core | StarterKit (Bold, Italic, Strike, Code, Heading, BulletList, OrderedList, Blockquote, HorizontalRule, History) |
-| Formatting | Underline, TextStyle, Color, Highlight (multicolor) |
-| Structure | Table (resizable) + Row/Cell/Header, Link, Placeholder |
-| Media | Custom NoteStationImage (resize, align, bubble menu, context menu, viewer modal) |
-| Research | HandwritingBlock (tldraw + AI OCR/Math recognition) |
-| UX | Multi-tab, Split view, Outline panel, Zen mode, Auto-save (3s debounce) |
+> TipTap 에디터를 연구 전자노트 전용 플랫폼으로 진화시키는 로드맵
+>
+> 작성일: 2026-02-14 | 최종 업데이트: 2026-02-21 | 현재 버전: v3.0.0
 
 ---
 
-## Phase 1: Core Editing Power-ups
-**Priority**: High | **Complexity**: Low | **Duration**: 1 week
+## Current State (v3.0.0)
 
-Quick-win 확장으로 기본 편집 경험 대폭 강화. 외부 의존성 없이 TipTap 공식 패키지만 사용.
+**18 official extensions + 2 custom extensions**
 
-### 1.1 Typography Auto-correction
-`@tiptap/extension-typography`
+| Category | Extensions | Version |
+|----------|-----------|---------|
+| Core | StarterKit (Bold, Italic, Strike, Code, Heading, BulletList, OrderedList, Blockquote, HorizontalRule, History) | ^2.2.4 ⚠️ |
+| Formatting | Underline, TextStyle, Color, Highlight (multicolor) | ^2.2.4 ⚠️ |
+| Structure | Table (resizable) + Row/Cell/Header, Link, Placeholder | ^2.2.4 / ^2.27.2 혼재 ⚠️ |
+| Editing | Typography, TaskList + TaskItem, CodeBlockLowlight, CharacterCount | ^2.27.2 ✅ |
+| Media | Custom NoteStationImage (S/M/L/Fit sizing, alignment, bubble menu, context menu, viewer modal) | ^2.2.4 ⚠️ |
+| Research | HandwritingBlock (tldraw + AI OCR/Math recognition) | custom |
+| Search | SearchAndReplace (custom, Ctrl+H) | custom |
+| UX | Multi-tab, Split view, Outline panel, Zen mode, Auto-save (3s debounce) | — |
 
-| Input | Output | Use Case |
-|-------|--------|----------|
-| `...` | `…` | 일반 텍스트 |
-| `->` | `→` | 반응식, 플로우 |
-| `=>` | `⇒` | 논리식 |
-| `!=` | `≠` | 비교 |
-| `"text"` | `"text"` | Smart quotes |
-| `1/2` | `½` | 농도/비율 |
-| `(c)` | `©` | 저작권 |
+### Version Mismatch (해결 필요)
 
-**연구 노트 가치**: 실험 프로토콜, 반응식 작성 시 자동 정리. 타이핑 효율 ↑
+| ^2.2.4 (구버전, 12개) | ^2.27.2 (최신, 6개) |
+|---|---|
+| starter-kit, react, image, link, color, highlight, text-style, underline, table, table-cell, table-header, table-row | character-count, code-block-lowlight, placeholder, task-item, task-list, typography |
 
-### 1.2 Search & Replace
-`tiptap-search-and-replace` (community) or custom implementation
+> ⚠️ 25단계 마이너 버전 차이. peer dep 충돌으로 Docker 빌드 실패 경험 (2026-02-21 hotfix).
+> `tiptap-extension-resize-image` 도입 시도 → 노드명 불일치(`imageResize` vs `image`)로 기존 노트 이미지 전부 깨짐 → 롤백 (7255b15).
 
-- `Ctrl+H`: Search & Replace 패널 open
-- 정규식 지원 (optional)
-- 대소문자 구분 toggle
-- Replace All / Replace One
-- Match count 표시
-- Highlight all matches in editor
+---
 
-**연구 노트 가치**: 시약명 일괄 수정 (e.g., "PBS" → "1× PBS"), 프로토콜 버전 업데이트
+## ~~Phase 1: Core Editing Power-ups~~ ✅ COMPLETED (v3.0.0)
 
-### 1.3 Task List
-`@tiptap/extension-task-list` + `@tiptap/extension-task-item`
+> Completed in commits `dffc2fb`, `3da4cc2`. 모든 항목 구현 완료.
 
-- `[ ]` / `[x]` markdown 호환 체크리스트
-- 드래그로 순서 변경
-- 중첩 가능
-- CSS: 체크된 항목 strikethrough + opacity
+| Item | Extension | Status |
+|------|-----------|--------|
+| 1.1 Typography | `@tiptap/extension-typography` | ✅ `…`, `→`, `⇒`, smart quotes |
+| 1.2 Search & Replace | custom `SearchAndReplace.ts` + `SearchReplacePanel.tsx` | ✅ Ctrl+H, 정규식, 하이라이트 |
+| 1.3 Task List | `@tiptap/extension-task-list` + `task-item` | ✅ 체크리스트, 중첩 |
+| 1.4 Code Block | `@tiptap/extension-code-block-lowlight` + `lowlight` | ✅ 구문 하이라이팅, 언어 선택 |
 
-**연구 노트 가치**: 실험 체크리스트, 준비물 확인, 단계별 프로토콜 진행 추적
+### Lessons Learned (Phase 1)
+- `tiptap-extension-resize-image` 는 노드명을 `imageResize`로 등록 → 기존 ProseMirror `image` 노드와 불일치 → **절대 사용 금지**
+- 새 tiptap 확장 추가 시 반드시 `package-lock.json` peer dep 플래그 확인 → Docker `npm install`에서 누락 가능
+- 이미지 리사이즈는 향후 `@tiptap/extension-image`를 직접 extend하여 구현 (E-0 이후)
 
-### 1.4 Code Block with Syntax Highlighting
-`@tiptap/extension-code-block-lowlight` + `lowlight`
+---
 
-- Python, R, Julia, MATLAB, JSON, YAML, Bash 기본 지원
-- 언어 선택 드롭다운
-- 복사 버튼
-- 라인 넘버 (optional)
+## Phase E-0: Version Unification (버전 통일) ← NEXT
+**Priority**: Critical | **Complexity**: Low-Medium | **Duration**: 1-2 days
 
-**연구 노트 가치**: 데이터 분석 코드 스니펫 (Python/R), 스크립트 기록, config 파일
+모든 tiptap 패키지를 ^2.27.2로 통일. 혼합 버전 peer dep 충돌 제거. Phase 2~4의 전제조건.
 
-### Phase 1 Deliverables
-```
-frontend/
-├── package.json                    # +4 dependencies
-└── src/
-    ├── components/
-    │   ├── NoteEditor.tsx          # extensions array 확장, toolbar 버튼 추가
-    │   └── editor/
-    │       └── SearchReplacePanel.tsx  # NEW: 검색/치환 패널
-    └── index.css                   # task-list, code-block 스타일
-```
+### 업그레이드 대상 (12개 패키지)
+
+| Package | Current | Target |
+|---------|---------|--------|
+| `@tiptap/starter-kit` | ^2.2.4 | ^2.27.2 |
+| `@tiptap/react` | ^2.2.4 | ^2.27.2 |
+| `@tiptap/extension-image` | ^2.2.4 | ^2.27.2 |
+| `@tiptap/extension-link` | ^2.2.4 | ^2.27.2 |
+| `@tiptap/extension-color` | ^2.2.4 | ^2.27.2 |
+| `@tiptap/extension-highlight` | ^2.2.4 | ^2.27.2 |
+| `@tiptap/extension-text-style` | ^2.2.4 | ^2.27.2 |
+| `@tiptap/extension-underline` | ^2.2.4 | ^2.27.2 |
+| `@tiptap/extension-table` | ^2.2.4 | ^2.27.2 |
+| `@tiptap/extension-table-cell` | ^2.2.4 | ^2.27.2 |
+| `@tiptap/extension-table-header` | ^2.2.4 | ^2.27.2 |
+| `@tiptap/extension-table-row` | ^2.2.4 | ^2.27.2 |
+
+### 작업 순서
+
+1. `package.json` 12개 패키지 버전 일괄 변경
+2. `npm install` → lock 파일 갱신, peer dep 충돌 확인
+3. `npm run build` → 타입 에러 수정
+4. 기존 노트 로드 테스트 (HTML 파싱 변경 여부)
+5. Table 렌더링 확인 (table API 변경 가장 많음)
+6. Image (NoteStationImage), Link 동작 확인
+7. Docker 빌드 + 컨테이너 테스트
+
+### 주의사항
+
+- StarterKit 내장 `codeBlock` ↔ `CodeBlockLowlight` 충돌 가능 → `codeBlock: false` 필수
+- Table 확장 2.2 → 2.27: `HTMLAttributes` 처리 방식 변경 가능
+- Image 확장 API는 안정적 (NoteStationImage extend 패턴 유지 가능)
+- **반드시** `package-lock.json` peer dep 정리 후 Docker 빌드 검증
+
+### 완료 기준
+
+- [ ] 12개 패키지 모두 ^2.27.2
+- [ ] `npm run build` 성공
+- [ ] Docker `docker compose up -d --build frontend` 성공
+- [ ] 기존 노트 이미지/테이블/링크 정상 렌더링
+- [ ] BubbleMenu, ContextMenu, ViewerModal 정상 동작
 
 ---
 
@@ -411,10 +427,11 @@ Phase 2.3 Signature ─── (needs Member system) ──→ Phase 3.3 Mention
 
 ## Timeline Summary
 
-| Phase | Duration | Milestone |
-|-------|----------|-----------|
-| **Phase 1**: Core Power-ups | 1 week | v2.2.0 — Typography, Search/Replace, TaskList, CodeBlock |
-| **Phase 2**: Research Nodes | 2 weeks | v2.3.0 — ExperimentHeader, StatusChip, Signature |
-| **Phase 3**: Review & Quality | 2 weeks | v2.4.0 — Comments, AI SpellCheck, Mentions |
-| **Phase 4**: Collaboration | 3-4 weeks | v3.0.0 — Y.js real-time, Awareness, Offline |
-| **Total** | ~8-9 weeks | |
+| Phase | Duration | Milestone | Status |
+|-------|----------|-----------|--------|
+| **Phase 1**: Core Power-ups | 1 week | v3.0.0 — Typography, Search/Replace, TaskList, CodeBlock | ✅ Done |
+| **Phase E-0**: Version Unification | 1-2 days | v3.1.0 — All tiptap ^2.27.2, peer dep 정리 | ⬅️ Next |
+| **Phase 2**: Research Nodes | 2 weeks | v3.2.0 — ExperimentHeader, StatusChip, Signature | Planned |
+| **Phase 3**: Review & Quality | 2 weeks | v3.3.0 — Comments, AI SpellCheck, Mentions | Planned |
+| **Phase 4**: Collaboration | 3-4 weeks | v4.0.0 — Y.js real-time, Awareness, Offline | Planned |
+| **Total** | ~8-9 weeks | | |

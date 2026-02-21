@@ -2,7 +2,9 @@
 
 > SiYuan Note UI/UX 분석 기반 — LabNote AI를 위한 인터페이스 혁신 로드맵
 >
-> 작성일: 2026-02-14 | 현재 버전: v1.3.1
+> 작성일: 2026-02-14 | 최종 업데이트: 2026-02-21 | 현재 버전: v3.0.0
+>
+> **진행 상태**: Phase UI-1 ✅ | Phase UI-2 ✅ | Phase UI-3 ← Next | Phase UI-4 Planned
 >
 > 참고: [SiYuan Note](https://github.com/siyuan-note/siyuan) (41K+ stars, TypeScript+Go)
 
@@ -39,11 +41,11 @@
 
 ---
 
-## Phase UI-1 — Foundation UX (기반 다지기)
+## Phase UI-1 — Foundation UX (기반 다지기) ✅ COMPLETED (v2.1.0)
 
-> 목표: 일상적 사용 경험의 질적 도약. 모든 사용자에게 즉시 체감되는 개선.
+> ~~목표: 일상적 사용 경험의 질적 도약. 모든 사용자에게 즉시 체감되는 개선.~~
 >
-> 예상 버전: v1.4.0 | 난이도: ★★☆ ~ ★★★
+> ~~예상 버전: v1.4.0~~ | **완료 버전: v2.1.0** | 전 항목 구현 완료
 
 ### UI-1.1 접을 수 있는 사이드바 + 모바일 대응
 
@@ -151,11 +153,11 @@
 
 ---
 
-## Phase UI-2 — Editor Evolution (에디터 진화)
+## Phase UI-2 — Editor Evolution (에디터 진화) ✅ COMPLETED (v3.0.0)
 
-> 목표: 단일 노트 뷰에서 멀티 문서 워크스페이스로 진화. 연구자의 비교/참조 워크플로우 지원.
+> ~~목표: 단일 노트 뷰에서 멀티 문서 워크스페이스로 진화. 연구자의 비교/참조 워크플로우 지원.~~
 >
-> 예상 버전: v1.5.0 | 난이도: ★★★ ~ ★★★★
+> ~~예상 버전: v1.5.0~~ | **완료 버전: v3.0.0** | 전 항목 구현 완료 + Editor Power-ups (Typography, TaskList, CodeBlock, Search&Replace, Handwriting)
 
 ### UI-2.1 멀티탭 에디터
 
@@ -235,11 +237,11 @@
 
 ---
 
-## Phase UI-3 — Workspace Intelligence (워크스페이스 지능화)
+## Phase UI-3 — Workspace Intelligence (워크스페이스 지능화) ← NEXT
 
 > 목표: 도킹 패널 시스템으로 개인화된 워크스페이스. AI가 맥락에 맞는 정보를 자동 서피스.
 >
-> 예상 버전: v2.0.0 | 난이도: ★★★★
+> 예상 버전: v3.x ~ v4.0.0 | 난이도: ★★★★
 
 ### UI-3.1 도킹 패널 시스템
 
@@ -406,26 +408,27 @@
 ## 구현 순서 제안
 
 ```
-v1.4.0 (Phase UI-1: Quick Wins)
-├── UI-1.1 접을 수 있는 사이드바     (2-3일)
-├── UI-1.4 브레드크럼               (1일)
-├── UI-1.5 키보드 단축키 시스템      (2일)
-├── UI-1.2 커맨드 팔레트            (3-4일)
-└── UI-1.3 다크 모드                (3-4일)
+v2.1.0 (Phase UI-1: Quick Wins) ✅ DONE
+├── UI-1.1 접을 수 있는 사이드바     ✅
+├── UI-1.4 브레드크럼               ✅
+├── UI-1.5 키보드 단축키 시스템      ✅
+├── UI-1.2 커맨드 팔레트            ✅
+└── UI-1.3 다크 모드                ✅
 
-v1.5.0 (Phase UI-2: Editor)
-├── UI-2.3 문서 아웃라인            (2일)
-├── UI-2.4 포커스 모드              (1-2일)
-├── UI-2.1 멀티탭 에디터            (5-7일)
-└── UI-2.2 분할 화면               (3-4일)
+v3.0.0 (Phase UI-2: Editor) ✅ DONE
+├── UI-2.3 문서 아웃라인            ✅
+├── UI-2.4 포커스/젠 모드           ✅
+├── UI-2.1 멀티탭 에디터            ✅
+├── UI-2.2 분할 화면               ✅
+└── + Editor Power-ups             ✅ (Typography, TaskList, CodeBlock, Search&Replace, Handwriting)
 
-v2.0.0 (Phase UI-3: Workspace)
+v3.x~4.0 (Phase UI-3: Workspace) ← NEXT
 ├── UI-3.1 도킹 패널               (7-10일)
 ├── UI-3.2 Quick Switcher          (2일)
 ├── UI-3.3 컨텍스트 AI 사이드바      (4-5일)
 └── UI-3.4 워크스페이스 저장         (2-3일)
 
-v2.1.0 (Phase UI-4: Advanced)
+v4.x (Phase UI-4: Advanced)
 ├── UI-4.1 블록 레퍼런스 & 백링크    (10-14일)
 ├── UI-4.2 인라인 AI 액션           (3-4일)
 ├── UI-4.3 PDF 인라인 주석          (5-7일)
