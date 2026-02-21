@@ -5,7 +5,8 @@ import { EditorContent, useEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Underline from '@tiptap/extension-underline'
 import Link from '@tiptap/extension-link'
-import Image from '@tiptap/extension-image'
+import '@tiptap/extension-image' // type augmentation for setImage command
+import ImageResize from 'tiptap-extension-resize-image'
 import TextStyle from '@tiptap/extension-text-style'
 import Color from '@tiptap/extension-color'
 import Highlight from '@tiptap/extension-highlight'
@@ -14,8 +15,13 @@ import TableRow from '@tiptap/extension-table-row'
 import TableCell from '@tiptap/extension-table-cell'
 import TableHeader from '@tiptap/extension-table-header'
 import Placeholder from '@tiptap/extension-placeholder'
-// CharacterCount extension removed — word/char counts computed manually for reliability
+import Typography from '@tiptap/extension-typography'
+import TaskList from '@tiptap/extension-task-list'
+import TaskItem from '@tiptap/extension-task-item'
+import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
+import { common, createLowlight } from 'lowlight'
 import { useTranslation } from 'react-i18next'
+import { useQuery } from '@tanstack/react-query'
 import { apiClient } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { useAutoSave, type SaveStatus } from '@/hooks/useAutoSave'
@@ -26,6 +32,7 @@ import {
   Strikethrough,
   List,
   ListOrdered,
+  ListChecks,
   Link as LinkIcon,
   Image as ImageIcon,
   Table as TableIcon,
@@ -35,6 +42,7 @@ import {
   Heading3,
   Quote,
   Code,
+  FileCode,
   Minus,
   Undo2,
   Redo2,
@@ -45,8 +53,16 @@ import {
   Upload,
   Keyboard,
   PenTool,
+  Search,
 } from 'lucide-react'
 import { HandwritingBlock } from '@/extensions/HandwritingBlock'
+import { SearchAndReplace } from '@/extensions/SearchAndReplace'
+import { ImageBubbleMenu } from '@/components/editor/ImageBubbleMenu'
+import { ImageContextMenu } from '@/components/editor/ImageContextMenu'
+import { ImageViewerModal } from '@/components/editor/ImageViewerModal'
+import { SearchReplacePanel } from '@/components/editor/SearchReplacePanel'
+
+const lowlight = createLowlight(common)
 
 interface NoteEditorProps {
   noteId: string
@@ -60,9 +76,9 @@ export interface NoteEditorHandle {
   getEditor: () => ReturnType<typeof useEditor> | null
 }
 
-// Custom Image extension that accepts <img> tags without src (NAS placeholders)
-// and preserves width/height attributes for NoteStation images
-const NoteStationImage = Image.extend({
+// Custom Image extension based on tiptap-extension-resize-image for drag-handle resizing.
+// Adds data-size (preset sizing) and data-align (alignment) attributes on top.
+const NoteStationImage = ImageResize.extend({
   addAttributes() {
     return {
       ...this.parent?.(),
@@ -76,11 +92,23 @@ const NoteStationImage = Image.extend({
         renderHTML: (attributes: Record<string, unknown>) =>
           attributes.height ? { height: attributes.height } : {},
       },
+      'data-size': {
+        default: 'fit',
+        parseHTML: (el: HTMLElement) => el.getAttribute('data-size') || 'fit',
+        renderHTML: (attrs: Record<string, unknown>) => ({ 'data-size': attrs['data-size'] || 'fit' }),
+      },
+      'data-align': {
+        default: 'center',
+        parseHTML: (el: HTMLElement) => el.getAttribute('data-align') || 'center',
+        renderHTML: (attrs: Record<string, unknown>) => ({ 'data-align': attrs['data-align'] || 'center' }),
+      },
     }
   },
   parseHTML() {
-    return [{ tag: 'img' }] // Accept img WITHOUT src requirement (placeholders)
+    return [{ tag: 'img' }] // Accept img WITHOUT src requirement (NAS placeholders)
   },
+}).configure({
+  inline: false,
 })
 
 // Add auth token to NAS image URLs so they display in the editor
@@ -169,6 +197,16 @@ export const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(function
   const [isDragOver, setIsDragOver] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [showShortcuts, setShowShortcuts] = useState(false)
+  const [showSearchReplace, setShowSearchReplace] = useState(false)
+  const [viewerSrc, setViewerSrc] = useState<string | null>(null)
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; src: string } | null>(null)
+
+  const { data: imgSizeSetting } = useQuery<{ value: unknown }>({
+    queryKey: ['settings', 'default_image_size'],
+    queryFn: () => apiClient.get('/settings/default_image_size'),
+  })
+  const defaultImageSize = typeof imgSizeSetting?.value === 'string' ? imgSizeSetting.value : 'fit'
+
   const shortcutsRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const editorRef = useRef<ReturnType<typeof useEditor>>(null)
@@ -178,7 +216,7 @@ export const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(function
 
   const extensions = useMemo(
     () => [
-      StarterKit,
+      StarterKit.configure({ codeBlock: false }),
       Underline,
       Link.configure({ openOnClick: false }),
       NoteStationImage,
@@ -193,6 +231,11 @@ export const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(function
         placeholder: t('notes.editorPlaceholder', 'Start writing...'),
       }),
       HandwritingBlock,
+      Typography,
+      TaskList,
+      TaskItem.configure({ nested: true }),
+      CodeBlockLowlight.configure({ lowlight }),
+      SearchAndReplace,
     ],
     [t]
   )
@@ -297,12 +340,16 @@ export const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(function
     }
   }, [editor, markDirty])
 
-  // Ctrl+S for manual save
+  // Ctrl+S for manual save, Ctrl+H for search & replace
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault()
         save()
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'h') {
+        e.preventDefault()
+        setShowSearchReplace(v => !v)
       }
     }
     document.addEventListener('keydown', handler)
@@ -334,6 +381,38 @@ export const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(function
 
     el.addEventListener('error', handleImgError, true) // capture phase
     return () => el.removeEventListener('error', handleImgError, true)
+  }, [editor])
+
+  // Double-click on image → open viewer modal
+  useEffect(() => {
+    if (!editor) return
+    const el = editor.view.dom
+
+    const handleDblClick = (e: MouseEvent) => {
+      const img = e.target as HTMLElement
+      if (img.tagName !== 'IMG') return
+      e.preventDefault()
+      setViewerSrc((img as HTMLImageElement).src)
+    }
+
+    el.addEventListener('dblclick', handleDblClick)
+    return () => el.removeEventListener('dblclick', handleDblClick)
+  }, [editor])
+
+  // Right-click on image → custom context menu
+  useEffect(() => {
+    if (!editor) return
+    const el = editor.view.dom
+
+    const handleCtx = (e: MouseEvent) => {
+      const img = e.target as HTMLElement
+      if (img.tagName !== 'IMG') return
+      e.preventDefault()
+      setCtxMenu({ x: e.clientX, y: e.clientY, src: (img as HTMLImageElement).src })
+    }
+
+    el.addEventListener('contextmenu', handleCtx)
+    return () => el.removeEventListener('contextmenu', handleCtx)
   }, [editor])
 
   const handleInsertLink = () => {
@@ -389,7 +468,10 @@ export const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(function
         if (result.status !== 'fulfilled') continue
         const { file, uploaded } = result.value
         if (file.type.startsWith('image/')) {
-          editor.chain().focus().setImage({ src: uploaded.url, alt: uploaded.name }).run()
+          editor.chain().focus()
+            .setImage({ src: uploaded.url, alt: uploaded.name })
+            .updateAttributes('image', { 'data-size': defaultImageSize, 'data-align': 'center' })
+            .run()
         } else {
           editor.chain().focus().insertContent(`<a href="${uploaded.url}">첨부[${uploaded.name}]</a> `).run()
         }
@@ -518,6 +600,13 @@ export const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(function
           <ListOrdered className={iconSize} />
         </ToolbarBtn>
         <ToolbarBtn
+          onClick={() => editor?.chain().focus().toggleTaskList().run()}
+          active={editor?.isActive('taskList')}
+          title={t('notes.shortcuts.taskList', 'Task List')}
+        >
+          <ListChecks className={iconSize} />
+        </ToolbarBtn>
+        <ToolbarBtn
           onClick={() => editor?.chain().focus().toggleBlockquote().run()}
           active={editor?.isActive('blockquote')}
           title="Blockquote"
@@ -529,6 +618,13 @@ export const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(function
           title="Horizontal Rule"
         >
           <Minus className={iconSize} />
+        </ToolbarBtn>
+        <ToolbarBtn
+          onClick={() => editor?.chain().focus().toggleCodeBlock().run()}
+          active={editor?.isActive('codeBlock')}
+          title={t('notes.shortcuts.codeBlock', 'Code Block')}
+        >
+          <FileCode className={iconSize} />
         </ToolbarBtn>
 
         <ToolbarSep />
@@ -570,6 +666,17 @@ export const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(function
           title={t('handwriting.insert', 'Insert Handwriting Block')}
         >
           <PenTool className={iconSize} />
+        </ToolbarBtn>
+
+        <ToolbarSep />
+
+        {/* Search & Replace */}
+        <ToolbarBtn
+          onClick={() => setShowSearchReplace(v => !v)}
+          active={showSearchReplace}
+          title={`${t('notes.shortcuts.searchReplace', 'Search & Replace')} (Ctrl+H)`}
+        >
+          <Search className={iconSize} />
         </ToolbarBtn>
 
         <ToolbarSep />
@@ -622,6 +729,7 @@ export const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(function
                   ['Ctrl+Alt+1', t('notes.shortcuts.heading1', 'Heading 1')],
                   ['Ctrl+Alt+2', t('notes.shortcuts.heading2', 'Heading 2')],
                   ['Ctrl+Alt+3', t('notes.shortcuts.heading3', 'Heading 3')],
+                  ['Ctrl+H', t('notes.shortcuts.searchReplace', 'Search & Replace')],
                 ].map(([key, label]) => (
                   <Fragment key={key}>
                     <span className="text-muted-foreground">{label}</span>
@@ -633,6 +741,14 @@ export const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(function
           )}
         </div>
       </div>
+
+      {/* Search & Replace panel */}
+      {showSearchReplace && editor && (
+        <SearchReplacePanel
+          editor={editor}
+          onClose={() => setShowSearchReplace(false)}
+        />
+      )}
 
       {/* Editor content area with drag-and-drop overlay */}
       <div
@@ -674,7 +790,34 @@ export const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(function
             '[&_.tiptap_p.is-editor-empty:first-child::before]:pointer-events-none',
           )}
         />
+        {editor && (
+          <ImageBubbleMenu
+            editor={editor}
+            onViewImage={(src) => setViewerSrc(src)}
+          />
+        )}
       </div>
+
+      {/* Image context menu (right-click) */}
+      {ctxMenu && editor && (
+        <ImageContextMenu
+          x={ctxMenu.x}
+          y={ctxMenu.y}
+          src={ctxMenu.src}
+          editor={editor}
+          onClose={() => setCtxMenu(null)}
+          onViewImage={(src) => { setCtxMenu(null); setViewerSrc(src) }}
+        />
+      )}
+
+      {/* Image viewer modal (double-click / view action) */}
+      {viewerSrc && editor && (
+        <ImageViewerModal
+          src={viewerSrc}
+          editor={editor}
+          onClose={() => setViewerSrc(null)}
+        />
+      )}
 
       {/* Footer with word count and save status */}
       <div className="flex items-center justify-between px-4 py-2 border-t border-border/50">

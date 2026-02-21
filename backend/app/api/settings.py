@@ -108,6 +108,7 @@ _SETTING_DESCRIPTIONS: dict[str, str] = {
     "ocr_engine": "OCR engine: ai_vision (cloud API), tesseract (local CPU), or glm_ocr (ZhipuAI)",
     "vision_model": "Vision model for image description: glm-4.6v, glm-4.6v-flash, glm-4.5v, gpt-4o, etc.",
     "editor_width": "Editor width: compact, comfortable, wide, or full",
+    "default_image_size": "Default image display size: small, medium, large, or fit",
     "graph_settings": "그래프 기본 설정 (유사도, 연결 수, 노드 수, 전체 보기)",
     "notebook_categories": "노트북 카테고리 프리셋 (value, ko, en, color)",
 }
@@ -140,6 +141,7 @@ def _get_default_settings() -> dict[str, Any]:
         "ocr_engine": "ai_vision",
         "vision_model": "glm-4.6v",
         "editor_width": "comfortable",
+        "default_image_size": "fit",
         "graph_settings": {
             "similarity_threshold": 0.8,
             "neighbors_per_note": 5,

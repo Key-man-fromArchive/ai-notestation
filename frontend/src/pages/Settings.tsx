@@ -211,6 +211,7 @@ export default function Settings() {
             <LanguageSection />
             <ThemeSection />
             <EditorWidthSection />
+            <DefaultImageSizeSection />
             <TimezoneSection
               data={data}
               isPending={updateMutation.isPending}
@@ -1628,6 +1629,70 @@ function EditorWidthSection() {
             )}
           >
             <span>{t(opt.labelKey)}</span>
+            <span className="text-xs font-normal text-muted-foreground">{opt.hint}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function DefaultImageSizeSection() {
+  const { t } = useTranslation()
+  const queryClient = useQueryClient()
+  const [saving, setSaving] = useState(false)
+
+  const { data: sizeSetting } = useQuery<SettingResponse>({
+    queryKey: ['settings', 'default_image_size'],
+    queryFn: () => apiClient.get('/settings/default_image_size'),
+  })
+
+  const currentSize = typeof sizeSetting?.value === 'string'
+    ? sizeSetting.value
+    : 'fit'
+
+  const handleChange = async (value: string) => {
+    setSaving(true)
+    try {
+      await apiClient.put('/settings/default_image_size', { value })
+      queryClient.invalidateQueries({ queryKey: ['settings', 'default_image_size'] })
+      queryClient.invalidateQueries({ queryKey: ['settings'] })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const options = [
+    { value: 'small', labelKey: 'settings.imageSize.small', hint: '25%' },
+    { value: 'medium', labelKey: 'settings.imageSize.medium', hint: '50%' },
+    { value: 'large', labelKey: 'settings.imageSize.large', hint: '75%' },
+    { value: 'fit', labelKey: 'settings.imageSize.fit', hint: '100%' },
+  ]
+
+  return (
+    <div className="p-4 border border-input rounded-md">
+      <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
+        <Image className="h-5 w-5" aria-hidden="true" />
+        {t('settings.defaultImageSize', 'Default Image Size')}
+      </h3>
+      <p className="text-sm text-muted-foreground mb-4">
+        {t('settings.defaultImageSizeDesc', 'Size applied when inserting or pasting new images.')}
+      </p>
+      <div className="grid grid-cols-4 gap-3">
+        {options.map((opt) => (
+          <button
+            key={opt.value}
+            onClick={() => handleChange(opt.value)}
+            disabled={saving}
+            className={cn(
+              'flex flex-col items-center gap-1 px-4 py-2.5 rounded-md border text-sm font-medium transition-colors',
+              currentSize === opt.value
+                ? 'border-primary bg-primary/10 text-primary'
+                : 'border-input hover:bg-accent',
+              'disabled:opacity-50',
+            )}
+          >
+            <span>{t(opt.labelKey, opt.hint)}</span>
             <span className="text-xs font-normal text-muted-foreground">{opt.hint}</span>
           </button>
         ))}

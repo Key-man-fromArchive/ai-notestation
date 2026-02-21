@@ -245,7 +245,10 @@
       "link": "Link",
       "heading1": "Heading 1",
       "heading2": "Heading 2",
-      "heading3": "Heading 3"
+      "heading3": "Heading 3",
+      "taskList": "Task List",
+      "codeBlock": "Code Block",
+      "searchReplace": "Search & Replace"
     }
   },
   "relatedNotes": {
@@ -594,6 +597,14 @@
       "comfortable": "Comfortable",
       "wide": "Wide",
       "full": "Full"
+    },
+    "defaultImageSize": "Default Image Size",
+    "defaultImageSizeDesc": "Size applied when inserting or pasting new images.",
+    "imageSize": {
+      "small": "Small",
+      "medium": "Medium",
+      "large": "Large",
+      "fit": "Fit"
     },
     "graphSettings": "Graph Defaults",
     "graphSettingsDesc": "Set default similarity, connections, and node limit for the Knowledge Graph page. You can temporarily adjust these on the graph page.",
@@ -1291,5 +1302,20 @@
     "recognizing": "Recognizing...",
     "empty": "No handwriting content",
     "error": "Recognition failed"
+  },
+  "image": {
+    "size": "Image Size",
+    "small": "Small (25%)",
+    "medium": "Medium (50%)",
+    "large": "Large (75%)",
+    "fit": "Fit (100%)",
+    "align": "Alignment",
+    "alignLeft": "Left",
+    "alignCenter": "Center",
+    "alignRight": "Right",
+    "openOriginal": "Open original in new tab",
+    "view": "View image",
+    "download": "Download",
+    "openInNewTab": "Open in new tab"
   }
 }

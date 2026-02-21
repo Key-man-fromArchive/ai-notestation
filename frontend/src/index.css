@@ -134,7 +134,7 @@ textarea {
   font-size: 0.875em;
 }
 
-/* TipTap editor — code block */
+/* TipTap editor — code block with syntax highlighting */
 .tiptap pre {
   background-color: var(--color-muted);
   border: 1px solid var(--color-border);
@@ -149,6 +149,34 @@ textarea {
   padding: 0;
   font-size: 0.875em;
 }
+
+/* Syntax highlighting — One Dark inspired, theme-aware */
+.tiptap pre .hljs-comment,
+.tiptap pre .hljs-quote { color: var(--color-muted-foreground); font-style: italic; }
+.tiptap pre .hljs-keyword,
+.tiptap pre .hljs-selector-tag { color: #c678dd; }
+.tiptap pre .hljs-string,
+.tiptap pre .hljs-addition { color: #98c379; }
+.tiptap pre .hljs-number,
+.tiptap pre .hljs-literal { color: #d19a66; }
+.tiptap pre .hljs-title,
+.tiptap pre .hljs-section { color: #61afef; }
+.tiptap pre .hljs-built_in { color: #e6c07b; }
+.tiptap pre .hljs-attr,
+.tiptap pre .hljs-attribute { color: #d19a66; }
+.tiptap pre .hljs-name,
+.tiptap pre .hljs-tag { color: #e06c75; }
+.tiptap pre .hljs-deletion { color: #e06c75; }
+.tiptap pre .hljs-type,
+.tiptap pre .hljs-params { color: #e6c07b; }
+.tiptap pre .hljs-meta { color: #61afef; }
+
+.dark .tiptap pre .hljs-keyword,
+.dark .tiptap pre .hljs-selector-tag { color: #c792ea; }
+.dark .tiptap pre .hljs-string,
+.dark .tiptap pre .hljs-addition { color: #c3e88d; }
+.dark .tiptap pre .hljs-title,
+.dark .tiptap pre .hljs-section { color: #82aaff; }
 
 /* TipTap editor — horizontal rule */
 .tiptap hr {
@@ -176,6 +204,23 @@ textarea {
   height: auto;
 }
 
+/* Image size presets */
+.tiptap img[data-size="small"]  { width: 25%; max-width: 25%; }
+.tiptap img[data-size="medium"] { width: 50%; max-width: 50%; }
+.tiptap img[data-size="large"]  { width: 75%; max-width: 75%; }
+.tiptap img[data-size="fit"]    { width: 100%; max-width: 100%; }
+
+/* Image alignment */
+.tiptap img[data-align="left"]   { margin-right: auto; margin-left: 0; display: block; }
+.tiptap img[data-align="center"] { margin-right: auto; margin-left: auto; display: block; }
+.tiptap img[data-align="right"]  { margin-right: 0; margin-left: auto; display: block; }
+
+/* Image selection highlight */
+.tiptap img.ProseMirror-selectednode {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
 /* TipTap editor — restore list/blockquote styles stripped by Tailwind preflight */
 .tiptap ul {
   list-style-type: disc;
@@ -191,6 +236,40 @@ textarea {
 
 .tiptap ul ul { list-style-type: circle; }
 .tiptap ul ul ul { list-style-type: square; }
+
+/* Task list */
+.tiptap ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0;
+}
+
+.tiptap ul[data-type="taskList"] li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.tiptap ul[data-type="taskList"] li > label {
+  flex-shrink: 0;
+  user-select: none;
+  margin-top: 0.25rem;
+}
+
+.tiptap ul[data-type="taskList"] li > label input[type="checkbox"] {
+  accent-color: var(--color-primary);
+  cursor: pointer;
+  width: 1rem;
+  height: 1rem;
+}
+
+.tiptap ul[data-type="taskList"] li > div {
+  flex: 1;
+}
+
+.tiptap ul[data-type="taskList"] li[data-checked="true"] > div {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
 
 .tiptap blockquote {
   border-left: 3px solid var(--color-primary);
@@ -246,6 +325,25 @@ textarea {
   background: var(--color-primary);
   opacity: 0.1;
   pointer-events: none;
+}
+
+/* Search & Replace decorations */
+.tiptap .search-result {
+  background-color: oklch(85% 0.15 90); /* yellow highlight */
+  border-radius: 2px;
+}
+
+.tiptap .search-result-active {
+  background-color: oklch(75% 0.15 55); /* orange for current match */
+  border-radius: 2px;
+}
+
+.dark .tiptap .search-result {
+  background-color: oklch(55% 0.12 90);
+}
+
+.dark .tiptap .search-result-active {
+  background-color: oklch(55% 0.15 55);
 }
 
 /* 애니메이션 줄이기 선호 사용자 지원 */

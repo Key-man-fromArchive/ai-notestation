@@ -245,7 +245,10 @@
       "link": "링크",
       "heading1": "제목 1",
       "heading2": "제목 2",
-      "heading3": "제목 3"
+      "heading3": "제목 3",
+      "taskList": "체크리스트",
+      "codeBlock": "코드 블록",
+      "searchReplace": "검색 및 바꾸기"
     }
   },
   "relatedNotes": {
@@ -594,6 +597,14 @@
       "comfortable": "보통",
       "wide": "넓게",
       "full": "전체"
+    },
+    "defaultImageSize": "기본 이미지 크기",
+    "defaultImageSizeDesc": "새 이미지를 삽입하거나 붙여넣을 때 적용되는 기본 크기입니다.",
+    "imageSize": {
+      "small": "작게",
+      "medium": "보통",
+      "large": "크게",
+      "fit": "자동 맞춤"
     },
     "graphSettings": "그래프 기본 설정",
     "graphSettingsDesc": "지식 그래프 페이지의 기본 유사도, 연결 수, 노드 수를 설정합니다. 그래프 페이지 내에서 임시로 변경할 수 있습니다.",
@@ -1291,5 +1302,20 @@
     "recognizing": "인식 중...",
     "empty": "필기 내용이 없습니다",
     "error": "인식에 실패했습니다"
+  },
+  "image": {
+    "size": "이미지 크기",
+    "small": "작게 (25%)",
+    "medium": "보통 (50%)",
+    "large": "크게 (75%)",
+    "fit": "자동 맞춤 (100%)",
+    "align": "정렬",
+    "alignLeft": "왼쪽",
+    "alignCenter": "가운데",
+    "alignRight": "오른쪽",
+    "openOriginal": "새 탭에서 원본 보기",
+    "view": "이미지 보기",
+    "download": "다운로드",
+    "openInNewTab": "새 탭에서 열기"
   }
 }
