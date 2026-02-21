@@ -7,7 +7,7 @@ import { apiClient } from '@/lib/api'
 
 interface StreamOptions {
   message: string
-  feature: 'insight' | 'search_qa' | 'writing' | 'spellcheck' | 'template'
+  feature: 'insight' | 'search_qa' | 'writing' | 'spellcheck' | 'spellcheck_inline' | 'template'
   model?: string
   noteId?: string
   note_ids?: string[]

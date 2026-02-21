@@ -25,7 +25,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai_router.image_utils import extract_note_images, get_cached_image_descriptions
-from app.ai_router.prompts import insight, search_qa, spellcheck, summarize, template, writing
+from app.ai_router.prompts import insight, search_qa, spellcheck, spellcheck_inline, summarize, template, writing
 from app.ai_router.router import AIRouter
 from app.ai_router.schemas import AIRequest, AIResponse, Message, ModelInfo, ProviderError
 from app.database import get_db
@@ -194,7 +194,7 @@ async def _inject_oauth_if_available(
 # ---------------------------------------------------------------------------
 
 
-FeatureType = Literal["insight", "search_qa", "writing", "spellcheck", "template", "summarize"]
+FeatureType = Literal["insight", "search_qa", "writing", "spellcheck", "spellcheck_inline", "template", "summarize"]
 
 
 class AIChatRequest(BaseModel):
@@ -433,6 +433,8 @@ def _build_messages_for_feature(
         )
     elif feature == "spellcheck":
         return spellcheck.build_messages(text=content, lang=lang)
+    elif feature == "spellcheck_inline":
+        return spellcheck_inline.build_messages(text=content, lang=lang)
     elif feature == "template":
         return template.build_messages(
             template_type=content,

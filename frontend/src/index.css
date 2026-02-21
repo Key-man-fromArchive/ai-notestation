@@ -346,6 +346,30 @@ textarea {
   background-color: oklch(55% 0.15 55);
 }
 
+/* AI SpellCheck decorations */
+.tiptap .spell-error {
+  text-decoration-style: wavy;
+  text-decoration-line: underline;
+  text-decoration-skip-ink: none;
+  cursor: pointer;
+}
+.tiptap .spell-error-spelling { text-decoration-color: oklch(60% 0.2 25); }
+.tiptap .spell-error-grammar { text-decoration-color: oklch(55% 0.18 260); }
+.tiptap .spell-error-expression { text-decoration-color: oklch(70% 0.15 85); }
+
+.tiptap .spell-error-active {
+  background-color: oklch(90% 0.05 25 / 0.3);
+  border-radius: 2px;
+}
+
+.dark .tiptap .spell-error-spelling { text-decoration-color: oklch(65% 0.2 25); }
+.dark .tiptap .spell-error-grammar { text-decoration-color: oklch(65% 0.18 260); }
+.dark .tiptap .spell-error-expression { text-decoration-color: oklch(75% 0.15 85); }
+
+.dark .tiptap .spell-error-active {
+  background-color: oklch(40% 0.05 25 / 0.3);
+}
+
 /* Custom research nodes — experiment header, status chip, signature */
 .tiptap [data-type="experiment-header"] {
   margin: 1em 0;

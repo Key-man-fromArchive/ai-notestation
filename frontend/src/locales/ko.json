@@ -1345,6 +1345,20 @@
     "unlock": "잠금 해제",
     "confirmUnlock": "해제 확인"
   },
+  "spellCheck": {
+    "title": "AI 맞춤법 검사",
+    "startCheck": "검사 시작",
+    "checking": "검사 중...",
+    "noErrors": "오류가 없습니다!",
+    "errorsFound": "{{count}}개 오류 발견",
+    "fix": "수정",
+    "fixAll": "모두 수정",
+    "dismiss": "무시",
+    "spelling": "맞춤법",
+    "grammar": "문법",
+    "expression": "표현",
+    "close": "닫기"
+  },
   "image": {
     "size": "이미지 크기",
     "small": "작게 (25%)",

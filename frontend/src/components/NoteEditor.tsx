@@ -56,16 +56,19 @@ import {
   CircleDot,
   PenLine,
   Search,
+  SpellCheck2,
 } from 'lucide-react'
 import { HandwritingBlock } from '@/extensions/HandwritingBlock'
 import { ExperimentHeader } from '@/extensions/ExperimentHeader'
 import { StatusChip } from '@/extensions/StatusChip'
 import { Signature } from '@/extensions/Signature'
 import { SearchAndReplace } from '@/extensions/SearchAndReplace'
+import { SpellCheck } from '@/extensions/SpellCheck'
 import { ImageBubbleMenu } from '@/components/editor/ImageBubbleMenu'
 import { ImageContextMenu } from '@/components/editor/ImageContextMenu'
 import { ImageViewerModal } from '@/components/editor/ImageViewerModal'
 import { SearchReplacePanel } from '@/components/editor/SearchReplacePanel'
+import { SpellCheckPanel } from '@/components/editor/SpellCheckPanel'
 
 const lowlight = createLowlight(common)
 
@@ -200,6 +203,7 @@ export const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(function
   const [isUploading, setIsUploading] = useState(false)
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [showSearchReplace, setShowSearchReplace] = useState(false)
+  const [showSpellCheck, setShowSpellCheck] = useState(false)
   const [viewerSrc, setViewerSrc] = useState<string | null>(null)
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; src: string } | null>(null)
 
@@ -241,6 +245,7 @@ export const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(function
       TaskItem.configure({ nested: true }),
       CodeBlockLowlight.configure({ lowlight }),
       SearchAndReplace,
+      SpellCheck,
     ],
     [t]
   )
@@ -702,6 +707,15 @@ export const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(function
           <Search className={iconSize} />
         </ToolbarBtn>
 
+        {/* AI SpellCheck */}
+        <ToolbarBtn
+          onClick={() => setShowSpellCheck(v => !v)}
+          active={showSpellCheck}
+          title={t('spellCheck.title', 'AI Spell Check')}
+        >
+          <SpellCheck2 className={iconSize} />
+        </ToolbarBtn>
+
         <ToolbarSep />
 
         {/* Color picker */}
@@ -770,6 +784,14 @@ export const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(function
         <SearchReplacePanel
           editor={editor}
           onClose={() => setShowSearchReplace(false)}
+        />
+      )}
+
+      {/* AI SpellCheck panel */}
+      {showSpellCheck && editor && (
+        <SpellCheckPanel
+          editor={editor}
+          onClose={() => setShowSpellCheck(false)}
         />
       )}
 

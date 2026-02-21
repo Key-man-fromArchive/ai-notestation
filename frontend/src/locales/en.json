@@ -1345,6 +1345,20 @@
     "unlock": "Unlock",
     "confirmUnlock": "Confirm Unlock"
   },
+  "spellCheck": {
+    "title": "AI Spell Check",
+    "startCheck": "Start Check",
+    "checking": "Checking...",
+    "noErrors": "No errors found!",
+    "errorsFound": "{{count}} errors found",
+    "fix": "Fix",
+    "fixAll": "Fix All",
+    "dismiss": "Dismiss",
+    "spelling": "Spelling",
+    "grammar": "Grammar",
+    "expression": "Expression",
+    "close": "Close"
+  },
   "image": {
     "size": "Image Size",
     "small": "Small (25%)",
