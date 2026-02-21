@@ -1281,5 +1281,15 @@
     "transferConfirmCheckbox": "I agree to transfer ownership",
     "selectNewOwner": "Select New Owner",
     "editNotebook": "Edit Notebook"
+  },
+  "handwriting": {
+    "title": "Handwriting Recognition",
+    "insert": "Insert Handwriting Block",
+    "convertText": "Convert to Text",
+    "keepInk": "Keep as Ink",
+    "mathLatex": "Math to LaTeX",
+    "recognizing": "Recognizing...",
+    "empty": "No handwriting content",
+    "error": "Recognition failed"
   }
 }

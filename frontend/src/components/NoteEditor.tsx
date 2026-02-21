@@ -44,7 +44,9 @@ import {
   AlertCircle,
   Upload,
   Keyboard,
+  PenTool,
 } from 'lucide-react'
+import { HandwritingBlock } from '@/extensions/HandwritingBlock'
 
 interface NoteEditorProps {
   noteId: string
@@ -190,6 +192,7 @@ export const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(function
       Placeholder.configure({
         placeholder: t('notes.editorPlaceholder', 'Start writing...'),
       }),
+      HandwritingBlock,
     ],
     [t]
   )
@@ -561,6 +564,12 @@ export const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(function
           title="Insert Table"
         >
           <TableIcon className={iconSize} />
+        </ToolbarBtn>
+        <ToolbarBtn
+          onClick={() => editor?.chain().focus().insertHandwritingBlock().run()}
+          title={t('handwriting.insert', 'Insert Handwriting Block')}
+        >
+          <PenTool className={iconSize} />
         </ToolbarBtn>
 
         <ToolbarSep />

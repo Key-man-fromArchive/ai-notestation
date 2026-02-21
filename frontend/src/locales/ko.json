@@ -1281,5 +1281,15 @@
     "transferConfirmCheckbox": "소유권 이전에 동의합니다",
     "selectNewOwner": "새 소유자 선택",
     "editNotebook": "노트북 편집"
+  },
+  "handwriting": {
+    "title": "필기 인식",
+    "insert": "필기 블록 삽입",
+    "convertText": "텍스트로 변환",
+    "keepInk": "잉크 유지",
+    "mathLatex": "수식 → LaTeX",
+    "recognizing": "인식 중...",
+    "empty": "필기 내용이 없습니다",
+    "error": "인식에 실패했습니다"
   }
 }

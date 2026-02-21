@@ -356,6 +356,9 @@ class NoteStationService:
         ``<style>`` elements are removed before extraction.  Block-level
         elements produce newline separators.
 
+        Handwriting blocks (``data-type="handwriting-block"``) contribute
+        their ``data-ocr-text`` attribute so recognised ink is searchable.
+
         Args:
             html: Raw HTML string (may be empty).
 
@@ -370,6 +373,12 @@ class NoteStationService:
         # Remove script and style elements entirely
         for tag in soup(["script", "style"]):
             tag.decompose()
+
+        # Inject OCR text from handwriting blocks so it becomes searchable
+        for hw_block in soup.find_all("div", attrs={"data-type": "handwriting-block"}):
+            ocr_text = hw_block.get("data-ocr-text", "")
+            if ocr_text:
+                hw_block.string = ocr_text
 
         text = soup.get_text(separator="\n", strip=True)
         return text
