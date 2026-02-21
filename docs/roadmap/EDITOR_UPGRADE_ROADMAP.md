@@ -8,7 +8,7 @@
 
 ## Current State (v3.1.0)
 
-**18 official extensions + 5 custom extensions** (all tiptap ^2.27.2 ✅)
+**20 official extensions + 5 custom extensions** (all tiptap ^2.27.2 ✅)
 
 | Category | Extensions | Version |
 |----------|-----------|---------|
@@ -20,6 +20,7 @@
 | Research | HandwritingBlock (tldraw + AI OCR/Math), ExperimentHeader, StatusChip, Signature | custom |
 | Search | SearchAndReplace (custom, Ctrl+H) | custom |
 | AI | SpellCheck (inline wavy underlines, click-to-fix panel) | custom |
+| Mention | MemberMention (@member), NoteMention (#note) — suggestion dropdown | ^2.27.2 ✅ |
 | UX | Multi-tab, Split view, Outline panel, Zen mode, Auto-save (3s debounce) | — |
 
 ---
@@ -244,14 +245,19 @@ AI-based (Option B) 구현 완료. 기존 AI Router + 새 `spellcheck_inline` �
 - SSE 스트리밍으로 검사, 에디터 toolbar 버튼으로 토글
 - Light/Dark 테마 대응, en/ko i18n
 
-### 3.3 Mention / Reference
-`@tiptap/extension-mention`
+### ~~3.3 Mention / Reference~~ ✅ COMPLETED
+`@tiptap/extension-mention` + `@tiptap/suggestion` (^2.27.2)
 
-- `@member` → 팀 멤버 언급 (기존 Member 시스템 연동)
-- `#note` → 노트 간 크로스 레퍼런스 (기존 Graph/Discovery 연동)
-- `$sample` → 샘플/시약 참조 (future: inventory 연동)
+- `@member` → 팀 멤버 언급 (기존 Member 시스템 연동) ✅
+- `#note` → 노트 간 크로스 레퍼런스 (기존 Quick Search API 연동) ✅
+- `$sample` → 샘플/시약 참조 (future: inventory 시스템 구현 후)
 
-**연구 노트 가치**: 실험 노트에서 관련 노트, 팀원, 시료를 직접 링크
+**구현 내용**:
+- `MemberMention.ts` — `Mention.extend({ name: 'memberMention' })`, `@` 트리거, `/members` API 캐시 후 클라이언트 필터링
+- `NoteMention.ts` — `Mention.extend({ name: 'noteMention' })`, `#` 트리거, `/notes/quick-search` 서버 사이드 ILIKE
+- `MentionList.tsx` — 공유 드롭다운 UI (키보드 네비게이션, 아이콘, 다크모드)
+- `mentionRenderer.ts` — tippy.js 팝업 헬퍼 (두 확장 공유)
+- 백엔드 변경 없음 — 기존 Members + Quick Search API 100% 재사용
 
 ### Phase 3 Deliverables
 ```
@@ -267,9 +273,11 @@ frontend/src/components/editor/CommentSidebar.tsx   # 코멘트 사이드바
 frontend/src/hooks/useComments.ts                   # Comment CRUD
 backend/app/api/comments.py                         # Comment endpoints
 
-# 3.3 Mentions (TODO)
-frontend/src/extensions/Mention/MentionExtension.ts   # Mention node
-frontend/src/extensions/Mention/MentionSuggestion.tsx  # Autocomplete popup
+# 3.3 Mentions (✅ Done)
+frontend/src/extensions/Mention/MemberMention.ts       # @member Mention extension
+frontend/src/extensions/Mention/NoteMention.ts         # #note Mention extension
+frontend/src/extensions/Mention/MentionList.tsx         # Shared dropdown UI
+frontend/src/extensions/Mention/mentionRenderer.ts      # tippy.js popup helper
 ```
 
 ---
@@ -410,6 +418,6 @@ Phase 2.3 Signature ─── (needs Member system) ──→ Phase 3.3 Mention
 | **Phase 1**: Core Power-ups | 1 week | v3.0.0 — Typography, Search/Replace, TaskList, CodeBlock | ✅ Done |
 | **Phase E-0**: Version Unification | 1-2 days | v3.1.0 — All tiptap ^2.27.2, peer dep 정리 | ✅ Done |
 | **Phase 2**: Research Nodes | 2 weeks | v3.1.0 — ExperimentHeader, StatusChip, Signature | ✅ Done |
-| **Phase 3**: Review & Quality | 2 weeks | v3.2.0 — Comments, AI SpellCheck, Mentions | 🔶 3.2 Done |
+| **Phase 3**: Review & Quality | 2 weeks | v3.2.0 — Comments, AI SpellCheck, Mentions | 🔶 3.2+3.3 Done |
 | **Phase 4**: Collaboration | 3-4 weeks | v4.0.0 — Y.js real-time, Awareness, Offline | Planned |
 | **Total** | ~8-9 weeks | | |

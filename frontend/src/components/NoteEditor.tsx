@@ -64,6 +64,8 @@ import { StatusChip } from '@/extensions/StatusChip'
 import { Signature } from '@/extensions/Signature'
 import { SearchAndReplace } from '@/extensions/SearchAndReplace'
 import { SpellCheck } from '@/extensions/SpellCheck'
+import { MemberMention } from '@/extensions/Mention/MemberMention'
+import { NoteMention } from '@/extensions/Mention/NoteMention'
 import { ImageBubbleMenu } from '@/components/editor/ImageBubbleMenu'
 import { ImageContextMenu } from '@/components/editor/ImageContextMenu'
 import { ImageViewerModal } from '@/components/editor/ImageViewerModal'
@@ -246,6 +248,8 @@ export const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(function
       CodeBlockLowlight.configure({ lowlight }),
       SearchAndReplace,
       SpellCheck,
+      MemberMention,
+      NoteMention,
     ],
     [t]
   )

@@ -398,6 +398,38 @@ textarea {
   outline-offset: 1px;
 }
 
+/* Mention chips — @member and #note */
+.tiptap .mention {
+  display: inline;
+  border-radius: 0.25rem;
+  padding: 0.1em 0.35em;
+  font-weight: 500;
+  font-size: 0.9em;
+  line-height: 1;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.tiptap .mention-member {
+  background-color: oklch(92% 0.04 263);
+  color: oklch(40% 0.15 263);
+}
+
+.tiptap .mention-note {
+  background-color: oklch(92% 0.04 295);
+  color: oklch(40% 0.15 295);
+}
+
+.dark .tiptap .mention-member {
+  background-color: oklch(30% 0.06 263);
+  color: oklch(80% 0.1 263);
+}
+
+.dark .tiptap .mention-note {
+  background-color: oklch(30% 0.06 295);
+  color: oklch(80% 0.1 295);
+}
+
 /* 애니메이션 줄이기 선호 사용자 지원 */
 @media (prefers-reduced-motion: reduce) {
   *,
