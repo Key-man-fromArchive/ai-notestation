@@ -346,6 +346,31 @@ textarea {
   background-color: oklch(55% 0.15 55);
 }
 
+/* Custom research nodes — experiment header, status chip, signature */
+.tiptap [data-type="experiment-header"] {
+  margin: 1em 0;
+}
+
+.tiptap .status-chip-wrapper {
+  display: inline;
+}
+
+.tiptap [data-type="signature"] {
+  margin: 1em 0;
+}
+
+.tiptap [data-type="experiment-header"].ProseMirror-selectednode > div,
+.tiptap [data-type="signature"].ProseMirror-selectednode > div {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: 0.5rem;
+}
+
+.tiptap .status-chip-wrapper.ProseMirror-selectednode > span {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+
 /* 애니메이션 줄이기 선호 사용자 지원 */
 @media (prefers-reduced-motion: reduce) {
   *,

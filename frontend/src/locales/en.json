@@ -1303,6 +1303,48 @@
     "empty": "No handwriting content",
     "error": "Recognition failed"
   },
+  "experimentHeader": {
+    "title": "Experiment Header",
+    "insert": "Insert Experiment Header",
+    "titlePlaceholder": "Experiment title...",
+    "untitled": "Untitled",
+    "date": "Date",
+    "experimenter": "Experimenter",
+    "project": "Project",
+    "sampleId": "Sample ID",
+    "protocolVersion": "Protocol Ver.",
+    "addTag": "+ tag",
+    "status_planned": "Planned",
+    "status_running": "Running",
+    "status_completed": "Completed",
+    "status_failed": "Failed",
+    "status_paused": "Paused",
+    "status_review": "Review"
+  },
+  "statusChip": {
+    "insert": "Insert Status Chip",
+    "clickToCycle": "Click to cycle status",
+    "status_planned": "Planned",
+    "status_running": "Running",
+    "status_completed": "Completed",
+    "status_failed": "Failed",
+    "status_paused": "Paused",
+    "status_review": "Review"
+  },
+  "signature": {
+    "title": "Signature",
+    "insert": "Insert Signature",
+    "signedBy": "Signed By",
+    "role": "Role",
+    "memberId": "Member ID",
+    "signedAt": "Signed At",
+    "comment": "Comment",
+    "commentPlaceholder": "Optional comment...",
+    "signAndLock": "Sign & Lock",
+    "locked": "Signed & Locked",
+    "unlock": "Unlock",
+    "confirmUnlock": "Confirm Unlock"
+  },
   "image": {
     "size": "Image Size",
     "small": "Small (25%)",

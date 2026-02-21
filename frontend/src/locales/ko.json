@@ -1303,6 +1303,48 @@
     "empty": "필기 내용이 없습니다",
     "error": "인식에 실패했습니다"
   },
+  "experimentHeader": {
+    "title": "실험 헤더",
+    "insert": "실험 헤더 삽입",
+    "titlePlaceholder": "실험 제목...",
+    "untitled": "제목 없음",
+    "date": "날짜",
+    "experimenter": "실험자",
+    "project": "프로젝트",
+    "sampleId": "시료 ID",
+    "protocolVersion": "프로토콜 버전",
+    "addTag": "+ 태그",
+    "status_planned": "계획됨",
+    "status_running": "진행 중",
+    "status_completed": "완료",
+    "status_failed": "실패",
+    "status_paused": "일시 중지",
+    "status_review": "검토 중"
+  },
+  "statusChip": {
+    "insert": "상태 칩 삽입",
+    "clickToCycle": "클릭하여 상태 변경",
+    "status_planned": "계획됨",
+    "status_running": "진행 중",
+    "status_completed": "완료",
+    "status_failed": "실패",
+    "status_paused": "일시 중지",
+    "status_review": "검토 중"
+  },
+  "signature": {
+    "title": "서명",
+    "insert": "서명 삽입",
+    "signedBy": "서명자",
+    "role": "역할",
+    "memberId": "멤버 ID",
+    "signedAt": "서명 시각",
+    "comment": "코멘트",
+    "commentPlaceholder": "코멘트 (선택)...",
+    "signAndLock": "서명 및 잠금",
+    "locked": "서명 & 잠금됨",
+    "unlock": "잠금 해제",
+    "confirmUnlock": "해제 확인"
+  },
   "image": {
     "size": "이미지 크기",
     "small": "작게 (25%)",

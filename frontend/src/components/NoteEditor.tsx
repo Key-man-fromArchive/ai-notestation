@@ -52,9 +52,15 @@ import {
   Upload,
   Keyboard,
   PenTool,
+  FlaskConical,
+  CircleDot,
+  PenLine,
   Search,
 } from 'lucide-react'
 import { HandwritingBlock } from '@/extensions/HandwritingBlock'
+import { ExperimentHeader } from '@/extensions/ExperimentHeader'
+import { StatusChip } from '@/extensions/StatusChip'
+import { Signature } from '@/extensions/Signature'
 import { SearchAndReplace } from '@/extensions/SearchAndReplace'
 import { ImageBubbleMenu } from '@/components/editor/ImageBubbleMenu'
 import { ImageContextMenu } from '@/components/editor/ImageContextMenu'
@@ -227,6 +233,9 @@ export const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(function
         placeholder: t('notes.editorPlaceholder', 'Start writing...'),
       }),
       HandwritingBlock,
+      ExperimentHeader,
+      StatusChip,
+      Signature,
       Typography,
       TaskList,
       TaskItem.configure({ nested: true }),
@@ -662,6 +671,24 @@ export const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(function
           title={t('handwriting.insert', 'Insert Handwriting Block')}
         >
           <PenTool className={iconSize} />
+        </ToolbarBtn>
+        <ToolbarBtn
+          onClick={() => editor?.chain().focus().insertExperimentHeader().run()}
+          title={t('experimentHeader.insert', 'Insert Experiment Header')}
+        >
+          <FlaskConical className={iconSize} />
+        </ToolbarBtn>
+        <ToolbarBtn
+          onClick={() => editor?.chain().focus().insertStatusChip().run()}
+          title={t('statusChip.insert', 'Insert Status Chip')}
+        >
+          <CircleDot className={iconSize} />
+        </ToolbarBtn>
+        <ToolbarBtn
+          onClick={() => editor?.chain().focus().insertSignature().run()}
+          title={t('signature.insert', 'Insert Signature')}
+        >
+          <PenLine className={iconSize} />
         </ToolbarBtn>
 
         <ToolbarSep />
