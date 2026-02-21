@@ -13,8 +13,8 @@ WORKDIR /app
 # Copy dependency definitions first for Docker layer caching
 COPY package.json package-lock.json* ./
 
-# Install npm dependencies (run twice to work around npm 10/11 lockfile compat issue)
-RUN npm install --legacy-peer-deps && npm install --legacy-peer-deps
+# Install npm dependencies
+RUN npm install --legacy-peer-deps
 
 # Copy application code
 COPY . .
