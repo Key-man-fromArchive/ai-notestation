@@ -7,7 +7,7 @@
 **Unlock the thousands of research notes on your NAS with local, privacy-first AI.**
 
 <p align="left">
-  <img src="https://img.shields.io/badge/version-2.1.0-blue?style=flat-square" alt="v2.1.0" />
+  <img src="https://img.shields.io/badge/version-3.0.0-blue?style=flat-square" alt="v3.0.0" />
   <img src="https://img.shields.io/badge/license-AGPL--3.0-green?style=flat-square" alt="AGPL-3.0" />
   <img src="https://img.shields.io/badge/docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker" />
   <img src="https://img.shields.io/badge/self--hosted-black?style=flat-square" alt="Self-hosted" />
@@ -43,7 +43,7 @@ bash install.sh        # Interactive setup. Enter NAS address and AI keys (or sk
 
 **Knowledge Graph** — Force-directed visualization of note relationships. AI clustering discovers hidden connections across your collection.
 
-**Rich Editor** — TipTap with KaTeX math, tables, code blocks. Drag-and-drop upload. 3-second autosave. Reference insertion.
+**Rich Editor** — TipTap with 11 custom extensions: handwriting recognition (tldraw), experiment headers, status chips, digital signatures, mentions (@member, #note), inline comments, AI spell check, search & replace, code blocks (lowlight). Drag-and-drop upload. 3-second autosave.
 
 **Academic Paper Capture** — PubMed (PMC full-text + Unpaywall OA), arXiv, URL capture. Insert references into existing notes.
 
@@ -84,7 +84,7 @@ Ask questions in natural language across your entire note collection. Returns an
 <img src="docs/screenshots/note-detail.png" alt="Note Editor — tables, images, rich text" width="100%" />
 
 **Note Editor**
-TipTap rich editor with KaTeX math, tables, code blocks, and image attachments. Always editable with 3-second auto-save. AI auto-tagging generates structured metadata per note.
+TipTap rich editor with 11 custom extensions: handwriting recognition (tldraw), experiment headers, status chips, digital signatures, @mentions, inline comments, AI spell check, search & replace. 3-second auto-save. AI auto-tagging.
 
 </td>
 <td width="50%">
@@ -149,8 +149,15 @@ Track notes, notebooks, sync status, and image analysis progress at a glance. OC
 - **Reference Insertion** — Insert PubMed/arXiv/URL capture results into existing notes from the editor.
 
 ### Editor & Notes
-- **Rich Editor** — TipTap with KaTeX math, tables, code blocks. 4-level width control.
-- **Drag & Drop** — Multi-file parallel upload + clipboard paste.
+- **Rich Editor** — TipTap with 11 custom extensions. KaTeX math, tables, code blocks (lowlight syntax highlighting). 4-level width control.
+- **Handwriting Recognition** — Draw on tldraw v4 canvas with tablet/stylus. AI Vision converts to text/LaTeX. Ink preservation with OCR search indexing.
+- **Experiment Headers** — Structured metadata blocks with date, experimenter, project, sample ID, protocol version, and status tags.
+- **Status Chips & Digital Signatures** — Click to cycle status (Planned→Running→Completed→...). Sign & lock for note integrity.
+- **Mentions** — @member for team mentions, #note for cross-note references. Autocomplete dropdown.
+- **Inline Comments** — Add/resolve/delete comments on text ranges. Click highlights to navigate.
+- **AI Spell Check** — Built-in AI-powered spelling, grammar, and expression correction panel.
+- **Search & Replace** — Ctrl+H for full search/replace. Regex and case-sensitive modes.
+- **Drag & Drop** — Multi-file parallel upload + clipboard paste. Image size presets (25%/50%/75%/100%).
 - **Auto-Save** — 3-second debounce, 30-second periodic, save-on-navigate, Ctrl+S manual.
 - **Auto-Tagging** — AI generates tags per note or in batch across entire notebooks.
 - **Note List** — Virtualized list + infinite scroll, sort by modified/created date, calendar-style thumbnails.
@@ -186,7 +193,7 @@ Track notes, notebooks, sync status, and image analysis progress at a glance. OC
 | Auth | JWT + OAuth 2.0 (Google, OpenAI PKCE) |
 | Deploy | Docker Compose (3 containers) |
 
-**By the numbers:** 177 API endpoints · 25 DB migrations · 18 pages · 37 hooks · 1,071 i18n keys
+**By the numbers:** 195 API endpoints · 32 DB migrations · 24 pages · 44 hooks · 11 editor extensions · 1,350 i18n keys
 
 ---
 
@@ -206,7 +213,7 @@ Track notes, notebooks, sync status, and image analysis progress at a glance. OC
 ┌─────────────────────────┴───────────────────────────────────┐
 │                      Backend (FastAPI)                       │
 │  ┌──────────────────────────────────────────────────────┐   │
-│  │  API Layer (177 endpoints)                            │   │
+│  │  API Layer (195 endpoints)                            │   │
 │  │  auth · notes · search · ai · sync · files · admin    │   │
 │  ├──────────────────────────────────────────────────────┤   │
 │  │  AI Router ─── OpenAI │ Anthropic │ Google │ ZhipuAI │   │
@@ -307,15 +314,16 @@ labnote-ai/
 ├── backend/
 │   └── app/
 │       ├── main.py              # FastAPI entrypoint
-│       ├── api/                 # 177 REST API endpoints
+│       ├── api/                 # 195 REST API endpoints
 │       ├── ai_router/           # Multi-provider AI (providers, prompts, quality gate)
 │       ├── search/              # Hybrid search (FTS, semantic, RRF, JUDGE)
 │       ├── services/            # OCR, Vision, tagging, related notes, PDF, HWP, capture, backup, evaluation
 │       └── synology_gateway/    # NAS API wrappers
 ├── frontend/src/
-│   ├── pages/                   # 18 pages (code-split)
+│   ├── pages/                   # 24 pages (code-split)
 │   ├── components/              # shadcn/ui + custom
-│   └── hooks/                   # 37 hooks (TanStack Query, SSE)
+│   ├── extensions/              # 11 TipTap extensions (handwriting, experiment header, mentions, comments, etc.)
+│   └── hooks/                   # 44 hooks (TanStack Query, SSE)
 └── docker-compose.yml           # 3-container deployment
 ```
 
@@ -341,9 +349,11 @@ cd backend && ruff check . && ruff format --check .           # Lint
 - [x] Phase 1 — Search Enhancement (Why matched, Adaptive Search, Multi-turn Refinement) `v1.1.0`
 - [x] Phase 2 — AI Quality Gates (Checklist, QA Evaluation, Stream Monitor) `v1.2.0`
 - [x] Phase 3 — Content Intelligence (Auto-Tagging, Related Notes, Rediscovery, Graph Insights) `v1.3.1`
-- [x] Phase 4 — Multimodal (PDF, HWP, 3-engine OCR, dual-pipeline, PubMed full-text capture) `v1.6.0 → v2.1.0`
+- [x] Phase 4 — Multimodal (PDF, HWP, 3-engine OCR, dual-pipeline, PubMed full-text capture) `v1.6.0`
 - [x] Phase 5 — Evaluation Infrastructure (A/B framework, metrics dashboard, feedback loop) `v2.0.0`
-- [ ] Phase UI-1 — Foundation UX (sidebar, command palette, dark mode) `v3.0.0 planned`
+- [x] Phase UI-1 — Foundation UX (sidebar, command palette, dark mode) `v2.1.0`
+- [x] Phase UI-2 — Editor Evolution (multi-tab, split view, outline, zen mode) `v2.2.0`
+- [x] Phase UI-3 — Research Blocks (handwriting, experiment header, status chip, signature, mentions, comments, spell check) `v3.0.0`
 
 Details: [ROADMAP.md](ROADMAP.md) · Changelog: [CHANGELOG.md](CHANGELOG.md)
 

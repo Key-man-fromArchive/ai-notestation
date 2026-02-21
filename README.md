@@ -7,7 +7,7 @@
 **NAS에 묻혀 있던 수천 개의 연구노트, 로컬 AI로 되살립니다.**
 
 <p align="left">
-  <img src="https://img.shields.io/badge/version-2.1.0-blue?style=flat-square" alt="v2.1.0" />
+  <img src="https://img.shields.io/badge/version-3.0.0-blue?style=flat-square" alt="v3.0.0" />
   <img src="https://img.shields.io/badge/license-AGPL--3.0-green?style=flat-square" alt="AGPL-3.0" />
   <img src="https://img.shields.io/badge/docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker" />
   <img src="https://img.shields.io/badge/self--hosted-black?style=flat-square" alt="Self-hosted" />
@@ -43,7 +43,7 @@ bash install.sh        # 대화형 설치. NAS 주소와 AI 키 입력 (Enter로
 
 **지식 그래프** — 노트 간 관계를 포스 레이아웃으로 시각화. AI 클러스터링이 숨겨진 연결을 발견.
 
-**리치 에디터** — TipTap + KaTeX 수식, 표, 코드 블록. 드래그앤드롭 업로드. 3초 자동 저장. 참고문헌 삽입.
+**리치 에디터** — TipTap + 11개 커스텀 확장: 필기 인식(tldraw), 실험 헤더, 상태 칩, 전자 서명, 멘션(@member, #note), 인라인 코멘트, AI 맞춤법, 검색/바꾸기, 코드 블록(lowlight). 드래그앤드롭 업로드. 3초 자동 저장.
 
 **학술 논문 캡처** — PubMed (PMC 전문 + Unpaywall OA), arXiv, URL 캡처. 기존 노트에 참고문헌 삽입.
 
@@ -84,7 +84,7 @@ PostgreSQL `tsvector`(BM25 + English stemming) + `pgvector`(시맨틱)를 Recipr
 <img src="docs/screenshots/note-detail.png" alt="노트 에디터 — 표, 이미지, 리치 텍스트" width="100%" />
 
 **노트 에디터**
-TipTap 리치 에디터에 KaTeX 수식, 표, 코드 블록, 이미지 첨부를 지원합니다. 항상 편집 가능하며 3초 자동 저장. AI 자동 태깅으로 노트별 구조화된 메타데이터를 생성합니다.
+TipTap 리치 에디터에 11개 커스텀 확장: 필기 인식(tldraw), 실험 헤더, 상태 칩, 전자 서명, @멘션, 인라인 코멘트, AI 맞춤법, 검색/바꾸기. 3초 자동 저장. AI 자동 태깅.
 
 </td>
 <td width="50%">
@@ -149,8 +149,15 @@ TipTap 리치 에디터에 KaTeX 수식, 표, 코드 블록, 이미지 첨부를
 - **참고문헌 삽입** — 노트 에디터에서 PubMed/arXiv/URL 캡처 결과를 기존 노트에 추가.
 
 ### 에디터 & 노트
-- **리치 에디터** — TipTap + KaTeX 수식, 표, 코드 블록. 너비 4단계 조절.
-- **드래그앤드롭** — 복수 파일 병렬 업로드 + 클립보드 붙여넣기.
+- **리치 에디터** — TipTap + 11개 커스텀 확장. KaTeX 수식, 표, 코드 블록(lowlight 구문 강조). 너비 4단계 조절.
+- **필기 인식** — tldraw v4 캔버스에서 태블릿/스타일러스로 손글씨 입력. AI Vision으로 텍스트/LaTeX 변환. 잉크 보존 + OCR 검색 인덱싱.
+- **실험 헤더** — 날짜, 실험자, 프로젝트, 시료 ID, 프로토콜 버전, 상태 태그가 포함된 구조화된 실험 메타데이터 블록.
+- **상태 칩 & 전자 서명** — 클릭으로 상태 순환(Planned→Running→Completed→...). 서명 & 잠금으로 노트 무결성 보장.
+- **멘션** — @member로 팀원 멘션, #note로 다른 노트 참조. 자동 완성 드롭다운.
+- **인라인 코멘트** — 텍스트 범위에 코멘트 추가/해결/삭제. 하이라이트 클릭으로 이동.
+- **AI 맞춤법 검사** — 에디터 내장 AI 기반 맞춤법·문법·표현 교정 패널.
+- **검색 & 바꾸기** — Ctrl+H로 전체 검색/바꾸기. 정규식, 대소문자 구분 지원.
+- **드래그앤드롭** — 복수 파일 병렬 업로드 + 클립보드 붙여넣기. 이미지 크기 프리셋(25%/50%/75%/100%).
 - **자동 저장** — 3초 디바운스, 30초 주기, 이동 시 저장, Ctrl+S 수동 저장.
 - **AI 자동 태깅** — 개별 노트 또는 노트북 전체 배치 태깅.
 - **노트 목록** — 가상화 리스트 + 무한 스크롤, 수정일/생성일 정렬, 달력 스타일 썸네일.
@@ -186,7 +193,7 @@ TipTap 리치 에디터에 KaTeX 수식, 표, 코드 블록, 이미지 첨부를
 | Auth | JWT + OAuth 2.0 (Google, OpenAI PKCE) |
 | Deploy | Docker Compose (3 containers) |
 
-**수치로 보기:** API 엔드포인트 177개 · DB 마이그레이션 25개 · 페이지 18개 · 훅 37개 · i18n 키 1,071개
+**수치로 보기:** API 엔드포인트 195개 · DB 마이그레이션 32개 · 페이지 24개 · 훅 44개 · 에디터 확장 11개 · i18n 키 1,350개
 
 ---
 
@@ -206,7 +213,7 @@ TipTap 리치 에디터에 KaTeX 수식, 표, 코드 블록, 이미지 첨부를
 ┌─────────────────────────┴───────────────────────────────────┐
 │                      Backend (FastAPI)                       │
 │  ┌──────────────────────────────────────────────────────┐   │
-│  │  API Layer (177 엔드포인트)                           │   │
+│  │  API Layer (195 엔드포인트)                           │   │
 │  │  auth · notes · search · ai · sync · files · admin    │   │
 │  ├──────────────────────────────────────────────────────┤   │
 │  │  AI Router ─── OpenAI │ Anthropic │ Google │ ZhipuAI │   │
@@ -307,15 +314,16 @@ labnote-ai/
 ├── backend/
 │   └── app/
 │       ├── main.py              # FastAPI 엔트리포인트
-│       ├── api/                 # REST API 엔드포인트 177개
+│       ├── api/                 # REST API 엔드포인트 195개
 │       ├── ai_router/           # 멀티 프로바이더 AI (프로바이더, 프롬프트, 품질 게이트)
 │       ├── search/              # 하이브리드 검색 (FTS, 시맨틱, RRF, JUDGE)
 │       ├── services/            # OCR, Vision, 태깅, 관련노트, PDF, HWP, 캡처, 백업, 평가
 │       └── synology_gateway/    # NAS API 래퍼
 ├── frontend/src/
-│   ├── pages/                   # 18개 페이지 (코드 스플리팅)
+│   ├── pages/                   # 24개 페이지 (코드 스플리팅)
 │   ├── components/              # shadcn/ui + 커스텀
-│   └── hooks/                   # 37개 훅 (TanStack Query, SSE)
+│   ├── extensions/              # 11개 TipTap 확장 (필기, 실험 헤더, 멘션, 코멘트 등)
+│   └── hooks/                   # 44개 훅 (TanStack Query, SSE)
 └── docker-compose.yml           # 3-container 배포
 ```
 
@@ -341,9 +349,11 @@ cd backend && ruff check . && ruff format --check .           # 린트
 - [x] Phase 1 — 검색 고도화 (Why matched, Adaptive Search, Multi-turn Refinement) `v1.1.0`
 - [x] Phase 2 — AI 품질 게이트 (Checklist, QA Evaluation, Stream Monitor) `v1.2.0`
 - [x] Phase 3 — 콘텐츠 인텔리전스 (Auto-Tagging, Related Notes, Rediscovery, Graph Insights) `v1.3.1`
-- [x] Phase 4 — 멀티모달 (PDF, HWP, 3엔진 OCR, 듀얼 파이프라인, PubMed 전문 캡처) `v1.6.0 → v2.1.0`
+- [x] Phase 4 — 멀티모달 (PDF, HWP, 3엔진 OCR, 듀얼 파이프라인, PubMed 전문 캡처) `v1.6.0`
 - [x] Phase 5 — 평가 인프라 (A/B 프레임워크, 메트릭 대시보드, 피드백 루프) `v2.0.0`
-- [ ] Phase UI-1 — Foundation UX (사이드바, 커맨드 팔레트, 다크 모드) `v3.0.0 예정`
+- [x] Phase UI-1 — Foundation UX (사이드바, 커맨드 팔레트, 다크 모드) `v2.1.0`
+- [x] Phase UI-2 — Editor Evolution (멀티탭, 분할 화면, 아웃라인, 젠 모드) `v2.2.0`
+- [x] Phase UI-3 — Research Blocks (필기 인식, 실험 헤더, 상태 칩, 서명, 멘션, 코멘트, 맞춤법) `v3.0.0`
 
 상세: [ROADMAP.md](ROADMAP.md) · 변경 이력: [CHANGELOG.md](CHANGELOG.md)
 
