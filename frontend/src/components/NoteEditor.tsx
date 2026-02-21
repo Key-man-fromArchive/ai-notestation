@@ -5,8 +5,7 @@ import { EditorContent, useEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Underline from '@tiptap/extension-underline'
 import Link from '@tiptap/extension-link'
-import '@tiptap/extension-image' // type augmentation for setImage command
-import ImageResize from 'tiptap-extension-resize-image'
+import Image from '@tiptap/extension-image'
 import TextStyle from '@tiptap/extension-text-style'
 import Color from '@tiptap/extension-color'
 import Highlight from '@tiptap/extension-highlight'
@@ -76,9 +75,8 @@ export interface NoteEditorHandle {
   getEditor: () => ReturnType<typeof useEditor> | null
 }
 
-// Custom Image extension based on tiptap-extension-resize-image for drag-handle resizing.
-// Adds data-size (preset sizing) and data-align (alignment) attributes on top.
-const NoteStationImage = ImageResize.extend({
+// Custom Image extension with data-size (preset sizing) and data-align (alignment) attributes.
+const NoteStationImage = Image.extend({
   addAttributes() {
     return {
       ...this.parent?.(),
@@ -107,8 +105,6 @@ const NoteStationImage = ImageResize.extend({
   parseHTML() {
     return [{ tag: 'img' }] // Accept img WITHOUT src requirement (NAS placeholders)
   },
-}).configure({
-  inline: false,
 })
 
 // Add auth token to NAS image URLs so they display in the editor
