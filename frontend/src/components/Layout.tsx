@@ -4,12 +4,14 @@
 // @TASK v3.0.0-T4 - Global keyboard shortcuts system
 // @SPEC docs/plans/2026-01-29-labnote-ai-design.md#레이아웃
 
-import { ReactNode, useState } from 'react'
+import { ReactNode, useEffect, useState } from 'react'
 import { Menu } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { CommandPalette } from './CommandPalette'
+import { TabBar } from './editor/TabBar'
 import { SidebarProvider, useSidebar } from '@/contexts/SidebarContext'
+import { useTabStore } from '@/stores/useTabStore'
 import { cn } from '@/lib/utils'
 import { useShortcuts } from '@/hooks/useShortcuts'
 import { ShortcutHelp } from './ShortcutHelp'
@@ -23,6 +25,9 @@ function LayoutContent({ children }: LayoutProps) {
   const [commandOpen, setCommandOpen] = useState(false)
   const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false)
   const navigate = useNavigate()
+  const tabs = useTabStore((s) => s.tabs)
+  const zenMode = useTabStore((s) => s.zenMode)
+  const toggleZen = useTabStore((s) => s.toggleZen)
 
   // Global keyboard shortcuts
   const shortcuts = [
@@ -80,29 +85,53 @@ function LayoutContent({ children }: LayoutProps) {
       descriptionKey: 'shortcuts.goSettings',
       action: () => navigate('/settings'),
     },
+    {
+      key: 'Z',
+      modifiers: { ctrl: true, shift: true },
+      scope: 'global' as const,
+      group: 'editor',
+      description: 'Toggle zen mode',
+      descriptionKey: 'shortcuts.zenMode',
+      action: toggleZen,
+    },
   ]
 
   useShortcuts(shortcuts)
 
+  // ESC exits zen mode
+  useEffect(() => {
+    if (!zenMode) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        toggleZen()
+      }
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [zenMode, toggleZen])
+
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       {/* Mobile hamburger button */}
-      <button
-        onClick={() => setMobileOpen(true)}
-        className={cn(
-          'fixed top-4 left-4 z-40 md:hidden',
-          'p-2 rounded-lg bg-card border border-border/60',
-          'text-foreground hover:bg-accent',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-          isMobileOpen && 'hidden'
-        )}
-        aria-label="Open menu"
-      >
-        <Menu className="h-5 w-5" aria-hidden="true" />
-      </button>
+      {!zenMode && (
+        <button
+          onClick={() => setMobileOpen(true)}
+          className={cn(
+            'fixed top-4 left-4 z-40 md:hidden',
+            'p-2 rounded-lg bg-card border border-border/60',
+            'text-foreground hover:bg-accent',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+            isMobileOpen && 'hidden'
+          )}
+          aria-label="Open menu"
+        >
+          <Menu className="h-5 w-5" aria-hidden="true" />
+        </button>
+      )}
 
       {/* Mobile backdrop */}
-      {isMobileOpen && (
+      {isMobileOpen && !zenMode && (
         <div
           className="fixed inset-0 bg-black/50 z-40 md:hidden"
           onClick={() => setMobileOpen(false)}
@@ -110,11 +139,14 @@ function LayoutContent({ children }: LayoutProps) {
         />
       )}
 
-      <Sidebar />
+      {!zenMode && <Sidebar />}
 
-      <main className="flex-1 overflow-auto" role="main">
-        {children}
-      </main>
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {!zenMode && tabs.length > 0 && <TabBar />}
+        <main className={cn('flex-1 overflow-auto', zenMode && 'max-w-3xl mx-auto w-full')} role="main">
+          {children}
+        </main>
+      </div>
 
       <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
       <ShortcutHelp

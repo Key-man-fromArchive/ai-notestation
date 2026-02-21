@@ -55,6 +55,7 @@ interface NoteEditorProps {
 export interface NoteEditorHandle {
   save: () => void
   saveStatus: SaveStatus
+  getEditor: () => ReturnType<typeof useEditor> | null
 }
 
 // Custom Image extension that accepts <img> tags without src (NAS placeholders)
@@ -240,7 +241,7 @@ export const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(function
     onSave: handleAutoSave,
   })
 
-  useImperativeHandle(ref, () => ({ save, saveStatus }), [save, saveStatus])
+  useImperativeHandle(ref, () => ({ save, saveStatus, getEditor: () => editorRef.current }), [save, saveStatus])
 
   // Close shortcuts popover on outside click
   useEffect(() => {
