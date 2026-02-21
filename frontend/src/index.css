@@ -196,12 +196,15 @@ textarea {
   opacity: 0.8;
 }
 
-/* TipTap editor — images */
+/* TipTap editor — images (inline-block for side-by-side layout) */
 .tiptap img {
+  display: inline-block;
+  vertical-align: top;
   border-radius: 0.5rem;
   border: 1px solid var(--color-border);
   max-width: 100%;
   height: auto;
+  margin: 0 0.5rem 0.5rem 0;
 }
 
 /* Image size presets */
@@ -210,10 +213,10 @@ textarea {
 .tiptap img[data-size="large"]  { width: 75%; max-width: 75%; }
 .tiptap img[data-size="fit"]    { width: 100%; max-width: 100%; }
 
-/* Image alignment */
-.tiptap img[data-align="left"]   { margin-right: auto; margin-left: 0; display: block; }
-.tiptap img[data-align="center"] { margin-right: auto; margin-left: auto; display: block; }
-.tiptap img[data-align="right"]  { margin-right: 0; margin-left: auto; display: block; }
+/* Image alignment: left uses inline-block default, center/right override to block */
+.tiptap img[data-align="left"]   { /* inline-block default — side-by-side */ }
+.tiptap img[data-align="center"] { display: block; margin: 0.25rem auto; }
+.tiptap img[data-align="right"]  { display: block; margin: 0.25rem 0 0.25rem auto; }
 
 /* Image selection highlight */
 .tiptap img.ProseMirror-selectednode {

@@ -100,14 +100,14 @@ const NoteStationImage = Image.extend({
           attributes.height ? { height: attributes.height } : {},
       },
       'data-size': {
-        default: 'fit',
-        parseHTML: (el: HTMLElement) => el.getAttribute('data-size') || 'fit',
-        renderHTML: (attrs: Record<string, unknown>) => ({ 'data-size': attrs['data-size'] || 'fit' }),
+        default: 'small',
+        parseHTML: (el: HTMLElement) => el.getAttribute('data-size') || 'small',
+        renderHTML: (attrs: Record<string, unknown>) => ({ 'data-size': attrs['data-size'] || 'small' }),
       },
       'data-align': {
-        default: 'center',
-        parseHTML: (el: HTMLElement) => el.getAttribute('data-align') || 'center',
-        renderHTML: (attrs: Record<string, unknown>) => ({ 'data-align': attrs['data-align'] || 'center' }),
+        default: 'left',
+        parseHTML: (el: HTMLElement) => el.getAttribute('data-align') || 'left',
+        renderHTML: (attrs: Record<string, unknown>) => ({ 'data-align': attrs['data-align'] || 'left' }),
       },
     }
   },
@@ -225,7 +225,7 @@ export const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(function
       StarterKit.configure({ codeBlock: false }),
       Underline,
       Link.configure({ openOnClick: false }),
-      NoteStationImage,
+      NoteStationImage.configure({ inline: true }),
       TextStyle,
       Color,
       Highlight.configure({ multicolor: true }),
@@ -261,6 +261,7 @@ export const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(function
     editorProps: {
       attributes: {
         class: 'outline-none min-h-[50vh] px-6 py-4',
+        spellcheck: 'true',
       },
       handleDrop: (view, event, _slice, moved) => {
         if (moved || !event.dataTransfer?.files.length) return false
@@ -480,7 +481,7 @@ export const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(function
         if (file.type.startsWith('image/')) {
           editor.chain().focus()
             .setImage({ src: uploaded.url, alt: uploaded.name })
-            .updateAttributes('image', { 'data-size': defaultImageSize, 'data-align': 'center' })
+            .updateAttributes('image', { 'data-size': defaultImageSize, 'data-align': 'left' })
             .run()
         } else {
           editor.chain().focus().insertContent(`<a href="${uploaded.url}">첨부[${uploaded.name}]</a> `).run()
