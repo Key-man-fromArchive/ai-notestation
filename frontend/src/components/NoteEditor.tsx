@@ -758,7 +758,7 @@ export const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(function
           />
         </label>
 
-        {/* Help & Shortcuts — pushed to the right */}
+        {/* Help — pushed to the right */}
         <div className="relative ml-auto" ref={shortcutsRef}>
           <button
             type="button"
@@ -771,7 +771,7 @@ export const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(function
             )}
           >
             <Keyboard className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">{t('notes.shortcuts.title', 'Keyboard Shortcuts')}</span>
+            <span className="hidden sm:inline">{t('notes.help', 'Help')}</span>
           </button>
           {showShortcuts && (
             <div className="absolute right-0 top-full mt-1.5 z-50 w-80 rounded-lg border border-border bg-popover shadow-lg max-h-[70vh] overflow-y-auto">
@@ -807,47 +807,35 @@ export const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(function
               <div className="border-t border-border p-4 pt-3">
                 <h4 className="text-sm font-semibold text-foreground mb-2.5 flex items-center gap-1.5">
                   <Info className="h-3.5 w-3.5" />
-                  {t('notes.featureGuide.title', 'Feature Guide')}
+                  {t('notes.featureGuide.title')}
                 </h4>
                 <div className="flex flex-col gap-2.5 text-xs">
-                  {/* Comments */}
                   <div className="flex gap-2">
                     <MessageSquare className="h-3.5 w-3.5 text-amber-500 shrink-0 mt-0.5" />
                     <div>
-                      <p className="font-medium text-foreground">{t('comments.title', 'Comments')}</p>
-                      <p className="text-muted-foreground mt-0.5">
-                        {t('notes.featureGuide.comments', 'Select text → open Comments panel → type your comment → Add. Click a comment to jump to highlighted text. Resolve or delete when done.')}
-                      </p>
+                      <p className="font-medium text-foreground">{t('comments.title')}</p>
+                      <p className="text-muted-foreground mt-0.5">{t('notes.featureGuide.comments')}</p>
                     </div>
                   </div>
-                  {/* SpellCheck */}
                   <div className="flex gap-2">
                     <SpellCheck2 className="h-3.5 w-3.5 text-blue-500 shrink-0 mt-0.5" />
                     <div>
-                      <p className="font-medium text-foreground">{t('spellCheck.title', 'AI Spell Check')}</p>
-                      <p className="text-muted-foreground mt-0.5">
-                        {t('notes.featureGuide.spellCheck', 'Open panel → Start Check. AI analyzes text for spelling, grammar, and expression errors. Click Fix to apply, Dismiss to skip.')}
-                      </p>
+                      <p className="font-medium text-foreground">{t('spellCheck.title')}</p>
+                      <p className="text-muted-foreground mt-0.5">{t('notes.featureGuide.spellCheck')}</p>
                     </div>
                   </div>
-                  {/* Search & Replace */}
                   <div className="flex gap-2">
                     <Search className="h-3.5 w-3.5 text-green-500 shrink-0 mt-0.5" />
                     <div>
-                      <p className="font-medium text-foreground">{t('notes.shortcuts.searchReplace', 'Search & Replace')}</p>
-                      <p className="text-muted-foreground mt-0.5">
-                        {t('notes.featureGuide.searchReplace', 'Ctrl+H to open. Type a keyword to highlight all matches. Supports regex and case-sensitive modes.')}
-                      </p>
+                      <p className="font-medium text-foreground">{t('notes.shortcuts.searchReplace')}</p>
+                      <p className="text-muted-foreground mt-0.5">{t('notes.featureGuide.searchReplace')}</p>
                     </div>
                   </div>
-                  {/* Mentions */}
                   <div className="flex gap-2">
                     <PenLine className="h-3.5 w-3.5 text-purple-500 shrink-0 mt-0.5" />
                     <div>
-                      <p className="font-medium text-foreground">{t('notes.featureGuide.mentions', 'Mentions')}</p>
-                      <p className="text-muted-foreground mt-0.5">
-                        {t('notes.featureGuide.mentionsDesc', 'Type @ to mention a team member, # to reference another note. Select from the dropdown.')}
-                      </p>
+                      <p className="font-medium text-foreground">{t('notes.featureGuide.mentions')}</p>
+                      <p className="text-muted-foreground mt-0.5">{t('notes.featureGuide.mentionsDesc')}</p>
                     </div>
                   </div>
                 </div>

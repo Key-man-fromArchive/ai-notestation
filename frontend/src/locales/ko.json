@@ -249,6 +249,15 @@
       "taskList": "체크리스트",
       "codeBlock": "코드 블록",
       "searchReplace": "검색 및 바꾸기"
+    },
+    "help": "도움말",
+    "featureGuide": {
+      "title": "기능 안내",
+      "comments": "텍스트 선택 → 코멘트 패널 열기 → 내용 입력 → 추가. 코멘트를 클릭하면 해당 텍스트로 이동합니다. 완료 후 해결 또는 삭제.",
+      "spellCheck": "패널 열기 → 검사 시작. AI가 맞춤법, 문법, 표현 오류를 분석합니다. 수정으로 적용, 무시로 건너뛰기.",
+      "searchReplace": "Ctrl+H로 열기. 키워드를 입력하면 전체 일치 항목이 하이라이트됩니다. 정규식 및 대소문자 구분 모드 지원.",
+      "mentions": "멘션",
+      "mentionsDesc": "@를 입력해 팀원을 멘션하거나, #을 입력해 다른 노트를 참조합니다. 드롭다운에서 선택하세요."
     }
   },
   "relatedNotes": {
@@ -1344,6 +1353,17 @@
     "locked": "서명 & 잠금됨",
     "unlock": "잠금 해제",
     "confirmUnlock": "해제 확인"
+  },
+  "comments": {
+    "title": "코멘트",
+    "placeholder": "코멘트를 입력하세요...",
+    "add": "추가",
+    "resolve": "해결",
+    "unresolve": "미해결",
+    "delete": "삭제",
+    "resolved": "해결됨",
+    "selectText": "텍스트를 선택하여 코멘트를 추가하세요",
+    "textRemoved": "텍스트 삭제됨"
   },
   "spellCheck": {
     "title": "AI 맞춤법 검사",

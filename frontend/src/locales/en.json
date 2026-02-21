@@ -249,6 +249,15 @@
       "taskList": "Task List",
       "codeBlock": "Code Block",
       "searchReplace": "Search & Replace"
+    },
+    "help": "Help",
+    "featureGuide": {
+      "title": "Feature Guide",
+      "comments": "Select text → open Comments panel → type your comment → Add. Click a comment to jump to highlighted text. Resolve or delete when done.",
+      "spellCheck": "Open panel → Start Check. AI analyzes text for spelling, grammar, and expression errors. Click Fix to apply, Dismiss to skip.",
+      "searchReplace": "Ctrl+H to open. Type a keyword to highlight all matches. Supports regex and case-sensitive modes.",
+      "mentions": "Mentions",
+      "mentionsDesc": "Type @ to mention a team member, # to reference another note. Select from the dropdown."
     }
   },
   "relatedNotes": {
@@ -1344,6 +1353,17 @@
     "locked": "Signed & Locked",
     "unlock": "Unlock",
     "confirmUnlock": "Confirm Unlock"
+  },
+  "comments": {
+    "title": "Comments",
+    "placeholder": "Add a comment...",
+    "add": "Add",
+    "resolve": "Resolve",
+    "unresolve": "Unresolve",
+    "delete": "Delete",
+    "resolved": "Resolved",
+    "selectText": "Select text to add a comment",
+    "textRemoved": "text removed"
   },
   "spellCheck": {
     "title": "AI Spell Check",
